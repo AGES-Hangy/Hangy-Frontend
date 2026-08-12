@@ -1,0 +1,27 @@
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Native build output
+android/
+ios/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# Expo
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# TypeScript
+*.tsbuildinfo
+
