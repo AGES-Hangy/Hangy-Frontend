@@ -36,6 +36,7 @@ The folder structure under `src/app/` *is* the navigation — this mirrors the s
   - `Login`
 - New screens reached from within a tab that aren't themselves a tab (e.g. event details, edit profile, and `Home` — the root redirect target) belong in the `src/app/(tabs)/(screens)/NomeDaTela/index.tsx` group. These stay nested in `(tabs)` (so the bottom tab bar is still visible), and don't need any per-screen registration in `(tabs)/_layout.tsx`: its `screenOptions` matches any route whose name starts with `(screens)/` and hides its tab button automatically (`tabBarButton: () => null`), so every current and future folder under `(screens)/` is reachable-but-not-listed for free.
   - If a `(screens)` screen should also hide the bottom tab bar itself (rather than just lack a button), add its folder name to `src/constants/noNavbarScreens.ts`. `(tabs)/_layout.tsx` reads that list and sets `tabBarStyle: { display: 'none' }` dynamically for matching routes.
+- `(tabs)/_layout.tsx` renders `src/components/Header` as every screen's header (back button, "Hangy" title, notifications bell linking to `(screens)/Notifications`). The `Tabs` navigator has `backBehavior="history"` so `router.canGoBack()`/`router.back()` reflect the actual screens visited (not just a fixed first tab) — don't remove that prop, the back button silently breaks without it.
 
 ### Other `src/` folders
 

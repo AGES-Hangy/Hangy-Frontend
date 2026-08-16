@@ -2,10 +2,10 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/constants/colors';
 
-export default function EventDetails() {
+export default function Notifications() {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Event Details</Text>
+      <Text style={styles.text}>Notifications</Text>
     </View>
   );
 }
