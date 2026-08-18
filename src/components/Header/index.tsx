@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 
 import { colors } from '@/constants/colors';
@@ -20,7 +21,11 @@ export function Header() {
           <MaterialIcons name="arrow-back" size={24} color={colors.logo} />
         </Pressable>
 
-        <Text style={styles.title}>Hangy</Text>
+        <Image
+          source={require('../../../assets/images/logo.svg')}
+          style={styles.logo}
+          contentFit="contain"
+        />
 
         <Pressable
           onPress={() => router.push('/Notifications')}
@@ -55,10 +60,8 @@ const styles = StyleSheet.create({
   iconButtonHidden: {
     opacity: 0,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.logo,
-    letterSpacing: 0.5,
+  logo: {
+    width: 100,
+    height: 32,
   },
 });

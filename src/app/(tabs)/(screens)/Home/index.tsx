@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Link } from 'expo-router';
+import { Image } from 'expo-image';
 
 import { colors } from '@/constants/colors';
 
@@ -8,7 +9,11 @@ export default function Home() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <Text style={styles.logo}>Hangy</Text>
+      <Image
+                source={require('../../../../../assets/images/logo.svg')}
+                style={styles.logo}
+                contentFit="contain"
+              />
 
       <Link href="/Login" asChild>
         <Pressable style={styles.button}>
@@ -27,14 +32,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   logo: {
-    fontSize: 72,
-    fontWeight: '800',
-    color: colors.logo,
-    letterSpacing: 0.5,
-    transform: [{ skewX: '-8deg' }],
-    textShadowColor: colors.logoShadow,
-    textShadowOffset: { width: 4, height: 4 },
-    textShadowRadius: 0,
+    width: 250,
+    height: 100,
   },
   button: {
     marginTop: 32,

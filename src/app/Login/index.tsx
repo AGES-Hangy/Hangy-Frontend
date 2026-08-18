@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { Image } from 'expo-image';
 
 import { colors } from '@/constants/colors';
 
@@ -22,7 +23,11 @@ export default function Login() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <StatusBar style="light" />
-      <Text style={styles.logo}>Hangy</Text>
+      <Image
+                      source={require('../../../assets/images/logo.svg')}
+                      style={styles.logo}
+                      contentFit="contain"
+                    />
 
       <View style={styles.form}>
         <TextInput
@@ -60,15 +65,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   logo: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: colors.logo,
-    letterSpacing: 0.5,
-    transform: [{ skewX: '-8deg' }],
-    textShadowColor: colors.logoShadow,
-    textShadowOffset: { width: 3, height: 3 },
-    textShadowRadius: 0,
-    marginBottom: 40,
+    width: 250,
+    height: 100,
+    marginBottom: 20
   },
   form: {
     width: '100%',

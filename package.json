@@ -17,6 +17,7 @@
     "@expo/vector-icons": "^15.0.3",
     "expo": "^54.0.0",
     "expo-constants": "~18.0.13",
+    "expo-image": "~3.0.11",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.24",
     "expo-status-bar": "~3.0.9",
