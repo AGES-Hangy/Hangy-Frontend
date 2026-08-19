@@ -18,7 +18,7 @@ export function Header() {
           disabled={!canGoBack}
           hitSlop={8}
         >
-          <MaterialIcons name="arrow-back" size={24} color={colors.logo} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.action.secondary} />
         </Pressable>
 
         <Image
@@ -32,7 +32,7 @@ export function Header() {
           style={styles.iconButton}
           hitSlop={8}
         >
-          <MaterialIcons name="notifications" size={24} color={colors.logo} />
+          <MaterialIcons name="notifications" size={24} color={colors.action.secondary} />
         </Pressable>
       </View>
     </SafeAreaView>
@@ -41,7 +41,7 @@ export function Header() {
 
 const styles = StyleSheet.create({
   safeArea: {
-    backgroundColor: colors.background
+    backgroundColor: colors.action.primary
   },
   container: {
     flexDirection: 'row',
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     height: 56,
     paddingHorizontal: 12,
-    backgroundColor: colors.background,
+    backgroundColor: colors.action.primary,
   },
   iconButton: {
     width: 40,
