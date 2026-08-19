@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.action.primary,
   },
   logo: {
     width: 250,
@@ -42,11 +42,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.logo,
+    backgroundColor: colors.action.secondary,
   },
   buttonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.background,
+    color: colors.text.primary,
   },
 });

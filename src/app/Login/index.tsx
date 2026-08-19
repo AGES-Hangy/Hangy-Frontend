@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,12 +11,22 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 
 import { colors } from '@/constants/colors';
+import { useLogin } from '@/hooks/useLogin';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const { login, isLoading, error } = useLogin();
+
+  async function handleSubmit() {
+    const result = await login(email, password);
+    if (result) {
+      router.replace('/Home');
+    }
+  }
 
   return (
     <KeyboardAvoidingView
@@ -33,7 +44,7 @@ export default function Login() {
         <TextInput
           style={styles.input}
           placeholder="E-mail"
-          placeholderTextColor={colors.placeholder}
+          placeholderTextColor={colors.text.tertiary}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -42,14 +53,24 @@ export default function Login() {
         <TextInput
           style={styles.input}
           placeholder="Senha"
-          placeholderTextColor={colors.placeholder}
+          placeholderTextColor={colors.text.tertiary}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
         />
 
-        <Pressable style={styles.button}>
-          <Text style={styles.buttonText}>Entrar</Text>
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        <Pressable
+          style={styles.button}
+          onPress={handleSubmit}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color={colors.text.primary} />
+          ) : (
+            <Text style={styles.buttonText}>Entrar</Text>
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -61,7 +82,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.action.primary,
     paddingHorizontal: 24,
   },
   logo: {
@@ -79,20 +100,24 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 8,
     paddingHorizontal: 16,
-    backgroundColor: colors.inputBackground,
-    color: colors.inputText,
+    backgroundColor: colors.surface.sunken,
+    color: colors.text.primary,
   },
   button: {
     height: 48,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.logo,
+    backgroundColor: colors.action.secondary,
     marginTop: 8,
   },
   buttonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.background,
+    color: colors.text.primary,
+  },
+  error: {
+    color: colors.feedback.error,
+    fontSize: 14,
   },
 });

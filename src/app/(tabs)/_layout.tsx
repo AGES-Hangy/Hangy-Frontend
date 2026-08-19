@@ -14,14 +14,14 @@ export default function TabsLayout() {
         return {
           headerShown: true,
           header: () => <Header />,
-          tabBarActiveTintColor: colors.logo,
-          tabBarInactiveTintColor: colors.placeholder,
+          tabBarActiveTintColor: colors.action.secondary,
+          tabBarInactiveTintColor: colors.text.tertiary,
           // Every screen under (screens)/ is reachable-but-not-listed: no tab button, current or future.
           tabBarButton: isScreensGroupRoute ? () => null : undefined,
           tabBarItemStyle: isScreensGroupRoute ? { display: 'none' } : undefined,
           tabBarStyle: noNavbarScreens.some((screen) => route.name === `(screens)/${screen}/index`)
             ? { display: 'none' }
-            : { backgroundColor: colors.background },
+            : { backgroundColor: colors.action.primary },
         };
       }}
     >
