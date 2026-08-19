@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512" height="512" viewBox="0 0 512 512"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Símbolo laranja sobre fundo roxo</title>
+  <desc id="desc">Versão vetorial editável da imagem fornecida, composta por um fundo e três formas com curvas suaves.</desc>
+
+  <g id="fundo">
+    <rect width="512" height="512" fill="#77477E"/>
+  </g>
+
+  <g id="simbolo" fill="#FE9600">
+    <path id="parte-superior-esquerda"
+          d="M 75,101
+             C 75,68 107,45 146,45
+             C 186,45 220,68 220,102
+             L 220,198
+             C 220,208 217,212 207,210
+             C 186,206 159,195 135,188
+             C 118,183 105,187 88,192
+             C 79,195 75,191 75,178
+             Z"/>
+
+    <path id="parte-superior-direita"
+          d="M 294,101
+             C 294,68 327,45 366,45
+             C 405,45 438,68 438,101
+             L 438,178
+             C 438,191 434,195 425,192
+             C 408,187 396,184 380,189
+             C 355,197 328,207 306,211
+             C 297,213 294,209 294,198
+             Z"/>
+
+    <path id="parte-inferior"
+          d="M 75,259
+             C 75,233 91,216 115,215
+             C 127,215 142,222 159,228
+             C 195,240 226,247 256,247
+             C 292,247 333,238 376,223
+             C 395,216 405,214 416,220
+             C 431,228 438,241 438,259
+             L 438,393
+             C 438,440 413,466 367,466
+             C 321,466 294,442 294,393
+             L 294,317
+             C 281,319 269,321 257,321
+             C 245,321 233,319 221,317
+             L 220,393
+             C 220,440 193,466 147,466
+             C 101,466 75,440 75,393
+             Z"/>
+  </g>
+</svg>
