@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { API_BASE_URL } from '@/constants/api';
+import { saveToken } from '@/utils/auth';
 
 interface LoginResult {
   accessToken: string;
@@ -31,6 +32,7 @@ export function useLogin() {
       }
 
       const data = await response.json();
+      await saveToken(data.access_token);
       return { accessToken: data.access_token, tokenType: data.token_type };
     } catch {
       setError('Não foi possível conectar ao servidor');
