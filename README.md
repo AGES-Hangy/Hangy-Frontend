@@ -9,17 +9,18 @@ Aplicativo mobile do Hangy, construído com React Native, Expo e TypeScript.
 
 ## Rodando localmente
 
+Instale as dependências:
+
 ```bash
+npm i
+# ou
 npm install
-npm start
 ```
 
-Depois, use o QR Code exibido pelo Expo ou escolha uma plataforma no terminal:
+Depois, inicie o servidor de desenvolvimento do Expo:
 
 ```bash
-npm run android
-npm run ios
-npm run web
+npx expo start
 ```
 
 Para validar os tipos:
