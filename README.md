@@ -20,7 +20,7 @@ npm install
 Depois, inicie o servidor de desenvolvimento do Expo:
 
 ```bash
-npx expo start
+npm start
 ```
 
 Para validar os tipos:
