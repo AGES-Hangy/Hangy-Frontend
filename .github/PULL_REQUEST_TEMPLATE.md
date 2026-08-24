@@ -25,17 +25,6 @@ Os comentários de orientação não aparecem no PR publicado e podem permanecer
 <!-- Quais telas/componentes mudaram? Como o usuário chega até elas e o que consegue fazer? -->
 
 
-### Estados tratados
-
-<!-- Descreva loading, vazio, erro, sucesso e permissões, quando aplicáveis. -->
-
-- [ ] Carregamento
-- [ ] Lista ou conteúdo vazio
-- [ ] Erro
-- [ ] Sucesso
-- [ ] Permissões ou acesso negado
-- [ ] Não se aplica
-
 ### Integração com o backend
 
 <!-- Informe endpoints consumidos, alterações de payload e uso de mock. Não inclua tokens ou dados sensíveis. -->
