@@ -67,9 +67,20 @@ export type TextFieldProps = {
 
   /**
    * Toque no campo dos tipos que não aceitam digitação (`Date`, `Select` e
-   * `Tags`). É onde a tela abre o date picker nativo, por exemplo.
+   * `Tags`). Em `Type=Date` roda junto com a abertura do picker, para a tela
+   * poder reagir ao toque sem precisar reimplementar o seletor.
    */
   onPress?: () => void;
+
+  /** `Type=Date`: data selecionada, que alimenta o picker nativo. */
+  dateValue?: Date;
+  /** `Type=Date`: chamado quando o usuário confirma uma data no picker. */
+  onChangeDate?: (date: Date) => void;
+  /** `Type=Date`: seletor de data (padrão) ou de hora. */
+  dateMode?: 'date' | 'time';
+  /** `Type=Date`: limites do seletor. */
+  minimumDate?: Date;
+  maximumDate?: Date;
 
   /** Limite de caracteres. Em `TextArea` também liga o contador do Figma. */
   maxLength?: number;

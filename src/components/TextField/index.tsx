@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +10,7 @@ import {
   View,
   type KeyboardTypeOptions,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
 import { Icon } from '@/components/Icon';
 import type { IconName } from '@/components/Icon';
@@ -32,6 +35,28 @@ const BORDER_WIDTH = 1.5;
 const BORDER_WIDTH_EMPHASIS = 2;
 /** Altura máxima da lista de opções antes de ela rolar. */
 const DROPDOWN_MAX_HEIGHT = 208;
+
+/**
+ * O date picker nativo só existe no Android e no iOS — no web o pacote apenas
+ * renderiza `null` e avisa no console. Para o `npm run web` continuar
+ * utilizável, ali o campo de data aceita digitação; nas plataformas de verdade
+ * vale a regra do Figma de nunca digitar a data.
+ */
+const HAS_NATIVE_DATE_PICKER = Platform.OS === 'ios' || Platform.OS === 'android';
+
+/** Opacidade do fundo escuro atrás do picker do iOS. */
+const BACKDROP_OPACITY = 0.4;
+
+/**
+ * Formata sem depender de `Intl`: o formato do Figma é fixo (`12/09/2026`) e
+ * não deve variar com o locale do aparelho.
+ */
+function formatDateValue(date: Date, mode: 'date' | 'time'): string {
+  const pad = (part: number) => String(part).padStart(2, '0');
+
+  if (mode === 'time') return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
 
 type TypeConfig = {
   leadingIcon?: IconName;
@@ -188,6 +213,11 @@ export function TextField({
   onSelectOption,
   tags,
   onPress,
+  dateValue,
+  onChangeDate,
+  dateMode = 'date',
+  minimumDate,
+  maximumDate,
   maxLength,
   accessibilityLabel,
   style,
@@ -195,8 +225,31 @@ export function TextField({
   const config = TYPES[type];
   const [focused, setFocused] = useState(false);
   const [isSecureHidden, setIsSecureHidden] = useState(true);
+  const [isIosPickerOpen, setIsIosPickerOpen] = useState(false);
 
-  const state = resolveState({ disabled, error, success, focused, hasValue: value.length > 0 });
+  const isDateField = type === 'Date';
+  // Campo de horário mostra relógio, não calendário. O Figma só desenhou o
+  // Type=Date de data, então o ícone do modo `time` vem daqui.
+  const trailingIcon: IconName | undefined =
+    isDateField && dateMode === 'time' ? 'clock' : config.trailingIcon;
+  // No web o campo de data volta a aceitar digitação, porque lá não existe
+  // picker nativo para abrir.
+  const editable = config.editable || (isDateField && !HAS_NATIVE_DATE_PICKER);
+
+  // O texto mostrado é o `value` quando a tela controla a formatação, e a data
+  // formatada quando ela só passa o `dateValue`.
+  const displayedValue =
+    isDateField && value.length === 0 && dateValue
+      ? formatDateValue(dateValue, dateMode)
+      : value;
+
+  const state = resolveState({
+    disabled,
+    error,
+    success,
+    focused,
+    hasValue: displayedValue.length > 0,
+  });
   const visual = STATES[state];
   const stateIcon = STATE_ICONS[state];
 
@@ -205,13 +258,43 @@ export function TextField({
 
   const isDropdownOpen = Boolean(config.hasDropdown && focused && options && options.length > 0);
 
-  // Fecha a lista ao desmontar (ex.: navegar para outra tela), senão ela fica
-  // presa por cima da tela seguinte.
-  useEffect(() => () => setFocused(false), []);
+  // Fecha a lista e o picker ao desmontar (ex.: navegar para outra tela), senão
+  // eles ficam presos por cima da tela seguinte.
+  useEffect(
+    () => () => {
+      setFocused(false);
+      setIsIosPickerOpen(false);
+      if (isDateField && Platform.OS === 'android') void DateTimePickerAndroid.dismiss(dateMode);
+    },
+    [isDateField, dateMode],
+  );
+
+  const commitDate = (date?: Date) => {
+    if (date) onChangeDate?.(date);
+  };
+
+  const openDatePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: dateValue ?? new Date(),
+        mode: dateMode,
+        minimumDate,
+        maximumDate,
+        // No Android o diálogo se fecha sozinho; só o 'set' confirma a escolha.
+        onChange: (event, date) => {
+          if (event.type === 'set') commitDate(date);
+        },
+      });
+      return;
+    }
+
+    setIsIosPickerOpen(true);
+  };
 
   const openOnPress = () => {
     if (disabled) return;
     if (config.hasDropdown) setFocused((current) => !current);
+    if (isDateField && HAS_NATIVE_DATE_PICKER) openDatePicker();
     onPress?.();
   };
 
@@ -256,14 +339,14 @@ export function TextField({
             { color: visual.valueColor },
             config.multiline && styles.inputMultiline,
           ]}
-          value={value}
+          value={displayedValue}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={disabled ? colors.text.disabled : colors.text.tertiary}
-          editable={config.editable && !disabled}
+          editable={editable && !disabled}
           // Nos tipos que abrem seletor o toque tem que chegar no Pressable de
           // fora, em vez de o TextInput engolir e abrir o teclado.
-          pointerEvents={config.editable ? 'auto' : 'none'}
+          pointerEvents={editable ? 'auto' : 'none'}
           multiline={config.multiline}
           secureTextEntry={config.secure && isSecureHidden}
           keyboardType={config.keyboardType}
@@ -277,7 +360,7 @@ export function TextField({
 
       {config.multiline && maxLength !== undefined && (
         <Text style={[typography.caption, styles.counter, { color: palette.neutral[400] }]}>
-          {value.length}/{maxLength}
+          {displayedValue.length}/{maxLength}
         </Text>
       )}
 
@@ -300,9 +383,9 @@ export function TextField({
       {stateIcon ? (
         <Icon name={stateIcon.name} size={ICON_SIZE} color={stateIcon.color} />
       ) : (
-        config.trailingIcon && (
+        trailingIcon && (
           <Icon
-            name={config.trailingIcon}
+            name={trailingIcon}
             size={ICON_SIZE}
             color={resolveIconColor(state, 'trailing')}
           />
@@ -318,7 +401,7 @@ export function TextField({
     <View style={[styles.container, isDropdownOpen && styles.containerAbove, style]}>
       {label && <Text style={[typography.labelM, { color: visual.labelColor }]}>{label}</Text>}
 
-      {config.editable ? (
+      {editable ? (
         fieldBody
       ) : (
         <Pressable
@@ -326,7 +409,7 @@ export function TextField({
           disabled={disabled}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel ?? label}
-          accessibilityState={{ disabled, expanded: isDropdownOpen }}
+          accessibilityState={{ disabled, expanded: isDropdownOpen || isIosPickerOpen }}
         >
           {fieldBody}
         </Pressable>
@@ -336,6 +419,49 @@ export function TextField({
         <Text style={[typography.bodyS, styles.message, { color: visual.messageColor }]}>
           {message ?? ''}
         </Text>
+      )}
+
+      {/* O Android abre um diálogo nativo pelo DateTimePickerAndroid e não
+          precisa de UI própria; no iOS o picker é um componente, então ele vai
+          numa folha por cima da tela. */}
+      {isIosPickerOpen && (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsIosPickerOpen(false)}
+        >
+          <View style={styles.pickerOverlay}>
+            <Pressable
+              style={styles.pickerBackdrop}
+              onPress={() => setIsIosPickerOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Fechar seletor de data"
+            />
+            <View style={styles.pickerSheet}>
+              <Pressable
+                onPress={() => setIsIosPickerOpen(false)}
+                hitSlop={spacing[12]}
+                accessibilityRole="button"
+                accessibilityLabel="Concluir"
+              >
+                <Text style={[typography.labelL, { color: colors.text.brand }]}>Concluir</Text>
+              </Pressable>
+
+              <DateTimePicker
+                value={dateValue ?? new Date()}
+                mode={dateMode}
+                display="spinner"
+                minimumDate={minimumDate}
+                maximumDate={maximumDate}
+                // No iOS o picker emite a cada rolagem: o valor vai sendo
+                // confirmado enquanto o usuário gira, e a folha fecha no
+                // "Concluir" ou no toque fora.
+                onChange={(_event, date) => commitDate(date)}
+              />
+            </View>
+          </View>
+        </Modal>
       )}
 
       {isDropdownOpen && (
@@ -431,6 +557,26 @@ const styles = StyleSheet.create({
   },
   optionPressed: {
     backgroundColor: colors.bg.subtle,
+  },
+  pickerOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  pickerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.bg.inverse,
+    opacity: BACKDROP_OPACITY,
+  },
+  pickerSheet: {
+    alignItems: 'flex-end',
+    gap: spacing[8],
+    paddingHorizontal: spacing[16],
+    paddingTop: spacing[16],
+    paddingBottom: spacing[32],
+    backgroundColor: colors.bg.base,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    ...elevation[3],
   },
 });
 
