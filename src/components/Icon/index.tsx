@@ -34,15 +34,17 @@ export function Icon({
   return (
     // Os props de acessibilidade ficam na View, não no SVG: o lucide repassa o
     // que não conhece para o elemento nativo, e no web isso vira atributo DOM
-    // inválido (accessible, accessibilityElementsHidden...). A View também
-    // fixa o frame quadrado do Figma.
+    // inválido. A View também fixa o frame quadrado do Figma.
+    //
+    // `aria-hidden` em vez de accessibilityElementsHidden (iOS) +
+    // importantForAccessibility (Android): o React Native mapeia ele para os
+    // dois no nativo, e o react-native-web descarta aquele par sem traduzir —
+    // o que deixava o ícone decorativo exposto ao leitor de tela no web.
     <View
       style={{ width: size, height: size }}
-      accessible={!isDecorative}
+      aria-hidden={isDecorative || undefined}
       accessibilityRole={isDecorative ? undefined : 'image'}
       accessibilityLabel={accessibilityLabel}
-      accessibilityElementsHidden={isDecorative}
-      importantForAccessibility={isDecorative ? 'no-hide-descendants' : 'yes'}
     >
       <LucideIcon
         size={size}
