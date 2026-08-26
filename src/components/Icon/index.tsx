@@ -1,3 +1,5 @@
+import { View } from 'react-native';
+
 import { colors } from '@/constants/colors';
 import { icons } from '@/components/Icon/icons';
 import type { IconProps } from '@/components/Icon/types';
@@ -30,22 +32,30 @@ export function Icon({
   const isDecorative = accessibilityLabel === undefined;
 
   return (
-    <LucideIcon
-      size={size}
-      color={color}
-      fill={fill}
-      strokeWidth={strokeWidth}
-      absoluteStrokeWidth={absoluteStrokeWidth}
-      // O Figma trava cap/join em `round`; o lucide já entrega assim, mas
-      // deixamos explícito para o traço não mudar se o pacote mudar o padrão.
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    // Os props de acessibilidade ficam na View, não no SVG: o lucide repassa o
+    // que não conhece para o elemento nativo, e no web isso vira atributo DOM
+    // inválido (accessible, accessibilityElementsHidden...). A View também
+    // fixa o frame quadrado do Figma.
+    <View
+      style={{ width: size, height: size }}
       accessible={!isDecorative}
       accessibilityRole={isDecorative ? undefined : 'image'}
       accessibilityLabel={accessibilityLabel}
       accessibilityElementsHidden={isDecorative}
       importantForAccessibility={isDecorative ? 'no-hide-descendants' : 'yes'}
-    />
+    >
+      <LucideIcon
+        size={size}
+        color={color}
+        fill={fill}
+        strokeWidth={strokeWidth}
+        absoluteStrokeWidth={absoluteStrokeWidth}
+        // O Figma trava cap/join em `round`; o lucide já entrega assim, mas
+        // deixamos explícito para o traço não mudar se o pacote mudar o padrão.
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </View>
   );
 }
 
