@@ -5,6 +5,8 @@ import { palette } from '@/constants/colors';
 export const radius = {
   xs: 6,
   sm: 10,
+  // Figma Components/EventCard: radius/sm
+  eventCardSm: 8,
   md: 14,
   lg: 20,
   xl: 28,
