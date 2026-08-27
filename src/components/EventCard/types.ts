@@ -9,6 +9,7 @@ export interface Event {
   location: string;
   imageUrl: string;
   privacy: EventPrivacy;
+  distance?: string;
 }
 
 export interface EventCardProps {

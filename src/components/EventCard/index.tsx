@@ -55,7 +55,7 @@ export function EventCard({
 		>
 			{variant === 'Featured' && <FeaturedCard event={content} />}
 			{variant === 'Compact' && <CompactCard event={content} state={state} />}
-			{variant === 'MapPreview' && <MapPreviewCard event={content} onPress={onPress} />}
+			{variant === 'MapPreview' && <MapPreviewCard event={content} />}
 			{variant === 'Mini' && <MiniCard event={content} />}
 			{variant === 'Request' && <RequestCard event={content} isNew={isNew} />}
 		</Pressable>
@@ -112,12 +112,14 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 	return <View style={[styles.card, styles.compact]}><EventImage event={event} style={styles.compactImage} /><EventDetails event={event} compact />{stateLabel ? <Text style={state === 'Confirmed' ? styles.confirmed : styles.pending}>{stateLabel}</Text> : null}</View>;
 }
 
-function MapPreviewCard({ event, onPress }: { event: Event; onPress: () => void }) {
-	return <View style={[styles.card, styles.mapPreview]}><EventImage event={event} style={styles.mapImage} /><View style={styles.mapDetails}><Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text><Text numberOfLines={1} style={styles.detailText}>{event.date}</Text></View><Pressable accessibilityLabel={`Confirmar presença em ${event.title}`} accessibilityRole="button" hitSlop={spacing[8]} onPress={onPress} style={styles.confirmButton}><MaterialIcons name="check" size={18} color={colors.text.inverse} /></Pressable></View>;
+function MapPreviewCard({ event }: { event: Event }) {
+	const distance = event.distance ?? '250 m';
+
+	return <View style={[styles.card, styles.mapPreview]}><EventImage event={event} style={styles.mapImage} /><View style={styles.mapDetails}><Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text><View style={styles.detailLine}><MaterialIcons name="near-me" size={14} color={colors.text.secondary} /><Text numberOfLines={1} style={styles.detailText}>{distance}</Text></View></View></View>;
 }
 
 function MiniCard({ event }: { event: Event }) {
-	return <View style={[styles.card, styles.mini]}><EventImage event={event} style={styles.miniImage} /><View style={styles.miniContent}><PrivacyBadge privacy={event.privacy} /><Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text><Text numberOfLines={1} style={styles.detailText}>{event.date}</Text></View></View>;
+	return <View style={[styles.card, styles.mini]}><EventImage event={event} style={styles.miniImage} /><View style={styles.miniContent}><Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text><Text numberOfLines={1} style={styles.detailText}>{event.date}</Text></View></View>;
 }
 
 function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
@@ -128,7 +130,7 @@ const styles = StyleSheet.create({
 	pressable: { alignSelf: 'flex-start' },
 	pressed: { opacity: 0.82 },
 	card: { overflow: 'hidden', backgroundColor: colors.surface.card, borderRadius: radius.md, ...elevation[1] },
-	featured: { width: 320, height: 288 },
+	featured: { width: 320, height: 288, borderRadius: radius.lg },
 	featuredImageWrap: { height: 160 },
 	featuredImage: { width: '100%', height: '100%', backgroundColor: colors.surface.sunken },
 	privacyBadge: { position: 'absolute', top: spacing[12], left: spacing[12], flexDirection: 'row', alignItems: 'center', gap: spacing[4], paddingHorizontal: spacing[8], paddingVertical: spacing[4], borderRadius: radius.full, backgroundColor: colors.action.primary },
@@ -138,14 +140,13 @@ const styles = StyleSheet.create({
 	compactTitle: { ...typography.labelM, color: colors.text.primary },
 	detailLine: { flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
 	detailText: { ...typography.caption, color: colors.text.secondary, flexShrink: 1 },
-	compact: { width: '100%', minHeight: 88, flexDirection: 'row', alignItems: 'center' },
+	compact: { width: '100%', maxWidth: 520, height: 88, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md },
 	compactImage: { width: 88, height: 88, backgroundColor: colors.surface.sunken },
 	confirmed: { ...typography.labelS, color: colors.feedback.success, paddingRight: spacing[12] },
 	pending: { ...typography.labelS, color: colors.action.secondary, paddingRight: spacing[12] },
 	mapPreview: { width: 280, height: 96, flexDirection: 'row', alignItems: 'center', padding: spacing[8] },
 	mapImage: { width: 80, height: 80, borderRadius: radius.eventCardSm, backgroundColor: colors.surface.sunken },
 	mapDetails: { flex: 1, gap: spacing[4], paddingHorizontal: spacing[8] },
-	confirmButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.action.primary },
 	mini: { width: 172, height: 226 },
 	miniImage: { width: '100%', height: 112, backgroundColor: colors.surface.sunken },
 	miniContent: { flex: 1, gap: spacing[4], padding: spacing[8] },
