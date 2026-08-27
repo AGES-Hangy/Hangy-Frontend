@@ -12,6 +12,7 @@ const event: Event = {
   imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a',
   privacy: 'Publico',
   distance: '250 m',
+  requesterName: 'Ana Silva',
 };
 
 export default function EventCardPreview() {

@@ -27,6 +27,26 @@ function formatEventDate(value: string) {
 		.replace('.', '');
 }
 
+function formatRequestDate(value: string) {
+	const parsedDate = new Date(value);
+
+	if (Number.isNaN(parsedDate.getTime())) {
+		return value;
+	}
+
+	const parts = new Intl.DateTimeFormat('pt-BR', {
+		weekday: 'short',
+		day: '2-digit',
+		month: 'short',
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: false,
+	}).formatToParts(parsedDate);
+	const getPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+
+	return `${getPart('weekday').replace('.', '')}, ${getPart('day')} ${getPart('month').replace('.', '')}, ${getPart('hour')}h${getPart('minute')}`;
+}
+
 const privacyLabels: Record<EventPrivacy, string> = {
 	Publico: 'Público',
 	Privado: 'Privado',
@@ -109,21 +129,23 @@ function FeaturedCard({ event }: { event: Event }) {
 
 function CompactCard({ event, state }: { event: Event; state: EventCardProps['state'] }) {
 	const stateLabel = state === 'Confirmed' ? 'Confirmado' : state === 'Pending' ? 'Pendente' : '';
-	return <View style={[styles.card, styles.compact]}><EventImage event={event} style={styles.compactImage} /><EventDetails event={event} compact />{stateLabel ? <Text style={state === 'Confirmed' ? styles.confirmed : styles.pending}>{stateLabel}</Text> : null}</View>;
+	return <View style={[styles.card, styles.compact]}><EventImage event={event} style={styles.compactImage} /><EventDetails event={event} compact />{stateLabel ? <Text style={state === 'Confirmed' ? styles.confirmed : styles.pending}>{stateLabel}</Text> : <MaterialIcons name="chevron-right" size={24} color={colors.text.tertiary} style={styles.compactChevron} />}</View>;
 }
 
 function MapPreviewCard({ event }: { event: Event }) {
-	const distance = event.distance ?? '250 m';
+	const distance = event.distance ?? '250 metros';
 
-	return <View style={[styles.card, styles.mapPreview]}><EventImage event={event} style={styles.mapImage} /><View style={styles.mapDetails}><Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text><View style={styles.detailLine}><MaterialIcons name="near-me" size={14} color={colors.text.secondary} /><Text numberOfLines={1} style={styles.detailText}>{distance}</Text></View></View></View>;
+	return <View style={[styles.card, styles.mapPreview]}><EventImage event={event} style={styles.mapImage} /><View style={styles.mapDetails}><Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text><Text numberOfLines={1} style={styles.detailText}>a {distance} de você</Text></View></View>;
 }
 
 function MiniCard({ event }: { event: Event }) {
-	return <View style={[styles.card, styles.mini]}><EventImage event={event} style={styles.miniImage} /><View style={styles.miniContent}><Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text><Text numberOfLines={1} style={styles.detailText}>{event.date}</Text></View></View>;
+	return <View style={[styles.card, styles.mini]}><EventImage event={event} style={styles.miniImage} /><View style={styles.miniContent}><Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text><View style={styles.detailLine}><MaterialIcons name="event" size={14} color={colors.text.secondary} /><Text numberOfLines={1} style={styles.detailText}>{event.date}</Text></View><View style={styles.detailLine}><MaterialIcons name="place" size={14} color={colors.text.secondary} /><Text numberOfLines={1} style={styles.detailText}>{event.location}</Text></View></View></View>;
 }
 
 function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
-	return <View style={[styles.card, styles.mini]}><View style={styles.requestImageWrap}><EventImage event={event} style={styles.miniImage} />{isNew ? <View style={styles.newDot} /> : null}</View><View style={styles.miniContent}><Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text><Text numberOfLines={1} style={styles.detailText}>{event.location}</Text><Text style={styles.requestLabel}>Solicitação</Text></View></View>;
+	const requesterName = event.requesterName ?? 'Usuário';
+
+	return <View style={[styles.card, styles.mini]}><View style={styles.requestImageWrap}><EventImage event={event} style={styles.requestImage} />{isNew ? <View style={styles.newDot} /> : null}</View><View style={styles.miniContent}><Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text><View style={styles.detailLine}><MaterialIcons name="person" size={14} color={colors.text.secondary} /><Text numberOfLines={1} style={styles.detailText}>{requesterName} solicitou</Text></View><View style={styles.detailLine}><MaterialIcons name="event" size={14} color={colors.text.secondary} /><Text numberOfLines={1} style={styles.detailText}>{formatRequestDate(event.date)}</Text></View><View style={styles.requestActions}><MaterialIcons name="check" size={24} color={colors.feedback.success} /><MaterialIcons name="close" size={24} color={colors.feedback.error} /></View></View></View>;
 }
 
 const styles = StyleSheet.create({
@@ -144,14 +166,16 @@ const styles = StyleSheet.create({
 	compactImage: { width: 88, height: 88, backgroundColor: colors.surface.sunken },
 	confirmed: { ...typography.labelS, color: colors.feedback.success, paddingRight: spacing[12] },
 	pending: { ...typography.labelS, color: colors.action.secondary, paddingRight: spacing[12] },
+	compactChevron: { marginRight: spacing[12] },
 	mapPreview: { width: 280, height: 96, flexDirection: 'row', alignItems: 'center', padding: spacing[8] },
 	mapImage: { width: 80, height: 80, borderRadius: radius.eventCardSm, backgroundColor: colors.surface.sunken },
 	mapDetails: { flex: 1, gap: spacing[4], paddingHorizontal: spacing[8] },
 	mini: { width: 172, height: 226 },
 	miniImage: { width: '100%', height: 112, backgroundColor: colors.surface.sunken },
+	requestImage: { width: '100%', height: 96, backgroundColor: colors.surface.sunken },
 	miniContent: { flex: 1, gap: spacing[4], padding: spacing[8] },
 	miniTitle: { ...typography.labelM, color: colors.text.primary, flexShrink: 1 },
 	requestImageWrap: { position: 'relative' },
 	newDot: { position: 'absolute', top: spacing[8], right: spacing[8], width: spacing[8], height: spacing[8], borderRadius: radius.full, backgroundColor: colors.action.secondary },
-	requestLabel: { ...typography.caption, color: colors.text.brand },
+	requestActions: { flexDirection: 'row', gap: spacing[12], marginTop: 'auto' },
 });
