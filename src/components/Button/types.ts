@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import type { IconName } from '@/components/Icon';
@@ -16,10 +16,15 @@ export type ButtonProps = {
   size?: ButtonSize;
   /**
    * Ícone à esquerda do label, com gap 8. Passe o nome do `Icon` para herdar
-   * tamanho e cor da variante automaticamente; um `ReactNode` só quando
-   * precisar de algo que não é um ícone do Design System.
+   * tamanho e cor da variante automaticamente; um elemento só quando precisar
+   * de algo que não é um ícone do Design System.
+   *
+   * O elemento é `ReactElement`, e não `ReactNode`, de propósito: `ReactNode`
+   * inclui `string`, o que faria qualquer texto passar no lugar de um nome de
+   * ícone (`icon="compartilhr"` só quebraria em runtime). Assim o TypeScript
+   * só aceita um nome que existe no mapa de ícones.
    */
-  icon?: IconName | ReactNode;
+  icon?: IconName | ReactElement;
   /** Bloqueia o toque e aplica o estado `Disabled`. */
   disabled?: boolean;
   /** Estado `Loading`: troca o label por um spinner e bloqueia o toque. */

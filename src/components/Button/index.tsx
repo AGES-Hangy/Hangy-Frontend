@@ -100,9 +100,9 @@ function resolveVisual(variant: ButtonVariant, disabled: boolean, pressed: boole
 }
 
 /**
- * `icon` aceita tanto o nome de um `Icon` quanto um `ReactNode`, e `ReactNode`
- * já inclui `string` — então só o teste de pertencimento ao mapa de ícones
- * distingue os dois casos.
+ * `icon` aceita tanto o nome de um `Icon` quanto um elemento pronto — este
+ * teste separa os dois casos em runtime, e de quebra estreita o tipo para o
+ * `name` do `Icon`.
  */
 function isIconName(value: unknown): value is IconName {
   return typeof value === 'string' && value in icons;
