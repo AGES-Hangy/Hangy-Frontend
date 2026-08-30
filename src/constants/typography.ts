@@ -15,7 +15,7 @@ export const typography = {
   bodyL: { fontSize: 16, lineHeight: 24, fontWeight: '400', letterSpacing: 0.1 },
   bodyM: { fontSize: 14, lineHeight: 21, fontWeight: '400', letterSpacing: 0 },
   bodyS: { fontSize: 12, lineHeight: 18, fontWeight: '400', letterSpacing: 0 },
-  labelL: { fontSize: 16, lineHeight: 20, fontWeight: '600', letterSpacing: 0.1 },
+  labelL: { fontSize: 16, lineHeight: 20, fontWeight: '600', letterSpacing: -0.1 },
   labelM: { fontSize: 14, lineHeight: 18, fontWeight: '600', letterSpacing: 0 },
   labelS: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.1 },
   caption: { fontSize: 11, lineHeight: 15, fontWeight: '500', letterSpacing: 0.2 },
