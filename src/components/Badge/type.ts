@@ -165,6 +165,10 @@ export function resolveNotificationCount(count?: number): { type: 'dot' | 'count
     return null;
   }
 
+  if (count === 1) {
+    return { type: 'dot', value: '' };
+  }
+
   if (count > 9) {
     return { type: 'count', value: '9+' };
   }

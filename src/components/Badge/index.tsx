@@ -17,10 +17,10 @@ const BADGE_ICON_SIZE = 12;
 const BADGE_TEXT_GAP = 6;
 const BADGE_BORDER_WIDTH = 1.5;
 const NOTIFICATION_ICON_SIZE = 16;
-const NOTIFICATION_DOT_SIZE = 10;
-const NOTIFICATION_BUBBLE_MIN_WIDTH = 16;
-const NOTIFICATION_PILL_HEIGHT = 16;
-const NOTIFICATION_OFFSET = 6;
+const NOTIFICATION_DOT_SIZE = 8;
+const NOTIFICATION_BUBBLE_MIN_WIDTH = 10;
+const NOTIFICATION_PILL_HEIGHT = 10;
+const NOTIFICATION_OFFSET = 1;
 
 function isNotificationBadgeProps(props: BadgeProps): props is Extract<BadgeProps, { family: 'Notification' }> {
   return props.family === 'Notification';
@@ -103,8 +103,8 @@ const styles = StyleSheet.create({
   },
   notificationBadge: {
     position: 'relative',
-    width: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET,
-    height: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET,
+    width: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET + 2,
+    height: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET + 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -116,8 +116,8 @@ const styles = StyleSheet.create({
   },
   notificationBubble: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: -3,
+    right: -1,
     backgroundColor: palette.error.default,
     borderWidth: 2,
     borderColor: palette.neutral[0],
@@ -133,12 +133,14 @@ const styles = StyleSheet.create({
     minWidth: NOTIFICATION_BUBBLE_MIN_WIDTH,
     height: NOTIFICATION_PILL_HEIGHT,
     borderRadius: radius.full,
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: 3,
+    paddingVertical: 0,
   },
   notificationCountText: {
-    ...typography.caption,
-    color: colors.text.inverse,
+    fontSize: 8,
+    lineHeight: 10,
     fontWeight: '700',
+    color: colors.text.inverse,
     includeFontPadding: false,
   },
 });
