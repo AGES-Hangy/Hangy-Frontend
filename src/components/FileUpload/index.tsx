@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   },
   bodyText: {
     ...bodyS,
-    color: colors.text.primary,
+    color: colors.text.tertiary,
     textAlign: 'center',
   },
   bodyTextMuted: {
