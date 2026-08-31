@@ -1,0 +1,221 @@
+import { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { colors, palette } from '@/constants/colors';
+import { elevation, radius, spacing } from '@/constants/layout';
+import { typography } from '@/constants/typography';
+import type { ParticipantLimitProps } from '@/components/ParticipantLimit/types';
+
+const CARD_HEIGHT = 89;
+const BORDER_WIDTH = 1.5;
+
+const TRACK_WIDTH = 44;
+const TRACK_HEIGHT = 24;
+const TRACK_RADIUS = 12;
+const DOT_SIZE = 16;
+const DOT_TRAVEL = TRACK_WIDTH - DOT_SIZE - 8; // 4px padding each side
+
+function CustomSwitch({
+  value,
+  onValueChange,
+  disabled = false,
+}: {
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: value ? 1 : 0,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+  }, [value]);
+
+  const dotX = anim.interpolate({ inputRange: [0, 1], outputRange: [4, 4 + DOT_TRAVEL] });
+  const trackBg = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [palette.neutral[300], colors.action.primary],
+  });
+  const dotColor = value ? colors.bg.base : colors.surface.sunken;
+
+  return (
+    <Pressable
+      onPress={() => !disabled && onValueChange(!value)}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      accessibilityLabel="Sem limite de participantes"
+    >
+      <Animated.View style={[styles.track, { backgroundColor: trackBg }]}>
+        <Animated.View style={[styles.dot, { transform: [{ translateX: dotX }], backgroundColor: dotColor }]} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+export function ParticipantLimit({
+  value,
+  onChangeValue,
+  unlimited,
+  onChangeUnlimited,
+  disabled = false,
+}: ParticipantLimitProps) {
+  const fieldDisabled = disabled || unlimited;
+
+  const fieldBorderColor = fieldDisabled ? palette.neutral[200] : palette.neutral[300];
+  const fieldBg = fieldDisabled ? colors.surface.sunken : colors.surface.card;
+  const fieldLabelColor = disabled ? colors.text.disabled : palette.neutral[700];
+  const countColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
+  const stepperColor = fieldDisabled ? colors.text.disabled : colors.action.primary;
+
+  function decrement() {
+    if (!fieldDisabled && value > 0) onChangeValue(value - 1);
+  }
+
+  function increment() {
+    if (!fieldDisabled) onChangeValue(value + 1);
+  }
+
+  const countLabel = String(value).padStart(2, '0');
+
+  return (
+    <View style={styles.container}>
+      <Text style={[typography.labelM, { color: fieldLabelColor }]}>Limite de participantes</Text>
+
+      <View style={styles.row}>
+        {/* Cartão esquerdo — stepper */}
+        <View
+          style={[
+            styles.card,
+            styles.cardStepper,
+            { backgroundColor: fieldBg, borderColor: fieldBorderColor },
+          ]}
+        >
+          <Pressable
+            onPress={decrement}
+            disabled={fieldDisabled || value === 0}
+            hitSlop={8}
+            accessibilityLabel="Diminuir limite"
+            accessibilityRole="button"
+            style={styles.stepBtn}
+          >
+            <Text style={[styles.stepIcon, { color: stepperColor }]}>−</Text>
+          </Pressable>
+
+          <Text style={[typography.labelM, styles.count, { color: countColor }]}>{countLabel}</Text>
+
+          <Pressable
+            onPress={increment}
+            disabled={fieldDisabled}
+            hitSlop={8}
+            accessibilityLabel="Aumentar limite"
+            accessibilityRole="button"
+            style={styles.stepBtn}
+          >
+            <Text style={[styles.stepIcon, { color: stepperColor }]}>+</Text>
+          </Pressable>
+        </View>
+
+        {/* Cartão direito — Sem limite + Switch */}
+        <View
+          style={[
+            styles.card,
+            styles.cardToggle,
+            {
+              backgroundColor: !disabled && unlimited ? colors.surface.card : colors.surface.sunken,
+              borderColor: !disabled && unlimited ? palette.neutral[300] : palette.neutral[200],
+            },
+          ]}
+        >
+          <View style={styles.switchRow}>
+            <Text
+              style={[
+                typography.labelM,
+                { color: disabled || !unlimited ? colors.text.disabled : colors.text.primary },
+              ]}
+            >
+              Sem limite
+            </Text>
+            <CustomSwitch
+              value={unlimited}
+              onValueChange={onChangeUnlimited}
+              disabled={disabled}
+            />
+          </View>
+          <Text
+            style={[
+              typography.bodyS,
+              { color: disabled || !unlimited ? colors.text.disabled : colors.text.secondary },
+            ]}
+          >
+            Qualquer pessoa que vir o evento pode entrar.
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    gap: spacing[12],
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing[12],
+  },
+  card: {
+    borderWidth: BORDER_WIDTH,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing[16],
+    height: CARD_HEIGHT,
+    ...elevation[1],
+  },
+  cardStepper: {
+    width: 110,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardToggle: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: spacing[4],
+  },
+  stepBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepIcon: {
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  count: {
+    minWidth: 28,
+    textAlign: 'center',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  track: {
+    width: TRACK_WIDTH,
+    height: TRACK_HEIGHT,
+    borderRadius: TRACK_RADIUS,
+    justifyContent: 'center',
+  },
+  dot: {
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
+    position: 'absolute',
+  },
+});
+
+export type { ParticipantLimitProps, ParticipantLimitState } from '@/components/ParticipantLimit/types';
