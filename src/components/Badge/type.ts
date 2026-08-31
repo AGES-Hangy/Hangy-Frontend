@@ -51,14 +51,14 @@ export type BadgeVisualConfig = {
 const privacyVariantMap: Record<PrivacyBadgeValue, BadgeVisualConfig> = {
   PUBLIC: {
     label: 'Público',
-    icon: 'eye',
+    icon: 'users',
     textColor: palette.success.default,
     backgroundColor: palette.success.bg,
     borderColor: palette.success.default,
   },
   'Público': {
     label: 'Público',
-    icon: 'eye',
+    icon: 'users',
     textColor: palette.success.default,
     backgroundColor: palette.success.bg,
     borderColor: palette.success.default,
@@ -66,30 +66,30 @@ const privacyVariantMap: Record<PrivacyBadgeValue, BadgeVisualConfig> = {
   PRIVATE: {
     label: 'Privado',
     icon: 'lock',
-    textColor: palette.primary[500],
-    backgroundColor: palette.primary[50],
-    borderColor: palette.primary[500],
+    textColor: palette.primary[600],
+    backgroundColor: palette.primary[100],
+    borderColor: palette.primary[600],
   },
   Privado: {
     label: 'Privado',
     icon: 'lock',
-    textColor: palette.primary[500],
-    backgroundColor: palette.primary[50],
-    borderColor: palette.primary[500],
+    textColor: palette.primary[600],
+    backgroundColor: palette.primary[100],
+    borderColor: palette.primary[600],
   },
   INVITE_ONLY: {
     label: 'Por convite',
-    icon: 'mail',
-    textColor: colors.action.secondary,
-    backgroundColor: palette.warning.bg,
-    borderColor: colors.action.secondary,
+    icon: 'ticket',
+    textColor: palette.secondary[700],
+    backgroundColor: palette.secondary[50],
+    borderColor: palette.secondary[700],
   },
   'Por convite': {
     label: 'Por convite',
-    icon: 'mail',
-    textColor: colors.action.secondary,
-    backgroundColor: palette.warning.bg,
-    borderColor: colors.action.secondary,
+    icon: 'ticket',
+    textColor: palette.secondary[700],
+    backgroundColor: palette.secondary[50],
+    borderColor: palette.secondary[700],
   },
 };
 
@@ -111,16 +111,16 @@ const statusVariantMap: Record<StatusBadgeValue, BadgeVisualConfig> = {
   PENDING: {
     label: 'Pendente',
     icon: 'clock',
-    textColor: colors.action.secondary,
+    textColor: palette.warning.default,
     backgroundColor: palette.warning.bg,
-    borderColor: colors.action.secondary,
+    borderColor: palette.warning.default,
   },
   Pendente: {
     label: 'Pendente',
     icon: 'clock',
-    textColor: colors.action.secondary,
+    textColor: palette.warning.default,
     backgroundColor: palette.warning.bg,
-    borderColor: colors.action.secondary,
+    borderColor: palette.warning.default,
   },
   REJECTED: {
     label: 'Recusado',
@@ -161,11 +161,7 @@ export function resolveStatusVariant(value: StatusBadgeValue): BadgeVisualConfig
 }
 
 export function resolveNotificationCount(count?: number): { type: 'dot' | 'count'; value: string } | null {
-  if (typeof count !== 'number' || Number.isNaN(count)) {
-    return { type: 'dot', value: '' };
-  }
-
-  if (count <= 0) {
+  if (count === undefined || typeof count !== 'number' || Number.isNaN(count) || count <= 0) {
     return null;
   }
 

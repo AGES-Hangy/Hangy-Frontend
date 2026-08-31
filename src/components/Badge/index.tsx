@@ -11,12 +11,16 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
-const BADGE_HEIGHT = 32;
+const BADGE_HEIGHT = 24;
+const BADGE_HORIZONTAL_PADDING = 10;
 const BADGE_ICON_SIZE = 12;
-const NOTIFICATION_ICON_SIZE = 18;
+const BADGE_TEXT_GAP = 6;
+const BADGE_BORDER_WIDTH = 1.5;
+const NOTIFICATION_ICON_SIZE = 16;
 const NOTIFICATION_DOT_SIZE = 10;
-const NOTIFICATION_BUBBLE_MIN_WIDTH = 18;
-const NOTIFICATION_PILL_HEIGHT = 18;
+const NOTIFICATION_BUBBLE_MIN_WIDTH = 16;
+const NOTIFICATION_PILL_HEIGHT = 16;
+const NOTIFICATION_OFFSET = 6;
 
 function isNotificationBadgeProps(props: BadgeProps): props is Extract<BadgeProps, { family: 'Notification' }> {
   return props.family === 'Notification';
@@ -40,7 +44,9 @@ export function Badge(props: BadgeProps) {
             : 'Notificações pendentes'
         }
       >
-        <Icon name="bell" size={NOTIFICATION_ICON_SIZE} color={colors.text.primary} />
+        <View style={styles.notificationIconWrap}>
+          <Icon name="bell" size={NOTIFICATION_ICON_SIZE} color={colors.text.primary} strokeWidth={2.5} />
+        </View>
 
         <View
           style={[
@@ -72,8 +78,10 @@ export function Badge(props: BadgeProps) {
       ]}
       accessibilityRole="text"
     >
-      <Icon name={visual.icon} size={BADGE_ICON_SIZE} color={visual.textColor} />
-      <Text style={[typography.caption, styles.badgeText, { color: visual.textColor }]}>{visual.label}</Text>
+      <Icon name={visual.icon} size={BADGE_ICON_SIZE} color={visual.textColor} strokeWidth={2.25} />
+      <Text style={[typography.overline, styles.badgeText, { color: visual.textColor }]}>
+        {visual.label}
+      </Text>
     </View>
   );
 }
@@ -83,22 +91,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: spacing[4],
-    minHeight: BADGE_HEIGHT,
-    paddingVertical: spacing[8],
-    paddingHorizontal: spacing[12],
+    gap: BADGE_TEXT_GAP,
+    height: BADGE_HEIGHT,
+    paddingHorizontal: BADGE_HORIZONTAL_PADDING,
     borderRadius: radius.full,
-    borderWidth: 1.5,
+    borderWidth: BADGE_BORDER_WIDTH,
   },
   badgeText: {
     includeFontPadding: false,
+    fontFamily: 'Inter',
   },
   notificationBadge: {
     position: 'relative',
-    width: NOTIFICATION_ICON_SIZE + spacing[8],
-    height: NOTIFICATION_ICON_SIZE + spacing[8],
-    alignItems: 'center',
+    width: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET,
+    height: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationIconWrap: {
+    width: NOTIFICATION_ICON_SIZE,
+    height: NOTIFICATION_ICON_SIZE,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   notificationBubble: {
     position: 'absolute',
