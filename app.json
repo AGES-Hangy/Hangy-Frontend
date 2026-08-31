@@ -24,7 +24,8 @@
         {
           "photosPermission": "O Hangy usa suas fotos para definir a capa do evento."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }
