@@ -12,59 +12,68 @@ export interface PickedImage {
   fileSize: number | null;
 }
 
-const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
-  mediaTypes: ['images'],
-  allowsEditing: true,
-  aspect: [16, 9],
-  quality: 1,
-};
+async function pickFileNative(): Promise<PickedImage | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [16, 9],
+    quality: 1,
+  });
+
+  if (result.canceled) return null;
+
+  const asset = result.assets[0];
+  return { uri: asset.uri, mimeType: asset.mimeType ?? '', fileSize: asset.fileSize ?? null };
+}
 
 /**
- * Na web, o `<input>` interno do expo-image-picker lê o arquivo escolhido
- * dentro do próprio listener de `change`; quando o tipo não é imagem/vídeo
- * (ex.: um PDF passou pelo filtro do seletor do sistema), a lib joga um
- * `throw` ali dentro que nunca rejeita a Promise devolvida por
- * `launchImageLibraryAsync` — vira um `unhandledrejection` solto, que
- * derruba a tela com a tela de erro do Metro em vez de cair no try/catch
- * normal de quem chamou. Só na web, escutamos esse evento durante a seleção
- * e religamos ele como rejeição da Promise que devolvemos.
+ * Só na web: o `<input>` interno do expo-image-picker lê o arquivo dentro do
+ * próprio listener de `change` e, pra tipos que não são imagem/vídeo (ex.:
+ * um .txt ou .pdf que passou pelo filtro do seletor do sistema), joga um
+ * `throw` que a própria lib nunca liga a um `reject` — vira um
+ * `unhandledrejection` solto que derruba a tela com a tela de erro do Metro
+ * antes de qualquer try/catch nosso rodar. Em vez de tentar interceptar esse
+ * evento, criamos nosso próprio `<input>` aqui e validamos tipo/tamanho no
+ * nosso código, sem nunca chamar o `readFile` problemático da lib.
  */
-function launchImageLibrary(): Promise<ImagePicker.ImagePickerResult> {
-  if (Platform.OS !== 'web') {
-    return ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
-  }
+function pickFileWeb(): Promise<PickedImage | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png';
+    input.style.display = 'none';
 
-  return new Promise((resolve, reject) => {
-    function handleUnhandledRejection(event: PromiseRejectionEvent) {
-      event.preventDefault();
-      cleanup();
-      reject(event.reason);
+    let settled = false;
+    function settle(value: PickedImage | null) {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('focus', handleFocus);
+      input.remove();
+      resolve(value);
     }
 
-    function cleanup() {
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    function handleFocus() {
+      // O diálogo do sistema fecha e devolve o foco pra janela; se `change`
+      // não disparar logo em seguida, o usuário cancelou a seleção.
+      setTimeout(() => settle(null), 300);
     }
 
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      settle(file ? { uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size } : null);
+    });
 
-    ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS).then(
-      (result) => {
-        cleanup();
-        resolve(result);
-      },
-      (err) => {
-        cleanup();
-        reject(err);
-      },
-    );
+    window.addEventListener('focus', handleFocus);
+    document.body.appendChild(input);
+    input.click();
   });
 }
 
 /**
  * Seleção, validação (tipo, tamanho, proporção) e upload da capa de um
  * evento. A proporção 16:9 é garantida pedindo o recorte já na tela do
- * seletor do sistema (`allowsEditing` + `aspect`), então quem chama
- * `pickImage` não precisa validar proporção de novo.
+ * seletor do sistema (`allowsEditing` + `aspect`) no nativo; na web isso não
+ * existe, então quem chama recebe a imagem sem recorte lá.
  *
  * O upload em si ainda não tem endpoint no backend — `upload` fica com um
  * TODO até a task 091/backend expor onde hospedar a imagem. Por enquanto ele
@@ -85,31 +94,18 @@ export function useImageUpload() {
       return null;
     }
 
-    let result: ImagePicker.ImagePickerResult;
-    try {
-      result = await launchImageLibrary();
-    } catch {
-      setError(INVALID_FILE_MESSAGE);
-      return null;
-    }
+    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative();
+    if (!picked) return null;
 
-    if (result.canceled) {
-      return null;
-    }
-
-    const asset = result.assets[0];
-    const mimeType = asset.mimeType ?? '';
-    const fileSize = asset.fileSize ?? null;
-
-    const isAcceptedType = ACCEPTED_MIME_TYPES.includes(mimeType);
-    const isWithinSizeLimit = fileSize === null || fileSize <= MAX_FILE_SIZE_BYTES;
+    const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
+    const isWithinSizeLimit = picked.fileSize === null || picked.fileSize <= MAX_FILE_SIZE_BYTES;
 
     if (!isAcceptedType || !isWithinSizeLimit) {
       setError(INVALID_FILE_MESSAGE);
       return null;
     }
 
-    return { uri: asset.uri, mimeType, fileSize };
+    return picked;
   }
 
   // TODO: substituir a simulação por um fetch real assim que existir um
