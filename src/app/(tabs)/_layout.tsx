@@ -2,9 +2,14 @@ import { Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { AuthGuard } from '@/utils/AuthGuard';
-import { Header } from '@/components/Header';
+import { TopAppBar } from '@/components/TopAppBar';
 import { colors } from '@/constants/colors';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
+
+/** `(screens)/Notifications/index` -> `Notifications`, para o título da barra. */
+function screenTitle(routeName: string) {
+  return routeName.replace(/^\(screens\)\//, '').replace(/\/index$/, '');
+}
 
 export default function TabsLayout() {
   return (
@@ -15,7 +20,14 @@ export default function TabsLayout() {
           const isScreensGroupRoute = route.name.startsWith('(screens)/');
           return {
             headerShown: true,
-            header: () => <Header />,
+            // Abas são raiz de navegação e usam a barra da marca; as telas de
+            // (screens) são internas e ganham voltar + título.
+            header: () =>
+              isScreensGroupRoute ? (
+                <TopAppBar variant="Detail" title={screenTitle(route.name)} />
+              ) : (
+                <TopAppBar variant="Home" />
+              ),
             tabBarActiveTintColor: colors.action.secondary,
             tabBarInactiveTintColor: colors.text.tertiary,
             // Every screen under (screens)/ is reachable-but-not-listed: no tab button, current or future.
