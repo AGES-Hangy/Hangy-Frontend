@@ -7,10 +7,10 @@ import {
   TextStyle,
   Insets,
 } from 'react-native';
-import { colors, palette } from '@/constants/colors';
+import { colors } from '@/constants/colors';
+import { typography, fontFamily } from '@/constants/typography';
 import { ChipProps, ChipSize } from './types';
 
-// Constantes de Mapeamento de Layout (Figma Tokens)
 const CHIP_HEIGHTS: Record<ChipSize, number> = {
   sm: 28,
   md: 36,
@@ -23,11 +23,10 @@ const PADDING_HORIZONTAL: Record<ChipSize, number> = {
   lg: 16,
 };
 
-// Offset de hitSlop para garantir a área de toque mínima de 44px
 const HIT_SLOPS: Record<ChipSize, Insets> = {
-  sm: { top: 8, bottom: 8, left: 0, right: 0 }, // 28 + 8 + 8 = 44px
-  md: { top: 4, bottom: 4, left: 0, right: 0 }, // 36 + 4 + 4 = 44px
-  lg: { top: 0, bottom: 0, left: 0, right: 0 }, // 44px
+  sm: { top: 8, bottom: 8, left: 0, right: 0 },
+  md: { top: 4, bottom: 4, left: 0, right: 0 },
+  lg: { top: 0, bottom: 0, left: 0, right: 0 },
 };
 
 export function Chip({
@@ -40,54 +39,55 @@ export function Chip({
   onPress,
   ...rest
 }: ChipProps) {
-  // Lógica de Determinação de Cores baseada nos Estados
   const getColors = (): { container: ViewStyle; text: TextStyle } => {
+    // 1. Estado Desabilitado
     if (disabled) {
       return {
         container: {
-          backgroundColor: colors.bg.subtle ?? palette.neutral[200],
-          borderColor: palette.neutral[300],
+          backgroundColor: colors.surface.sunken, 
+          borderColor: colors.border.default,     
         },
         text: {
-          color: colors.text.disabled ?? palette.neutral[400],
+          color: colors.text.disabled,           
         },
       };
     }
 
+    // 2. Estado Selecionado
     if (isSelected) {
       if (categoryType === 'macro') {
         // Macro selecionado: Fill Sólido
         return {
           container: {
-            backgroundColor: colors.bg.base ?? palette.primary[600],
-            borderColor: colors.bg.base ?? palette.primary[600],
+            backgroundColor: colors.action.primary,
+            borderColor: colors.border.focus,
           },
           text: {
-            color: colors.text.primary ?? palette.primary[50],
+            color: colors.text.inverse,
           },
         };
       } else {
         // Micro selecionado: Fill Tonal
         return {
           container: {
-            backgroundColor: colors.bg.subtle ?? palette.primary[100],
-            borderColor: colors.bg.subtle ?? palette.primary[100],
+            backgroundColor: colors.surface.sunken,
+            borderColor: colors.border.focus,
           },
           text: {
-            color: colors.text.primary ?? palette.primary[800],
+            color: colors.text.brand,
           },
         };
       }
     }
 
-    // Estado Padrão (Não Selecionado)
+    // 3. Estado Padrão Não Selecionado
     return {
       container: {
-        backgroundColor: colors.bg.base ?? palette.primary[50],
-        borderColor: colors.border.default ?? palette.primary[300],
+        backgroundColor: colors.surface.card,
+        borderColor: colors.border.strong,
       },
       text: {
-        color: colors.text.primary ?? palette.primary[800],
+        color: colors.text.primary,
       },
     };
   };
@@ -116,11 +116,7 @@ export function Chip({
       ]}
       {...rest}
     >
-      <Text
-        style={[styles.label, dynamicColors.text]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-      >
+      <Text style={[styles.label, dynamicColors.text]} numberOfLines={1}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -129,7 +125,7 @@ export function Chip({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 999, // Raio Full
+    borderRadius: 999,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
@@ -137,10 +133,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   label: {
-    // Label S w600 (Escala Style Guide)
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
+    // Espalha todas as propriedades do token (fontSize, fontWeight, lineHeight, letterSpacing)
+    ...typography.labelS,
+    fontFamily: fontFamily.base,
     textAlign: 'center',
   },
 });
