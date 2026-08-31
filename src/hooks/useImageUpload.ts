@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Platform } from 'react-native';
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -10,6 +11,19 @@ export interface PickedImage {
   uri: string;
   mimeType: string;
   fileSize: number | null;
+}
+
+/**
+ * `expo-image-picker` nem sempre devolve `fileSize` no Android — sem isso, o
+ * limite de 5 MB não tinha como ser checado de verdade. `File.size` lê o
+ * tamanho direto do arquivo no disco como reforço.
+ */
+function getFileSize(uri: string): number | null {
+  try {
+    return new File(uri).size;
+  } catch {
+    return null;
+  }
 }
 
 async function pickFileNative(): Promise<PickedImage | null> {
@@ -23,7 +37,8 @@ async function pickFileNative(): Promise<PickedImage | null> {
   if (result.canceled) return null;
 
   const asset = result.assets[0];
-  return { uri: asset.uri, mimeType: asset.mimeType ?? '', fileSize: asset.fileSize ?? null };
+  const fileSize = asset.fileSize ?? getFileSize(asset.uri);
+  return { uri: asset.uri, mimeType: asset.mimeType ?? '', fileSize };
 }
 
 /**
@@ -98,7 +113,9 @@ export function useImageUpload() {
     if (!picked) return null;
 
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
-    const isWithinSizeLimit = picked.fileSize === null || picked.fileSize <= MAX_FILE_SIZE_BYTES;
+    // Sem o tamanho confirmado, não dá pra garantir o limite de 5 MB — trata
+    // como inválido em vez de deixar passar.
+    const isWithinSizeLimit = picked.fileSize !== null && picked.fileSize <= MAX_FILE_SIZE_BYTES;
 
     if (!isAcceptedType || !isWithinSizeLimit) {
       setError(INVALID_FILE_MESSAGE);
