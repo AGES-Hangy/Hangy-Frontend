@@ -96,14 +96,14 @@ const privacyVariantMap: Record<PrivacyBadgeValue, BadgeVisualConfig> = {
 const statusVariantMap: Record<StatusBadgeValue, BadgeVisualConfig> = {
   CONFIRMED: {
     label: 'Confirmado',
-    icon: 'circle-check',
+    icon: 'check',
     textColor: palette.success.default,
     backgroundColor: palette.success.bg,
     borderColor: palette.success.default,
   },
   Confirmado: {
     label: 'Confirmado',
-    icon: 'circle-check',
+    icon: 'check',
     textColor: palette.success.default,
     backgroundColor: palette.success.bg,
     borderColor: palette.success.default,
