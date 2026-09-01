@@ -8,19 +8,19 @@ import {
   type BadgeProps,
 } from '@/components/Badge/type';
 import { colors, palette } from '@/constants/colors';
-import { radius, spacing } from '@/constants/layout';
-import { typography } from '@/constants/typography';
+import { layout, radius } from '@/constants/layout';
+import { fontFamily, typography } from '@/constants/typography';
 
-const BADGE_HEIGHT = 24;
-const BADGE_HORIZONTAL_PADDING = 10;
-const BADGE_ICON_SIZE = 12;
+const BADGE_HEIGHT = layout.badge.height;
+const BADGE_HORIZONTAL_PADDING = layout.badge.paddingHorizontal;
+const BADGE_ICON_SIZE = layout.badge.iconSize;
 const BADGE_TEXT_GAP = 6;
-const BADGE_BORDER_WIDTH = 1.5;
+const BADGE_BORDER_WIDTH = layout.badge.borderWidth;
 const NOTIFICATION_ICON_SIZE = 16;
-const NOTIFICATION_DOT_SIZE = 8;
-const NOTIFICATION_BUBBLE_MIN_WIDTH = 10;
-const NOTIFICATION_PILL_HEIGHT = 10;
-const NOTIFICATION_OFFSET = 1;
+const NOTIFICATION_DOT_SIZE = layout.badge.notificationDotSize;
+const NOTIFICATION_BUBBLE_MIN_WIDTH = layout.badge.notificationMinWidth;
+const NOTIFICATION_PILL_HEIGHT = layout.badge.notificationPillHeight;
+const NOTIFICATION_OFFSET = layout.badge.notificationOffset;
 
 function isNotificationBadgeProps(props: BadgeProps): props is Extract<BadgeProps, { family: 'Notification' }> {
   return props.family === 'Notification';
@@ -79,7 +79,7 @@ export function Badge(props: BadgeProps) {
       accessibilityRole="text"
     >
       <Icon name={visual.icon} size={BADGE_ICON_SIZE} color={visual.textColor} strokeWidth={2.25} />
-      <Text style={[typography.overline, styles.badgeText, { color: visual.textColor }]}>
+      <Text style={[typography.badge, styles.badgeText, { color: visual.textColor }]}>
         {visual.label}
       </Text>
     </View>
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     includeFontPadding: false,
-    fontFamily: 'Inter',
+    fontFamily: fontFamily.base,
   },
   notificationBadge: {
     position: 'relative',

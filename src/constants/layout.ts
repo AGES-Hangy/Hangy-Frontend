@@ -27,6 +27,19 @@ export const spacing = {
   64: 64,
 } as const;
 
+export const layout = {
+  badge: {
+    height: 24,
+    paddingHorizontal: 10,
+    iconSize: 12,
+    borderWidth: 1.5,
+    notificationDotSize: 10,
+    notificationPillHeight: 10,
+    notificationMinWidth: 10,
+    notificationOffset: 1,
+  },
+} as const;
+
 // Sombras — offset/blur em px (CSS) convertidos para shadow* do React Native;
 // `elevation` cobre a sombra equivalente no Android.
 export const elevation = {
