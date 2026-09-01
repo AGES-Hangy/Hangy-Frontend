@@ -4,7 +4,9 @@ import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png'];
+// 'image/jpg' não é um mimeType padrão, mas algumas câmeras/dispositivos
+// reportam JPG assim em vez do correto 'image/jpeg' — aceitamos os dois.
+const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
 const INVALID_FILE_MESSAGE = 'Arquivo inválido — use JPG ou PNG\naté 5 MB, na proporção 16:9';
 
 export interface PickedImage {
@@ -55,7 +57,7 @@ function pickFileWeb(): Promise<PickedImage | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/jpeg,image/png';
+    input.accept = 'image/jpeg,image/jpg,image/png';
     input.style.display = 'none';
 
     let settled = false;
