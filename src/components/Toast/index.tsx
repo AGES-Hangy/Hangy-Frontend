@@ -10,14 +10,32 @@ export interface ToastMessage {
   message: string;
 }
 
+export interface AddToastOptions {
+  type: ToastType;
+  message?: string;
+  eventName?: string;
+}
+
 interface ToastContextData {
-  addToast: (message: Omit<ToastMessage, 'id'>) => void;
+  addToast: (options: AddToastOptions) => void;
   removeToast: (id: string) => void;
+  showSuccessToast: (eventName: string) => void;
+  showErrorToast: (message?: string) => void;
+  showWarningToast: (message?: string) => void;
+  showInfoToast: (message?: string) => void;
 }
 
 const ToastContext = createContext<ToastContextData>({} as ToastContextData);
 
 export const useToast = () => useContext(ToastContext);
+
+const defaultToastMessages = {
+  success: (eventName?: string) =>
+    eventName ? `Presença confirmada em ${eventName}.` : 'Presença confirmada.',
+  error: () => 'Não foi possível enviar a solicitação.',
+  warning: () => 'Este evento está quase lotado.',
+  info: () => 'Você será avisado quando o dono aprovar.',
+};
 
 const toastConfig = {
   success: {
@@ -58,7 +76,7 @@ const ToastItem: React.FC<{ message: ToastMessage; onRemove: (id: string) => voi
     <Animated.View style={[styles.toastContainer, style, { opacity }]}>
       {icon}
       <Text style={[styles.text, textStyle]}>{message.message}</Text>
-      <TouchableOpacity onPress={() => onRemove(message.id)}>
+      <TouchableOpacity onPress={() => onRemove(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <X size={20} color={textStyle.color} opacity={0.6} />
       </TouchableOpacity>
     </Animated.View>
@@ -68,17 +86,60 @@ const ToastItem: React.FC<{ message: ToastMessage; onRemove: (id: string) => voi
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback(({ type, message }: Omit<ToastMessage, 'id'>) => {
+  const addToast = useCallback(({ type, message, eventName }: AddToastOptions) => {
     const id = Math.random().toString(36).substring(2, 9);
-    setMessages((state) => [...state, { id, type, message }]);
+    const resolvedMessage =
+      message ||
+      (type === 'success'
+        ? defaultToastMessages.success(eventName)
+        : defaultToastMessages[type]());
+
+    setMessages((state) => [...state, { id, type, message: resolvedMessage }]);
   }, []);
 
   const removeToast = useCallback((id: string) => {
     setMessages((state) => state.filter((msg) => msg.id !== id));
   }, []);
 
+  const showSuccessToast = useCallback(
+    (eventName: string) => {
+      addToast({ type: 'success', eventName });
+    },
+    [addToast]
+  );
+
+  const showErrorToast = useCallback(
+    (message?: string) => {
+      addToast({ type: 'error', message });
+    },
+    [addToast]
+  );
+
+  const showWarningToast = useCallback(
+    (message?: string) => {
+      addToast({ type: 'warning', message });
+    },
+    [addToast]
+  );
+
+  const showInfoToast = useCallback(
+    (message?: string) => {
+      addToast({ type: 'info', message });
+    },
+    [addToast]
+  );
+
   return (
-    <ToastContext.Provider value={{ addToast, removeToast }}>
+    <ToastContext.Provider
+      value={{
+        addToast,
+        removeToast,
+        showSuccessToast,
+        showErrorToast,
+        showWarningToast,
+        showInfoToast,
+      }}
+    >
       {children}
       <View style={styles.queueContainer} pointerEvents="box-none">
         {messages.map((msg) => (
