@@ -232,8 +232,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   progressTrack: {
-    width: 180,
-    height: 4,
+    width: '60%',
+    height: spacing[4],
     borderRadius: radius.full,
     backgroundColor: colors.border.default,
     overflow: 'hidden',
