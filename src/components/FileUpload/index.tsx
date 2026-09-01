@@ -211,6 +211,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing[8],
