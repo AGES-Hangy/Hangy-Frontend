@@ -15,9 +15,9 @@ import type { TopAppBarProps } from '@/components/TopAppBar';
  */
 export function useTopAppBar(props: TopAppBarProps) {
   const navigation = useNavigation();
-  const { variant, title, unreadCount } = props;
+  const { variant, title, unreadCount, showBack } = props;
 
-  // As callbacks e o slot de avatar mudam de identidade a cada render da tela.
+  // As callbacks e o objeto `action` mudam de identidade a cada render da tela.
   // Guardá-los numa ref deixa o header ler sempre o valor mais novo sem que a
   // troca de identidade reconfigure as opções a cada render — que é o laço de
   // setOptions que travaria a tela.
@@ -28,5 +28,5 @@ export function useTopAppBar(props: TopAppBarProps) {
     navigation.setOptions({
       header: () => <TopAppBar {...propsRef.current} />,
     });
-  }, [navigation, variant, title, unreadCount]);
+  }, [navigation, variant, title, unreadCount, showBack]);
 }

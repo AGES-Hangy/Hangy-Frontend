@@ -1,12 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { colors } from '@/constants/colors';
 
 export default function Notifications() {
-  // Sem isto o título viria do nome da pasta, em inglês.
-  useTopAppBar({ variant: 'Detail', title: 'Notificações' });
-
+  // Sem chamar useTopAppBar, vale o padrão do layout: a barra da Home, com
+  // logo e sino — é o que o Figma desenha para esta tela.
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Notifications</Text>

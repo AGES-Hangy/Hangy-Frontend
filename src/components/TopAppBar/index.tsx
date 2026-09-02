@@ -1,24 +1,30 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 
 import { Icon } from '@/components/Icon';
+import type { IconName } from '@/components/Icon';
 import { colors, palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 import type { TopAppBarProps, TopAppBarVariant } from './types';
 
-export type { TopAppBarProps, TopAppBarVariant } from './types';
+export type { TopAppBarAction, TopAppBarProps, TopAppBarVariant } from './types';
 
 /** Altura da barra sem a safe area — o `insets.top` é somado por cima. */
 const BAR_HEIGHT = 56;
-/** Lado do ícone e do espaçador que mantém o título opticamente centralizado. */
+/** Borda inferior das variantes claras. */
+const BORDER_WIDTH = 1.5;
 const ICON_SIZE = 24;
-/** Avatar do Home. */
-const AVATAR_SIZE = 36;
-const AVATAR_ICON_SIZE = 20;
+/**
+ * Largura fixa dos slots laterais. Com os dois lados iguais, o título fica
+ * centralizado na tela — e não entre os ícones, que mudam de largura conforme
+ * a variante tem ou não ação à direita.
+ */
+const SLOT_WIDTH = 48;
 /** Logo Hangy: 70x27 no frame do Figma. */
 const LOGO_WIDTH = 70;
 const LOGO_HEIGHT = 27;
@@ -38,15 +44,6 @@ const ICON_HIT_SLOP = (44 - ICON_SIZE) / 2;
 /** Variantes com fundo roxo — ícones e texto saem em `text/inverse`. */
 const BRAND_VARIANTS: TopAppBarVariant[] = ['Home', 'BrandBack'];
 
-/**
- * Espaçador do tamanho de um ícone. O Figma tem um nó "Spacer" com esse papel
- * e a própria documentação do componente diz para não renderizar nada nele —
- * ele só existe para o item do meio ficar centralizado.
- */
-function Spacer({ size = ICON_SIZE }: { size?: number }) {
-  return <View style={{ width: size, height: size }} />;
-}
-
 function BarButton({
   icon,
   label,
@@ -54,7 +51,7 @@ function BarButton({
   tint,
   children,
 }: {
-  icon: Parameters<typeof Icon>[0]['name'];
+  icon: IconName;
   label: string;
   onPress?: () => void;
   tint: string;
@@ -90,101 +87,85 @@ export function TopAppBar({
   variant = 'Home',
   title,
   onBack,
+  showBack = true,
   unreadCount = 0,
   onNotificationsPress,
-  avatar,
-  onAvatarPress,
-  onShare,
-  onReport,
+  action,
 }: TopAppBarProps) {
   const insets = useSafeAreaInsets();
 
   const isBrand = BRAND_VARIANTS.includes(variant);
+  const isBordered = variant !== 'Home';
   const tint = isBrand ? colors.text.inverse : colors.text.primary;
   const goBack = onBack ?? (() => router.back());
 
-  const barStyle = [
-    styles.bar,
-    isBrand ? styles.barBrand : styles.barSurface,
-    // O Home é a única variante sem borda inferior no Figma.
-    variant !== 'Home' && styles.barBordered,
-    // O Modal alinha o título à esquerda; as outras distribuem os três itens.
-    variant === 'Modal' ? styles.barLeftAligned : styles.barSpaced,
-  ];
+  const showsLogo = variant === 'Home' || variant === 'BrandBack';
+  const isModal = variant === 'Modal';
+
+  // Ícone de saída: o Modal fecha o fluxo, as outras voltam um passo.
+  const leaveIcon: IconName | null = isModal ? 'x' : variant === 'Home' ? null : 'arrow-left';
 
   return (
-    // `height` no React Native inclui o padding, então a altura total tem de
-    // somar a safe area — senão o conteúdo é espremido dentro dos 56.
-    <View style={[barStyle, { height: BAR_HEIGHT + insets.top, paddingTop: insets.top }]}>
-      {variant === 'Home' && (
-        <>
-          {avatar ? (
-            <Pressable
-              onPress={onAvatarPress}
-              hitSlop={(44 - AVATAR_SIZE) / 2}
-              accessibilityRole="button"
-              accessibilityLabel="Abrir meu perfil"
-            >
-              {avatar}
-            </Pressable>
-          ) : (
-            // Sem o componente Avatar ainda, reservamos o espaço para o logo
-            // continuar centralizado — é o que o frame do Figma faz.
-            <Spacer size={AVATAR_SIZE} />
-          )}
+    <View
+      // `height` no React Native inclui o padding e a borda, então a safe area
+      // e a borda entram na altura total — senão o conteúdo é espremido dentro
+      // dos 56 e as variantes ficam com alturas úteis diferentes.
+      style={[
+        styles.bar,
+        isBrand ? styles.barBrand : styles.barSurface,
+        isBordered && styles.barBordered,
+        {
+          height: BAR_HEIGHT + insets.top + (isBordered ? BORDER_WIDTH : 0),
+          paddingTop: insets.top,
+        },
+      ]}
+      accessibilityRole="header"
+    >
+      {/* A cor do conteúdo da status bar acompanha o fundo da barra. */}
+      <StatusBar style={isBrand ? 'light' : 'dark'} />
 
+      <View style={[styles.slot, styles.slotStart]}>
+        {leaveIcon && showBack && (
+          <BarButton
+            icon={leaveIcon}
+            label={isModal ? 'Fechar' : 'Voltar'}
+            tint={tint}
+            onPress={goBack}
+          />
+        )}
+      </View>
+
+      {showsLogo ? (
+        <View style={styles.center}>
           <Logo />
+        </View>
+      ) : (
+        <Text style={[styles.title, isModal && styles.titleLeft]} numberOfLines={1} ellipsizeMode="tail">
+          {title}
+        </Text>
+      )}
 
+      <View style={[styles.slot, styles.slotEnd]}>
+        {variant === 'Home' && (
           <BarButton
             icon="bell"
-            label={
-              unreadCount > 0
-                ? `Notificações, ${unreadCount} não lidas`
-                : 'Notificações'
-            }
+            label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : 'Notificações'}
             tint={tint}
             onPress={onNotificationsPress ?? (() => router.push('/Notifications'))}
           >
             {unreadCount > 0 && <View style={styles.unreadDot} />}
           </BarButton>
-        </>
-      )}
+        )}
 
-      {(variant === 'Detail' || variant === 'Profile') && (
-        <>
-          <BarButton icon="arrow-left" label="Voltar" tint={tint} onPress={goBack} />
-
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-
-          {variant === 'Detail' && onShare && (
-            <BarButton icon="share" label="Compartilhar" tint={tint} onPress={onShare} />
-          )}
-          {variant === 'Profile' && onReport && (
-            <BarButton icon="flag" label="Denunciar" tint={tint} onPress={onReport} />
-          )}
-          {((variant === 'Detail' && !onShare) || (variant === 'Profile' && !onReport)) && <Spacer />}
-        </>
-      )}
-
-      {variant === 'Modal' && (
-        <>
-          <BarButton icon="x" label="Fechar" tint={tint} onPress={goBack} />
-
-          <Text style={[styles.title, styles.titleLeft]} numberOfLines={1}>
-            {title}
-          </Text>
-        </>
-      )}
-
-      {variant === 'BrandBack' && (
-        <>
-          <BarButton icon="arrow-left" label="Voltar" tint={tint} onPress={goBack} />
-          <Logo />
-          <Spacer />
-        </>
-      )}
+        {variant !== 'Home' && action && (
+          <BarButton
+            icon={action.icon}
+            label={action.accessibilityLabel}
+            tint={tint}
+            onPress={action.onPress}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -195,12 +176,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing[16],
   },
-  barSpaced: {
-    justifyContent: 'space-between',
-  },
-  barLeftAligned: {
-    gap: spacing[16],
-  },
   barBrand: {
     backgroundColor: colors.action.primary,
   },
@@ -208,8 +183,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.base,
   },
   barBordered: {
-    borderBottomWidth: 1.5,
+    borderBottomWidth: BORDER_WIDTH,
     borderBottomColor: colors.border.default,
+  },
+  // Os dois slots têm a mesma largura, então o que fica entre eles é o centro
+  // da tela. O Figma tem um nó "Spacer" com esse papel e a documentação do
+  // componente diz para não renderizar nada nele.
+  slot: {
+    width: SLOT_WIDTH,
+    justifyContent: 'center',
+  },
+  slotStart: {
+    alignItems: 'flex-start',
+  },
+  slotEnd: {
+    alignItems: 'flex-end',
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
   },
   logo: {
     width: LOGO_WIDTH,

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { IconName } from '@/components/Icon';
 
 /**
  * Variantes da barra superior. Cada uma é um eixo de variante real na seção
@@ -6,15 +6,29 @@ import type { ReactNode } from 'react';
  */
 export type TopAppBarVariant = 'Home' | 'Detail' | 'Modal' | 'BrandBack' | 'Profile';
 
+/** Ação do slot da direita nas variantes claras (compartilhar, denunciar...). */
+export interface TopAppBarAction {
+  icon: IconName;
+  /** Obrigatório: o botão é só ícone, sem label visível. */
+  accessibilityLabel: string;
+  onPress: () => void;
+}
+
 export interface TopAppBarProps {
   /** Define o conteúdo da barra. */
   variant?: TopAppBarVariant;
 
-  /** Título — centralizado em `Detail` e `Profile`, à esquerda em `Modal`. */
+  /** Título — centralizado na tela em `Detail` e `Profile`, à esquerda em `Modal`. */
   title?: string;
 
   /** Ação do botão voltar. Sem isto, cai em `router.back()`. */
   onBack?: () => void;
+
+  /**
+   * Esconde o botão voltar, mantendo o título centralizado. É o caso do perfil
+   * próprio, que é raiz de aba e não veio de lugar nenhum.
+   */
+  showBack?: boolean;
 
   /**
    * `Home`: número de notificações não lidas. Acima de zero, o sino ganha o
@@ -27,17 +41,8 @@ export interface TopAppBarProps {
   onNotificationsPress?: () => void;
 
   /**
-   * `Home`: avatar de 36 à esquerda, que abre o perfil. Entra por slot porque
-   * o `Avatar` é componente de outra task; sem ele, o espaço é reservado para
-   * o logo continuar centralizado (é o que o frame do Figma faz).
+   * Ação no canto direito das variantes claras. Sem ela o slot vira espaçador,
+   * para o título continuar centralizado na tela.
    */
-  avatar?: ReactNode;
-  /** `Home`: toque no avatar. */
-  onAvatarPress?: () => void;
-
-  /** `Detail`: ícone de compartilhar à direita. Sem isto, vira espaçador. */
-  onShare?: () => void;
-
-  /** `Profile`: ícone de denunciar à direita. Sem isto, vira espaçador. */
-  onReport?: () => void;
+  action?: TopAppBarAction;
 }

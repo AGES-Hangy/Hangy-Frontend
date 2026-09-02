@@ -6,11 +6,6 @@ import { TopAppBar } from '@/components/TopAppBar';
 import { colors } from '@/constants/colors';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
 
-/** `(screens)/Notifications/index` -> `Notifications`, para o título da barra. */
-function screenTitle(routeName: string) {
-  return routeName.replace(/^\(screens\)\//, '').replace(/\/index$/, '');
-}
-
 export default function TabsLayout() {
   return (
     <AuthGuard>
@@ -20,14 +15,9 @@ export default function TabsLayout() {
           const isScreensGroupRoute = route.name.startsWith('(screens)/');
           return {
             headerShown: true,
-            // Abas são raiz de navegação e usam a barra da marca; as telas de
-            // (screens) são internas e ganham voltar + título.
-            header: () =>
-              isScreensGroupRoute ? (
-                <TopAppBar variant="Detail" title={screenTitle(route.name)} />
-              ) : (
-                <TopAppBar variant="Home" />
-              ),
+            // Padrão de todas as telas. A que precisa de outra barra sobrescreve
+            // com useTopAppBar, então o layout não conhece telas específicas.
+            header: () => <TopAppBar variant="Home" />,
             tabBarActiveTintColor: colors.action.secondary,
             tabBarInactiveTintColor: colors.text.tertiary,
             // Every screen under (screens)/ is reachable-but-not-listed: no tab button, current or future.
