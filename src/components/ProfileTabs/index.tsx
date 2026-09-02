@@ -29,7 +29,6 @@ export function ProfileTabs({ value, onChange, style }: ProfileTabsProps) {
           <Pressable
             key={tab.value}
             onPress={() => onChange(tab.value)}
-            disabled={isSelected}
             accessibilityRole="tab"
             accessibilityState={{ selected: isSelected }}
             style={({ pressed }) => [
