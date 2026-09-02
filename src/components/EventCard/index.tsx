@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 
-import { Badge } from '@/components/Badge';
+import { Badge, getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { colors } from '@/constants/colors';
 import { elevation, radius, spacing } from '@/constants/layout';
@@ -49,25 +49,7 @@ function formatRequestDate(value: string) {
 	return `${getPart('weekday').replace('.', '')}, ${getPart('day')} ${getPart('month').replace('.', '')}, ${getPart('hour')}h${getPart('minute')}`;
 }
 
-const privacyLabels: Record<EventPrivacy, string> = {
-	Publico: 'Público',
-	Privado: 'Privado',
-	PorConvite: 'Por convite',
-};
-
 const placeholderImage = require('../../../assets/images/hangy.svg');
-
-function getPrivacyBadgeValue(privacy: EventPrivacy) {
-	if (privacy === 'Publico') return 'Público';
-	if (privacy === 'Privado') return 'Privado';
-	return 'Por convite';
-}
-
-function getStatusBadgeValue(state: EventCardProps['state']) {
-	if (state === 'Confirmed') return 'Confirmado';
-	if (state === 'Pending') return 'Pendente';
-	return null;
-}
 
 export function EventCard({
 	variant,
@@ -77,7 +59,7 @@ export function EventCard({
 	isNew = false,
 	onPress,
 }: EventCardProps) {
-	const accessibleLabel = `${event.title}, ${formatEventDate(event.date)}, ${event.location}, ${privacyLabels[privacy]}`;
+	const accessibleLabel = `${event.title}, ${formatEventDate(event.date)}, ${event.location}, ${getPrivacyBadgeLabel(privacy)}`;
 	const content = { ...event, privacy, date: formatEventDate(event.date) };
 
 	return (
