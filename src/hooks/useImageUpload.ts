@@ -38,9 +38,20 @@ async function pickFileNative(): Promise<PickedImage | null> {
 
   if (result.canceled) return null;
 
-  const asset = result.assets[0];
-  const fileSize = asset.fileSize ?? getFileSize(asset.uri);
-  return { uri: asset.uri, mimeType: asset.mimeType ?? '', fileSize };
+  const asset = result.assets?.[0];
+  if (!asset) return null;
+
+  const uri = asset.uri;
+  const mimeType =
+    asset.mimeType ??
+    (uri.toLowerCase().endsWith('.png')
+      ? 'image/png'
+      : uri.toLowerCase().match(/\.jpe?g$/)
+        ? 'image/jpeg'
+        : '');
+
+  const fileSize = asset.fileSize ?? getFileSize(uri);
+  return { uri, mimeType, fileSize };
 }
 
 /**
