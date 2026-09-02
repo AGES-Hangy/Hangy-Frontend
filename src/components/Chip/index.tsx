@@ -6,11 +6,13 @@ import {
   ViewStyle,
   TextStyle,
   Insets,
+  View,
 } from 'react-native';
 import { colors } from '@/constants/colors';
 import { typography, fontFamily } from '@/constants/typography';
 import { ChipProps, ChipSize } from './types';
 import { radius } from '@/constants/layout';
+
 const CHIP_HEIGHTS: Record<ChipSize, number> = {
   sm: 28,
   md: 36,
@@ -29,17 +31,26 @@ const HIT_SLOPS: Record<ChipSize, Insets> = {
   lg: { top: 0, bottom: 0, left: 0, right: 0 },
 };
 
+type ChipDynamicStyles = {
+  container: ViewStyle;
+  text: TextStyle;
+  badgeText: TextStyle;
+};
+
 export function Chip({
   label,
   categoryType = 'macro',
   size = 'md',
   isSelected = false,
   disabled = false,
+  badgeCount,
+  showRemoveIcon = false,
+  onRemove,
   accessibilityLabel,
   onPress,
   ...rest
 }: ChipProps) {
-  const getColors = (): { container: ViewStyle; text: TextStyle } => {
+  const getColors = (): ChipDynamicStyles => {
     // 1. Estado Desabilitado
     if (disabled) {
       return {
@@ -47,9 +58,8 @@ export function Chip({
           backgroundColor: colors.surface.sunken, 
           borderColor: colors.border.default,     
         },
-        text: {
-          color: colors.text.disabled,           
-        },
+        text: { color: colors.text.disabled },
+        badgeText: { color: colors.text.disabled },
       };
     }
 
@@ -62,9 +72,8 @@ export function Chip({
             backgroundColor: colors.action.primary,
             borderColor: colors.border.focus,
           },
-          text: {
-            color: colors.text.inverse,
-          },
+          text: { color: colors.text.inverse },
+          badgeText: { color: colors.text.inverse },
         };
       } else {
         // Micro selecionado: Fill Tonal
@@ -73,9 +82,8 @@ export function Chip({
             backgroundColor: colors.surface.sunken,
             borderColor: colors.border.focus,
           },
-          text: {
-            color: colors.text.brand,
-          },
+          text: { color: colors.text.brand },
+          badgeText: { color: colors.text.brand },
         };
       }
     }
@@ -86,9 +94,8 @@ export function Chip({
         backgroundColor: colors.surface.card,
         borderColor: colors.border.strong,
       },
-      text: {
-        color: colors.text.primary,
-      },
+      text: { color: colors.text.primary },
+      badgeText: { color: colors.text.secondary }, // Pode mudar para primary se preferir o número idêntico ao label
     };
   };
 
@@ -119,6 +126,29 @@ export function Chip({
       <Text style={[styles.label, dynamicColors.text]} numberOfLines={1}>
         {label}
       </Text>
+
+      {/* Contador numérico (Sem borda/fundo) */}
+      {typeof badgeCount === 'number' && (
+        <Text style={[styles.badgeText, dynamicColors.badgeText]}>
+          {badgeCount}
+        </Text>
+      )}
+
+      {/* Ícone de Remover */}
+      {showRemoveIcon && isSelected && (
+        <TouchableOpacity
+          activeOpacity={0.6}
+          onPress={onRemove}
+          disabled={disabled}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Remover ${label}`}
+        >
+          <Text style={[styles.removeIcon, { color: dynamicColors.text.color }]}>
+            ✕
+          </Text>
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 }
@@ -131,11 +161,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     alignSelf: 'flex-start',
+    gap: 8, 
   },
   label: {
-    // Espalha todas as propriedades do token (fontSize, fontWeight, lineHeight, letterSpacing)
     ...typography.labelS,
     fontFamily: fontFamily.base,
+    textAlign: 'center',
+  },
+  badgeText: {
+    ...typography.labelS,
+    fontFamily: fontFamily.base,
+    textAlign: 'center',
+  },
+  removeIcon: {
+    fontFamily: fontFamily.base,
+    fontSize: 14,
+    lineHeight: 16,
     textAlign: 'center',
   },
 });
