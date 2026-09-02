@@ -1,46 +1,70 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { ProfileTab, ProfileTabsProps } from '@/components/ProfileTabs/types';
+import type { ProfileTabsProps } from '@/components/ProfileTabs/types';
 import { colors, palette } from '@/constants/colors';
 import { elevation, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
-const TABS: ReadonlyArray<{ value: ProfileTab; label: string }> = [
-  { value: 'history', label: 'Histórico' },
-  { value: 'events', label: 'Meus Eventos' },
-  { value: 'gallery', label: 'Galeria' },
-];
-
 /**
- * Navegação segmentada do perfil, conforme as três variações do Figma.
+ * Navegação controlada com aparência segmentada ou indicador inferior.
  *
  * ```tsx
- * const [tab, setTab] = useState<ProfileTab>('history');
- * <ProfileTabs value={tab} onChange={setTab} />
+ * const items = [
+ *   { value: 'created', label: 'Criados' },
+ *   { value: 'confirmed', label: 'Confirmados' },
+ *   { value: 'favorites', label: 'Favoritos' },
+ * ] as const;
+ *
+ * <ProfileTabs items={items} value={tab} onChange={setTab} variant="underline" />
  * ```
  */
-export function ProfileTabs({ value, onChange, style }: ProfileTabsProps) {
+export function ProfileTabs<Value extends string>({
+  items,
+  value,
+  onChange,
+  variant = 'segmented',
+  style,
+}: ProfileTabsProps<Value>) {
+  const isUnderline = variant === 'underline';
+
   return (
-    <View style={[styles.container, style]} accessibilityRole="tablist">
-      {TABS.map((tab) => {
+    <View
+      style={[
+        styles.container,
+        isUnderline ? styles.underlineContainer : styles.segmentedContainer,
+        style,
+      ]}
+      accessibilityRole="tablist"
+    >
+      {items.map((tab) => {
         const isSelected = tab.value === value;
+        const isDisabled = isSelected || tab.disabled;
 
         return (
           <Pressable
             key={tab.value}
             onPress={() => onChange(tab.value)}
-            disabled={isSelected}
+            disabled={isDisabled}
             accessibilityRole="tab"
-            accessibilityState={{ selected: isSelected }}
+            accessibilityState={{ selected: isSelected, disabled: tab.disabled }}
             style={({ pressed }) => [
               styles.tab,
-              isSelected && styles.selectedTab,
-              pressed && styles.pressedTab,
+              isUnderline ? styles.underlineTab : styles.segmentedTab,
+              isSelected &&
+                (isUnderline ? styles.selectedUnderlineTab : styles.selectedSegmentedTab),
+              pressed &&
+                (isUnderline ? styles.pressedUnderlineTab : styles.pressedSegmentedTab),
             ]}
           >
             <Text
               numberOfLines={1}
-              style={[styles.label, isSelected && styles.selectedLabel]}
+              style={[
+                styles.label,
+                isUnderline ? styles.underlineLabel : styles.segmentedLabel,
+                isSelected &&
+                  (isUnderline ? styles.selectedUnderlineLabel : styles.selectedSegmentedLabel),
+                tab.disabled && styles.disabledLabel,
+              ]}
             >
               {tab.label}
             </Text>
@@ -53,37 +77,76 @@ export function ProfileTabs({ value, onChange, style }: ProfileTabsProps) {
 
 const styles = StyleSheet.create({
   container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  segmentedContainer: {
     width: 325,
     height: 44,
     padding: spacing[4],
-    flexDirection: 'row',
-    alignItems: 'center',
     borderRadius: radius.full,
     backgroundColor: colors.surface.sunken,
   },
+  underlineContainer: {
+    width: '100%',
+    height: 44,
+    paddingHorizontal: spacing[16],
+    gap: spacing[24],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border.default,
+    backgroundColor: colors.bg.base,
+  },
   tab: {
-    flex: 1,
-    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  segmentedTab: {
+    flex: 1,
+    height: 36,
     borderRadius: radius.full,
   },
-  selectedTab: {
+  underlineTab: {
+    height: 44,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  selectedSegmentedTab: {
     backgroundColor: colors.bg.base,
     borderWidth: 1,
     borderColor: colors.border.default,
     ...elevation[1],
   },
-  pressedTab: {
+  selectedUnderlineTab: {
+    borderBottomColor: colors.action.primary,
+  },
+  pressedSegmentedTab: {
     backgroundColor: palette.neutral[200],
+  },
+  pressedUnderlineTab: {
+    backgroundColor: palette.primary[50],
   },
   label: {
     ...typography.labelM,
+  },
+  segmentedLabel: {
     color: palette.neutral[500],
   },
-  selectedLabel: {
+  underlineLabel: {
+    color: colors.text.secondary,
+  },
+  selectedSegmentedLabel: {
     color: palette.primary[600],
+  },
+  selectedUnderlineLabel: {
+    color: colors.text.brand,
+  },
+  disabledLabel: {
+    color: colors.text.disabled,
   },
 });
 
-export type { ProfileTab, ProfileTabsProps } from '@/components/ProfileTabs/types';
+export type {
+  ProfileTabItem,
+  ProfileTabsProps,
+  ProfileTabsVariant,
+} from '@/components/ProfileTabs/types';
