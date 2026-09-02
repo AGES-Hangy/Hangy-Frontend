@@ -1,7 +1,11 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { CircleCheck, CircleAlert, TriangleAlert, Info, X } from 'lucide-react-native/icons';
-
+import { View, Text, StyleSheet, Animated } from 'react-native';
+import { Icon } from '@/components/Icon';
+import { IconButton } from '@/components/IconButton';
+import { palette } from '@/constants/colors';
+import { elevation, radius, spacing } from '@/constants/layout';
+import { typography } from '@/constants/typography';
+import { colors } from '@/constants/colors';
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 export interface ToastMessage {
@@ -26,6 +30,7 @@ interface ToastContextData {
 }
 
 const ToastContext = createContext<ToastContextData>({} as ToastContextData);
+const BORDER_WIDTH = 1.5;
 
 export const useToast = () => useContext(ToastContext);
 
@@ -39,30 +44,38 @@ const defaultToastMessages = {
 
 const toastConfig = {
   success: {
-    icon: <CircleCheck size={20} color="#128A54" />,
-    style: { backgroundColor: '#dcfce7', borderColor: '#bbf7d0' },
-    textStyle: { color: '#128A54' },
+    icon: <Icon name="circle-check" size={20} color={palette.success.default} />,
+    style: { backgroundColor: palette.success.bg },
+    textStyle: { color: colors.text.primary },
+    accessibilityLabelPrefix: 'Sucesso: ',
   },
   error: {
-    icon: <CircleAlert size={20} color="#D33A45" />,
-    style: { backgroundColor: '#fee2e2', borderColor: '#fecaca' },
-    textStyle: { color: '#D33A45' },
+    icon: <Icon name="circle-alert" size={20} color={palette.error.default} />,
+    style: {
+      backgroundColor: palette.error.bg,
+      borderWidth: BORDER_WIDTH,
+      borderColor: palette.error.default,
+    },
+    textStyle: { color: colors.text.primary },
+    accessibilityLabelPrefix: 'Erro: ',
   },
   warning: {
-    icon: <TriangleAlert size={20} color="#E8590C" />,
-    style: { backgroundColor: '#ffedd5', borderColor: '#fed7aa' },
-    textStyle: { color: '#E8590C' },
+    icon: <Icon name="triangle-alert" size={20} color={palette.warning.default} />,
+    style: { backgroundColor: palette.warning.bg },
+    textStyle: { color: colors.text.primary },
+    accessibilityLabelPrefix: 'Aviso: ',
   },
   info: {
-    icon: <Info size={20} color="#2F6FE4" />,
-    style: { backgroundColor: '#dbeafe', borderColor: '#bfdbfe' },
-    textStyle: { color: '#2F6FE4' },
+    icon: <Icon name="info" size={20} color={palette.info.default} />,
+    style: { backgroundColor: palette.info.bg },
+    textStyle: { color: colors.text.primary },
+    accessibilityLabelPrefix: 'Informação: ',
   },
 };
 
 const ToastItem: React.FC<{ message: ToastMessage; onRemove: (id: string) => void }> = ({ message, onRemove }) => {
   const opacity = useRef(new Animated.Value(0)).current;
-  const { icon, style, textStyle } = toastConfig[message.type];
+  const { icon, style, textStyle, accessibilityLabelPrefix } = toastConfig[message.type];
 
   useEffect(() => {
     Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
@@ -73,12 +86,23 @@ const ToastItem: React.FC<{ message: ToastMessage; onRemove: (id: string) => voi
   }, []);
 
   return (
-    <Animated.View style={[styles.toastContainer, style, { opacity }]}>
+    <Animated.View
+      accessible
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={`${accessibilityLabelPrefix}${message.message}`}
+      style={[styles.toastContainer, style, { opacity }]}
+    >
       {icon}
       <Text style={[styles.text, textStyle]}>{message.message}</Text>
-      <TouchableOpacity onPress={() => onRemove(message.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <X size={20} color={textStyle.color} opacity={0.6} />
-      </TouchableOpacity>
+      <IconButton
+        icon={<Icon name="x" size={18} color={palette.neutral[700]} />}
+        size="SM"
+        variant="Ghost"
+        accessibilityLabel="Fechar notificação"
+        onPress={() => onRemove(message.id)}
+        style={{ width: 24, height: 24 }}
+      />
     </Animated.View>
   );
 };
@@ -151,7 +175,28 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 const styles = StyleSheet.create({
-  queueContainer: { position: 'absolute', bottom: 40, left: 16, right: 16, zIndex: 9999, gap: 8 },
-  toastContainer: { flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, marginBottom: 8 },
-  text: { flex: 1, fontSize: 14, fontWeight: '500', marginLeft: 12, marginRight: 12 },
+  queueContainer: {
+    position: 'absolute',
+    bottom: spacing[40],
+    left: spacing[16],
+    right: spacing[16],
+    zIndex: 9999,
+    gap: spacing[8],
+  },
+  toastContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    paddingHorizontal: spacing[16],
+    borderRadius: radius.md,
+    marginBottom: spacing[8],
+    ...elevation[2],
+  },
+  text: {
+    flex: 1,
+    ...typography.bodyM,
+    fontWeight: '500',
+    marginLeft: spacing[12],
+    marginRight: spacing[12],
+  },
 });
