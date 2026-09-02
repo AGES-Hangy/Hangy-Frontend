@@ -125,7 +125,7 @@ export function Chip({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 999,
+    borderRadius: radius.full,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
