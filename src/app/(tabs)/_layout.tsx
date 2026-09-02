@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { AuthGuard } from '@/utils/AuthGuard';
-import { Header } from '@/components/Header';
+import { TopAppBar } from '@/components/TopAppBar';
 import { colors } from '@/constants/colors';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
 
@@ -15,7 +15,9 @@ export default function TabsLayout() {
           const isScreensGroupRoute = route.name.startsWith('(screens)/');
           return {
             headerShown: true,
-            header: () => <Header />,
+            // Padrão de todas as telas. A que precisa de outra barra sobrescreve
+            // com useTopAppBar, então o layout não conhece telas específicas.
+            header: () => <TopAppBar variant="Home" />,
             tabBarActiveTintColor: colors.action.secondary,
             tabBarInactiveTintColor: colors.text.tertiary,
             // Every screen under (screens)/ is reachable-but-not-listed: no tab button, current or future.
