@@ -76,26 +76,26 @@ export function ProfileTabs<Value extends string>({
 
 const styles = StyleSheet.create({
   container: {
+    width: '100%',
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'stretch',
   },
   segmentedContainer: {
-    width: '100%',
     height: 44,
     padding: spacing[4],
     borderRadius: radius.full,
     backgroundColor: colors.surface.sunken,
   },
   underlineContainer: {
-    width: '100%',
     height: 44,
-    paddingHorizontal: spacing[16],
-    gap: spacing[24],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border.default,
     backgroundColor: colors.bg.base,
   },
   tab: {
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -105,6 +105,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   underlineTab: {
+    flex: 1,
     height: 44,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
