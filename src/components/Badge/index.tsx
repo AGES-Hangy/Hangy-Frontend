@@ -6,7 +6,7 @@ import {
   resolvePrivacyVariant,
   resolveStatusVariant,
   type BadgeProps,
-} from '@/components/Badge/type';
+} from '@/components/Badge/types';
 import { colors, palette } from '@/constants/colors';
 import { layout, radius } from '@/constants/layout';
 import { fontFamily, typography } from '@/constants/typography';
@@ -145,4 +145,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export type { BadgeFamily, BadgeProps, PrivacyBadgeValue, StatusBadgeValue } from '@/components/Badge/type';
+export type { BadgeFamily, BadgeProps, PrivacyBadgeValue, StatusBadgeValue } from '@/components/Badge/types';
