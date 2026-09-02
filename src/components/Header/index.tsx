@@ -17,6 +17,9 @@ export function Header() {
           style={[styles.iconButton, !canGoBack && styles.iconButtonHidden]}
           disabled={!canGoBack}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+          accessibilityState={{ disabled: !canGoBack }}
         >
           <MaterialIcons name="arrow-back" size={24} color={colors.action.secondary} />
         </Pressable>
@@ -31,6 +34,8 @@ export function Header() {
           onPress={() => router.push('/Notifications')}
           style={styles.iconButton}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir notificações"
         >
           <MaterialIcons name="notifications" size={24} color={colors.action.secondary} />
         </Pressable>

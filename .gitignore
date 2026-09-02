@@ -2,6 +2,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+coverage/
 
 # Native build output
 android/
@@ -24,4 +25,3 @@ ios/
 
 # TypeScript
 *.tsbuildinfo
-
