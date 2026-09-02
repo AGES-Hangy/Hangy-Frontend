@@ -77,7 +77,18 @@ function pickFileWeb(): Promise<PickedImage | null> {
 
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      settle(file ? { uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size } : null);
+      if (!file) {
+        settle(null);
+        return;
+      }
+
+      const previousUrl = (globalThis as any).__hangyLastObjectUrl as string | undefined;
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+
+      const objectUrl = URL.createObjectURL(file);
+      (globalThis as any).__hangyLastObjectUrl = objectUrl;
+
+      settle({ uri: objectUrl, mimeType: file.type, fileSize: file.size });
     });
 
     window.addEventListener('focus', handleFocus);
