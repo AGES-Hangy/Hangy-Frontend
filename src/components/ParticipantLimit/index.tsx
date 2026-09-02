@@ -64,8 +64,10 @@ export function ParticipantLimit({
 }: ParticipantLimitProps) {
   const fieldDisabled = disabled || unlimited;
 
-  const fieldBorderColor = fieldDisabled ? palette.neutral[200] : palette.neutral[300];
-  const fieldBg = fieldDisabled ? colors.surface.sunken : colors.surface.card;
+  const stepperBg = fieldDisabled ? colors.surface.sunken : colors.surface.card;
+  const stepperBorderColor = fieldDisabled ? palette.neutral[200] : palette.neutral[300];
+  const toggleBg = !disabled && unlimited ? colors.surface.card : colors.surface.sunken;
+  const toggleBorderColor = !disabled && unlimited ? palette.neutral[300] : palette.neutral[200];
   const fieldLabelColor = disabled ? colors.text.disabled : palette.neutral[700];
   const countColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
   const stepperColor = fieldDisabled ? colors.text.disabled : colors.action.primary;
@@ -105,7 +107,7 @@ export function ParticipantLimit({
           style={[
             styles.card,
             styles.cardStepper,
-            { backgroundColor: fieldBg, borderColor: fieldBorderColor },
+            { backgroundColor: stepperBg, borderColor: stepperBorderColor },
           ]}
         >
           <Pressable
@@ -148,17 +150,14 @@ export function ParticipantLimit({
           style={[
             styles.card,
             styles.cardToggle,
-            {
-              backgroundColor: !disabled && unlimited ? colors.surface.card : colors.surface.sunken,
-              borderColor: !disabled && unlimited ? palette.neutral[300] : palette.neutral[200],
-            },
+            { backgroundColor: toggleBg, borderColor: toggleBorderColor },
           ]}
         >
           <View style={styles.switchRow}>
             <Text
               style={[
                 typography.labelM,
-                { color: disabled || !unlimited ? colors.text.disabled : colors.text.primary },
+                { color: disabled ? colors.text.disabled : unlimited ? colors.text.primary : colors.text.tertiary },
               ]}
             >
               Sem limite
@@ -172,7 +171,7 @@ export function ParticipantLimit({
           <Text
             style={[
               typography.bodyS,
-              { color: disabled || !unlimited ? colors.text.disabled : colors.text.secondary },
+              { color: disabled ? colors.text.disabled : colors.text.tertiary },
             ]}
           >
             Qualquer pessoa que vir o evento pode entrar.
@@ -189,23 +188,25 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[12],
   },
   card: {
     borderWidth: BORDER_WIDTH,
     borderRadius: radius.md,
     paddingHorizontal: spacing[16],
-    height: CARD_HEIGHT,
     ...elevation[1],
   },
   cardStepper: {
     width: 120,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   cardToggle: {
     flex: 1,
+    height: CARD_HEIGHT,
     justifyContent: 'center',
     gap: spacing[4],
   },
