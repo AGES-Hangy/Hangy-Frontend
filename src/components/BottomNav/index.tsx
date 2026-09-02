@@ -19,6 +19,18 @@ const ICON_SIZE = 24;
 const DOT_SIZE = 4;
 /** Botão central de criar evento. */
 const CREATE_SIZE = 48;
+/**
+ * Largura da linha de itens: os 390 do frame do Figma menos o padding lateral
+ * de 16 dos dois lados. Acima disso a linha para de esticar e fica centrada,
+ * para o espaçamento entre os ícones não mudar de aparelho para aparelho.
+ */
+const CONTENT_MAX_WIDTH = 390 - spacing[16] * 2;
+/**
+ * Folga que a barra já tem abaixo dos itens ((72 - 44) / 2). A área do
+ * indicador de home cabe aí primeiro; só o que passa disso vira padding extra,
+ * senão a barra fica desnecessariamente alta em aparelho com gesture bar.
+ */
+const BOTTOM_SLACK = (BAR_HEIGHT - ITEM_SIZE) / 2;
 
 const TABS: { tab: BottomNavTab; icon: IconName; label: string }[] = [
   { tab: 'Home', icon: 'house', label: 'Início' },
@@ -71,32 +83,36 @@ export function BottomNav({ active = 'Home', onTabPress, onCreatePress }: Bottom
     />
   );
 
+  const extraBottom = Math.max(insets.bottom - BOTTOM_SLACK, 0);
+
   return (
     <View
       style={[
         styles.bar,
-        // `height` inclui o padding no React Native, então a safe area precisa
-        // entrar na altura total — senão a barra é espremida.
-        { height: BAR_HEIGHT + insets.bottom, paddingBottom: insets.bottom },
+        // `height` inclui o padding no React Native, então o que sobra da safe
+        // area precisa entrar na altura total — senão a barra é espremida.
+        { height: BAR_HEIGHT + extraBottom, paddingBottom: extraBottom },
       ]}
     >
-      <View style={styles.group}>
-        {renderItem(homeTab)}
-        {renderItem(liveTab)}
-      </View>
+      <View style={styles.row}>
+        <View style={styles.group}>
+          {renderItem(homeTab)}
+          {renderItem(liveTab)}
+        </View>
 
-      <Pressable
-        onPress={onCreatePress}
-        style={styles.create}
-        accessibilityRole="button"
-        accessibilityLabel="Criar evento"
-      >
-        <Icon name="plus" color={colors.text.inverse} />
-      </Pressable>
+        <Pressable
+          onPress={onCreatePress}
+          style={styles.create}
+          accessibilityRole="button"
+          accessibilityLabel="Criar evento"
+        >
+          <Icon name="plus" color={colors.text.inverse} />
+        </Pressable>
 
-      <View style={styles.group}>
-        {renderItem(searchTab)}
-        {renderItem(profileTab)}
+        <View style={styles.group}>
+          {renderItem(searchTab)}
+          {renderItem(profileTab)}
+        </View>
       </View>
     </View>
   );
@@ -104,13 +120,19 @@ export function BottomNav({ active = 'Home', onTabPress, onCreatePress }: Bottom
 
 const styles = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing[16],
     backgroundColor: colors.bg.base,
     borderTopWidth: 1.5,
     borderTopColor: colors.border.default,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: 1,
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
   },
   group: {
     flexDirection: 'row',
