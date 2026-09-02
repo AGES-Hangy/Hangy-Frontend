@@ -4,7 +4,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AuthGuard } from '@/utils/AuthGuard';
 import { BottomNav } from '@/components/BottomNav';
 import type { BottomNavActive, BottomNavTab } from '@/components/BottomNav';
-import { TopAppBar } from '@/components/TopAppBar';
+import { TopAppBarProvider, TopAppBarSlot } from '@/hooks/useTopAppBar';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
 
 /** Rota de cada aba do Figma. As duas tabelas são inversas uma da outra. */
@@ -57,16 +57,19 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
 export default function TabsLayout() {
   return (
     <AuthGuard>
-      <Tabs
-        backBehavior="history"
-        tabBar={(props) => <TabBar {...props} />}
-        screenOptions={{
-          headerShown: true,
-          // Padrão de todas as telas. A que precisa de outra barra sobrescreve
-          // com useTopAppBar, então o layout não conhece telas específicas.
-          header: () => <TopAppBar variant="Home" />,
-        }}
-      />
+      <TopAppBarProvider>
+        <Tabs
+          backBehavior="history"
+          tabBar={(props) => <TabBar {...props} />}
+          screenOptions={{
+            headerShown: true,
+            // Padrão de todas as telas. A que precisa de outra barra
+            // sobrescreve com useTopAppBar, então o layout não conhece telas
+            // específicas.
+            header: () => <TopAppBarSlot />,
+          }}
+        />
+      </TopAppBarProvider>
     </AuthGuard>
   );
 }
