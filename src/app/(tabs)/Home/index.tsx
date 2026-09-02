@@ -2,10 +2,10 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/constants/colors';
 
-export default function Feed() {
+export default function Home() {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Feed</Text>
+      <Text style={styles.text}>Home</Text>
     </View>
   );
 }
