@@ -11,9 +11,21 @@ npm run android
 npm run ios
 npm run web
 npm run typecheck     # tsc --noEmit
+npm test              # integration tests with mocked external dependencies
+npm run test:watch    # rerun tests while developing
+npm run test:coverage # local coverage report with enforced thresholds
+npm run test:ci       # CI mode with enforced coverage thresholds
 ```
 
-There is no lint or test script configured yet.
+There is no lint script configured yet. Tests live outside `src/app` under
+`__tests__/`, because files inside `src/app` are interpreted as routes by Expo
+Router. Integration tests should exercise real screens/hooks while mocking
+external boundaries such as HTTP, storage, and navigation.
+
+Coverage is enforced globally for the behavioral scope in `jest.config.js`:
+90% statements, lines, and functions; 80% branches. Constants, type-only
+files, route configuration, and current visual-only placeholders are excluded.
+When a placeholder screen gains behavior, add it to `collectCoverageFrom`.
 
 ## Architecture
 

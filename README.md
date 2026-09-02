@@ -29,6 +29,28 @@ Para validar os tipos:
 npm run typecheck
 ```
 
+Para executar os testes de integração do frontend:
+
+```bash
+npm test
+```
+
+Os testes usam Jest, React Native Testing Library e respostas HTTP mockadas,
+portanto não é necessário iniciar o backend. Para executar em modo contínuo
+durante o desenvolvimento, use `npm run test:watch`.
+
+Para reproduzir localmente a verificação obrigatória do GitHub Actions:
+
+```bash
+npm run typecheck
+npm run test:ci
+```
+
+O comando de CI mede o código comportamental atual de telas, componentes,
+hooks e utils. Ele exige no mínimo 90% de statements, linhas e funções e 80%
+de branches. Constantes, tipos, configurações e telas que ainda são apenas
+placeholders visuais não entram na conta.
+
 ## Organização do repositório
 
 Todo o código-fonte (exceto assets estáticos) fica dentro de `src/`. Essa
@@ -84,4 +106,3 @@ em vez de caminhos relativos longos.
 
 O GitLab é a origem do projeto neste primeiro momento. O espelho para o
 GitHub será configurado depois que esta base for validada.
-
