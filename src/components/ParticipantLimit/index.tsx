@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, palette } from '@/constants/colors';
 import { elevation, radius, spacing } from '@/constants/layout';
@@ -70,15 +70,30 @@ export function ParticipantLimit({
   const countColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
   const stepperColor = fieldDisabled ? colors.text.disabled : colors.action.primary;
 
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
   function decrement() {
     if (!fieldDisabled && value > 0) onChangeValue(value - 1);
   }
 
   function increment() {
-    if (!fieldDisabled) onChangeValue(value + 1);
+    if (!fieldDisabled && value < 999) onChangeValue(value + 1);
   }
 
-  const countLabel = String(value).padStart(2, '0');
+  function handleChangeText(text: string) {
+    if (/^\d*$/.test(text)) setDraft(text);
+  }
+
+  function handleBlur() {
+    const parsed = parseInt(draft, 10);
+    const clamped = isNaN(parsed) ? 0 : Math.min(999, Math.max(0, parsed));
+    onChangeValue(clamped);
+    setDraft(String(clamped));
+  }
 
   return (
     <View style={styles.container}>
@@ -104,11 +119,21 @@ export function ParticipantLimit({
             <Text style={[styles.stepIcon, { color: stepperColor }]}>−</Text>
           </Pressable>
 
-          <Text style={[typography.labelM, styles.count, { color: countColor }]}>{countLabel}</Text>
+          <TextInput
+            style={[typography.labelM, styles.count, { color: countColor }]}
+            value={draft}
+            onChangeText={handleChangeText}
+            onBlur={handleBlur}
+            keyboardType="number-pad"
+            maxLength={3}
+            editable={!fieldDisabled}
+            selectTextOnFocus
+            accessibilityLabel="Limite de participantes"
+          />
 
           <Pressable
             onPress={increment}
-            disabled={fieldDisabled}
+            disabled={fieldDisabled || value === 999}
             hitSlop={8}
             accessibilityLabel="Aumentar limite"
             accessibilityRole="button"
@@ -174,7 +199,7 @@ const styles = StyleSheet.create({
     ...elevation[1],
   },
   cardStepper: {
-    width: 110,
+    width: 120,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -196,8 +221,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   count: {
-    minWidth: 28,
+    minWidth: 32,
     textAlign: 'center',
+    padding: 0,
   },
   switchRow: {
     flexDirection: 'row',
