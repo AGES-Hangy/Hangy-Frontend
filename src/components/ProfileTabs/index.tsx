@@ -44,7 +44,6 @@ export function ProfileTabs<Value extends string>({
           <Pressable
             key={tab.value}
             onPress={() => onChange(tab.value)}
-            disabled={isDisabled}
             accessibilityRole="tab"
             accessibilityState={{ selected: isSelected, disabled: tab.disabled }}
             style={({ pressed }) => [
@@ -81,7 +80,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentedContainer: {
-    width: 325,
+    width: '100%',
     height: 44,
     padding: spacing[4],
     borderRadius: radius.full,
