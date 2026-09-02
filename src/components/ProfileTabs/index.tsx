@@ -53,7 +53,7 @@ export function ProfileTabs({ value, onChange, style }: ProfileTabsProps) {
 
 const styles = StyleSheet.create({
   container: {
-    width: 325,
+    width: '100%',
     height: 44,
     padding: spacing[4],
     flexDirection: 'row',
