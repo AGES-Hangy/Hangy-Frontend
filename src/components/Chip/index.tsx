@@ -10,7 +10,7 @@ import {
 import { colors } from '@/constants/colors';
 import { typography, fontFamily } from '@/constants/typography';
 import { ChipProps, ChipSize } from './types';
-
+import { radius } from '@/constants/layout';
 const CHIP_HEIGHTS: Record<ChipSize, number> = {
   sm: 28,
   md: 36,
