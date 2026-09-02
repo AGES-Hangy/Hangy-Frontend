@@ -25,3 +25,8 @@ ios/
 # TypeScript
 *.tsbuildinfo
 
+# Tela para teste
+src/app/Show/
+
+# Rascunho da descrição da PR
+PR_DESCRIPTION.md

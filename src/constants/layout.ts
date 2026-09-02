@@ -9,6 +9,8 @@ export const radius = {
   lg: 20,
   xl: 28,
   full: 999,
+  /** Raio 16 do frame FileUpload — página Components do Figma, não cai na escala acima. */
+  dropzone: 16,
 } as const;
 
 // Grade de 4pt
