@@ -2,11 +2,11 @@ import React from 'react';
 import {
   Text,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ViewStyle,
   TextStyle,
   Insets,
-  View,
 } from 'react-native';
 import { colors } from '@/constants/colors';
 import { typography, fontFamily } from '@/constants/typography';
@@ -67,7 +67,6 @@ export function Chip({
     // 2. Estado Selecionado
     if (isSelected) {
       if (categoryType === 'macro') {
-        // Macro selecionado: Fill Sólido
         return {
           container: {
             backgroundColor: colors.action.primary,
@@ -77,7 +76,6 @@ export function Chip({
           badgeText: { color: colors.text.inverse },
         };
       } else {
-        // Micro selecionado: Fill Tonal
         return {
           container: {
             backgroundColor: colors.surface.sunken,
@@ -96,7 +94,7 @@ export function Chip({
         borderColor: colors.border.strong,
       },
       text: { color: colors.text.primary },
-      badgeText: { color: colors.text.secondary }, // Pode mudar para primary se preferir o número idêntico ao label
+      badgeText: { color: colors.text.secondary },
     };
   };
 
@@ -114,6 +112,8 @@ export function Chip({
         disabled: disabled,
       }}
       accessibilityLabel={accessibilityLabel || label}
+      // style é definido internamente. Qualquer override indesejado pelo {...rest}
+      // agora é bloqueado pela tipagem Omit<..., 'style'>
       style={[
         styles.container,
         {
@@ -135,18 +135,23 @@ export function Chip({
         </Text>
       )}
 
-      {/* Ícone de Remover */}
+      {/* Ícone de Remover - Usando Pressable e Role="none" para evitar nested buttons */}
       {showRemoveIcon && isSelected && (
-        <TouchableOpacity
-          activeOpacity={0.6}
-          onPress={onRemove}
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onRemove?.();
+          }}
           disabled={disabled}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityRole="button"
+          accessibilityRole="none"
           accessibilityLabel={`Remover ${label}`}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.6 : 1, // Simula o efeito do antigo activeOpacity={0.6}
+          })}
         >
           <Icon name="x" size={14} color={dynamicColors.badgeText.color as string} />
-        </TouchableOpacity>
+        </Pressable>
       )}
     </TouchableOpacity>
   );
@@ -170,12 +175,6 @@ const styles = StyleSheet.create({
   badgeText: {
     ...typography.labelS,
     fontFamily: fontFamily.base,
-    textAlign: 'center',
-  },
-  removeIcon: {
-    fontFamily: fontFamily.base,
-    fontSize: 14,
-    lineHeight: 16,
     textAlign: 'center',
   },
 });

@@ -2,9 +2,11 @@ import { TouchableOpacityProps } from 'react-native';
 
 export type ChipSize = 'sm' | 'md' | 'lg';
 
-export interface ChipProps extends TouchableOpacityProps {
+export type ChipCategoryType = 'macro' | 'micro';
+
+export interface ChipProps extends Omit<TouchableOpacityProps, 'style'> {
   label: string;
-  categoryType?: 'macro' | 'micro';
+  categoryType?: ChipCategoryType;
   size?: ChipSize;
   isSelected?: boolean;
   disabled?: boolean;
