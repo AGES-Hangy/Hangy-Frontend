@@ -45,7 +45,11 @@ const defaultToastMessages = {
 const toastConfig = {
   success: {
     icon: <Icon name="circle-check" size={20} color={palette.success.default} />,
-    style: { backgroundColor: palette.success.bg },
+    style: {
+      backgroundColor: palette.success.bg,
+      borderWidth: BORDER_WIDTH,
+      borderColor: palette.success.border,
+    },
     textStyle: { color: colors.text.primary },
     accessibilityLabelPrefix: 'Sucesso: ',
   },
@@ -54,20 +58,28 @@ const toastConfig = {
     style: {
       backgroundColor: palette.error.bg,
       borderWidth: BORDER_WIDTH,
-      borderColor: palette.error.default,
+      borderColor: palette.error.border,
     },
     textStyle: { color: colors.text.primary },
     accessibilityLabelPrefix: 'Erro: ',
   },
   warning: {
     icon: <Icon name="triangle-alert" size={20} color={palette.warning.default} />,
-    style: { backgroundColor: palette.warning.bg },
+    style: {
+      backgroundColor: palette.warning.bg,
+      borderWidth: BORDER_WIDTH,
+      borderColor: palette.warning.border,
+    },
     textStyle: { color: colors.text.primary },
     accessibilityLabelPrefix: 'Aviso: ',
   },
   info: {
     icon: <Icon name="info" size={20} color={palette.info.default} />,
-    style: { backgroundColor: palette.info.bg },
+    style: {
+      backgroundColor: palette.info.bg,
+      borderWidth: BORDER_WIDTH,
+      borderColor: palette.info.border,
+    },
     textStyle: { color: colors.text.primary },
     accessibilityLabelPrefix: 'Informação: ',
   },
