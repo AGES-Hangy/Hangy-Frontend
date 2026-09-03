@@ -66,8 +66,8 @@ export function ParticipantLimit({
 
   const stepperBg = fieldDisabled ? colors.surface.sunken : colors.surface.card;
   const stepperBorderColor = fieldDisabled ? palette.neutral[200] : palette.neutral[300];
-  const toggleBg = !disabled && unlimited ? colors.surface.card : colors.surface.sunken;
-  const toggleBorderColor = !disabled && unlimited ? palette.neutral[300] : palette.neutral[200];
+  const toggleBg = disabled ? colors.surface.sunken : colors.surface.card;
+  const toggleBorderColor = disabled ? palette.neutral[200] : palette.neutral[300];
   const fieldLabelColor = disabled ? colors.text.disabled : palette.neutral[700];
   const countColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
   const stepperColor = fieldDisabled ? colors.text.disabled : colors.action.primary;
@@ -157,7 +157,7 @@ export function ParticipantLimit({
             <Text
               style={[
                 typography.labelM,
-                { color: disabled ? colors.text.disabled : unlimited ? colors.text.primary : colors.text.tertiary },
+                { color: disabled ? colors.text.disabled : colors.text.primary }
               ]}
             >
               Sem limite
@@ -171,7 +171,7 @@ export function ParticipantLimit({
           <Text
             style={[
               typography.bodyS,
-              { color: disabled ? colors.text.disabled : colors.text.tertiary },
+              { color: disabled ? colors.text.disabled : colors.text.secondary }
             ]}
           >
             Qualquer pessoa que vir o evento pode entrar.
