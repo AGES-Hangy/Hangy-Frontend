@@ -2,12 +2,10 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/constants/colors';
 
-export default function Notifications() {
-  // Sem chamar useTopAppBar, vale o padrão do layout: a barra da Home, com
-  // logo e sino — é o que o Figma desenha para esta tela.
+export default function Home() {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Notifications</Text>
+      <Text style={styles.text}>Home</Text>
     </View>
   );
 }
