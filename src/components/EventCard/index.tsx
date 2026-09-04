@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Badge, getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { colors } from '@/constants/colors';
-import { elevation, radius, spacing } from '@/constants/layout';
+import { elevation, layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 import type { Event, EventCardProps, EventPrivacy } from './types';
@@ -88,7 +88,7 @@ function EventImage({ event, style }: { event: Event; style: object }) {
 			placeholder={placeholderImage}
 			onError={() => setHasImageError(true)}
 			contentFit="cover"
-			transition={150}
+			transition={layout.eventCard.imageTransitionDuration}
 			style={style}
 		/>
 	);
@@ -101,23 +101,23 @@ function EventDetails({ event, compact = false }: { event: Event; compact?: bool
 			{compact ? (
 				<View style={styles.compactMetaLine}>
 					<View style={styles.metaItem}>
-						<MaterialIcons name="event" size={14} color={colors.text.secondary} />
+						<MaterialIcons name="event" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 						<Text numberOfLines={1} style={styles.detailText}>{event.date}</Text>
 					</View>
 					<Text style={styles.metaSeparator}>•</Text>
 					<View style={styles.metaItem}>
-						<MaterialIcons name="place" size={14} color={colors.text.secondary} />
+						<MaterialIcons name="place" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 						<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
 					</View>
 				</View>
 			) : (
 				<>
 					<View style={styles.detailLine}>
-						<MaterialIcons name="event" size={14} color={colors.text.secondary} />
+						<MaterialIcons name="event" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 						<Text numberOfLines={1} style={styles.detailText}>{event.date}</Text>
 					</View>
 					<View style={styles.detailLine}>
-						<MaterialIcons name="place" size={14} color={colors.text.secondary} />
+						<MaterialIcons name="place" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 						<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
 					</View>
 				</>
@@ -161,7 +161,7 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 				</View>
 			</View>
 			<View style={styles.compactStateWrap}>
-				{stateBadge ? <Badge family="Status" value={stateBadge} /> : <MaterialIcons name="chevron-right" size={24} color={colors.text.tertiary} style={styles.compactChevron} />}
+				{stateBadge ? <Badge family="Status" value={stateBadge} /> : <MaterialIcons name="chevron-right" size={layout.eventCard.chevronSize} color={colors.text.tertiary} style={styles.compactChevron} />}
 			</View>
 		</View>
 	);
@@ -198,11 +198,11 @@ function MiniCard({ event }: { event: Event }) {
 			<View style={styles.miniContent}>
 				<Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text>
 				<View style={styles.detailLine}>
-					<MaterialIcons name="event" size={14} color={colors.text.secondary} />
+					<MaterialIcons name="event" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 					<Text numberOfLines={1} style={styles.detailText}>{event.date}</Text>
 				</View>
 				<View style={styles.detailLine}>
-					<MaterialIcons name="place" size={14} color={colors.text.secondary} />
+					<MaterialIcons name="place" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 					<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
 				</View>
 			</View>
@@ -222,11 +222,11 @@ function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
 			<View style={styles.miniContent}>
 				<Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text>
 				<View style={styles.detailLine}>
-					<MaterialIcons name="person" size={14} color={colors.text.secondary} />
+					<MaterialIcons name="person" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 					<Text numberOfLines={1} style={styles.detailText}>{requesterName} solicitou</Text>
 				</View>
 				<View style={styles.detailLine}>
-					<MaterialIcons name="event" size={14} color={colors.text.secondary} />
+					<MaterialIcons name="event" size={layout.eventCard.detailIconSize} color={colors.text.secondary} />
 					<Text numberOfLines={1} style={styles.detailText}>{formatRequestDate(event.date)}</Text>
 				</View>
 				<View style={styles.requestActions}>
@@ -256,41 +256,41 @@ function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
 
 const styles = StyleSheet.create({
 	pressable: { alignSelf: 'flex-start' },
-	pressed: { opacity: 0.82 },
+	pressed: { opacity: layout.eventCard.pressedOpacity },
 	card: { overflow: 'visible', backgroundColor: colors.surface.card, borderRadius: radius.md, ...elevation[1] },
-	featured: { width: 320, height: 288, borderRadius: radius.lg },
-	featuredImageWrap: { height: 160, overflow: 'hidden', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+	featured: { width: layout.eventCard.featuredWidth, height: layout.eventCard.featuredHeight, borderRadius: radius.lg },
+	featuredImageWrap: { height: layout.eventCard.featuredImageHeight, overflow: 'hidden', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
 	featuredImage: { width: '100%', height: '100%', backgroundColor: colors.surface.sunken },
-	privacyTagWrap: { position: 'absolute', top: spacing[12], left: spacing[12], zIndex: 1 },
+	privacyTagWrap: { position: 'absolute', top: spacing[12], left: spacing[12], zIndex: layout.eventCard.overlayZIndex },
 	details: { flex: 1, gap: spacing[4], padding: spacing[12] },
 	title: { ...typography.h4, color: colors.text.primary },
 	compactTitle: { ...typography.labelM, color: colors.text.primary },
 	detailLine: { flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
 	compactMetaLine: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], flexWrap: 'wrap' },
-	metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], flexShrink: 1 },
+	metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], flexShrink: layout.eventCard.flexShrink },
 	metaSeparator: { color: colors.text.tertiary },
-	detailText: { ...typography.caption, color: colors.text.secondary, flexShrink: 1 },
-	compact: { width: '100%', maxWidth: 520, height: 88, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, overflow: 'visible' },
+	detailText: { ...typography.caption, color: colors.text.secondary, flexShrink: layout.eventCard.flexShrink },
+	compact: { width: '100%', maxWidth: layout.eventCard.compactMaxWidth, height: layout.eventCard.compactHeight, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, overflow: 'visible' },
 	compactImageWrap: { position: 'relative', overflow: 'hidden', borderTopLeftRadius: radius.md, borderBottomLeftRadius: radius.md },
-	compactImage: { width: 88, height: 88, backgroundColor: colors.surface.sunken },
+	compactImage: { width: layout.eventCard.compactImageSize, height: layout.eventCard.compactImageSize, backgroundColor: colors.surface.sunken },
 	compactContent: { flex: 1, justifyContent: 'center', paddingVertical: spacing[8], paddingRight: spacing[8] },
-	compactMeta: { marginTop: spacing[4], alignSelf: 'flex-start', position: 'relative', top: -10, left: 5, right: 0 },
-	compactStateWrap: { alignItems: 'center', justifyContent: 'center', paddingRight: spacing[12], minWidth: 92 },
+	compactMeta: { marginTop: spacing[4], alignSelf: 'flex-start', position: 'relative', top: layout.eventCard.compactMetaTop, left: layout.eventCard.compactMetaLeft, right: layout.eventCard.compactMetaRight },
+	compactStateWrap: { alignItems: 'center', justifyContent: 'center', paddingRight: spacing[12], minWidth: layout.eventCard.compactStateMinWidth },
 	compactChevron: { marginRight: spacing[12] },
-	mapPreview: { width: 280, height: 96, flexDirection: 'row', alignItems: 'center', padding: spacing[8], overflow: 'visible' },
+	mapPreview: { width: layout.eventCard.mapPreviewWidth, height: layout.eventCard.mapPreviewHeight, flexDirection: 'row', alignItems: 'center', padding: spacing[8], overflow: 'visible' },
 	mapImageWrap: { position: 'relative', overflow: 'hidden', borderRadius: radius.eventCardSm },
-	mapImage: { width: 80, height: 80, borderRadius: radius.eventCardSm, backgroundColor: colors.surface.sunken },
+	mapImage: { width: layout.eventCard.mapImageSize, height: layout.eventCard.mapImageSize, borderRadius: radius.eventCardSm, backgroundColor: colors.surface.sunken },
 	mapDetails: { position: 'relative', flex: 1, gap: spacing[4], paddingHorizontal: spacing[8], paddingTop: spacing[8] },
 	mapBadgeAbove: { marginTop: spacing[4], alignSelf: 'flex-start' },
-	mini: { width: 172, height: 226, overflow: 'visible' },
+	mini: { width: layout.eventCard.miniWidth, height: layout.eventCard.miniHeight, overflow: 'visible' },
 	miniImageWrap: { position: 'relative', overflow: 'hidden', borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
-	miniImage: { width: '100%', height: 112, backgroundColor: colors.surface.sunken },
-	miniBadgeOverlay: { position: 'absolute', top: spacing[8], left: spacing[8], zIndex: 1 },
-	requestImage: { width: '100%', height: 96, backgroundColor: colors.surface.sunken },
+	miniImage: { width: '100%', height: layout.eventCard.miniImageHeight, backgroundColor: colors.surface.sunken },
+	miniBadgeOverlay: { position: 'absolute', top: spacing[8], left: spacing[8], zIndex: layout.eventCard.overlayZIndex },
+	requestImage: { width: '100%', height: layout.eventCard.requestImageHeight, backgroundColor: colors.surface.sunken },
 	miniContent: { flex: 1, gap: spacing[4], padding: spacing[8] },
-	miniTitle: { ...typography.labelM, color: colors.text.primary, flexShrink: 1 },
+	miniTitle: { ...typography.labelM, color: colors.text.primary, flexShrink: layout.eventCard.flexShrink },
 	requestImageWrap: { position: 'relative', overflow: 'hidden', borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
 	newDot: { position: 'absolute', top: spacing[8], right: spacing[8], width: spacing[8], height: spacing[8], borderRadius: radius.full, backgroundColor: colors.action.secondary },
 	requestActions: { flexDirection: 'row', gap: spacing[8], marginTop: 'auto', justifyContent: 'center', alignItems: 'center' },
-	requestButton: { minWidth: 40, width: 40, paddingHorizontal: 0, alignItems: 'center', justifyContent: 'center' },
+	requestButton: { minWidth: layout.eventCard.requestButtonSize, width: layout.eventCard.requestButtonSize, paddingHorizontal: layout.eventCard.requestButtonPaddingHorizontal, alignItems: 'center', justifyContent: 'center' },
 });

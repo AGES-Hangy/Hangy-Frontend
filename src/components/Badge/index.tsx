@@ -14,13 +14,23 @@ import { fontFamily, typography } from '@/constants/typography';
 const BADGE_HEIGHT = layout.badge.height;
 const BADGE_HORIZONTAL_PADDING = layout.badge.paddingHorizontal;
 const BADGE_ICON_SIZE = layout.badge.iconSize;
-const BADGE_TEXT_GAP = 6;
+const BADGE_ICON_STROKE_WIDTH = layout.badge.iconStrokeWidth;
+const BADGE_TEXT_GAP = layout.badge.textGap;
 const BADGE_BORDER_WIDTH = layout.badge.borderWidth;
-const NOTIFICATION_ICON_SIZE = 16;
+const NOTIFICATION_ICON_SIZE = layout.badge.notificationIconSize;
+const NOTIFICATION_ICON_STROKE_WIDTH = layout.badge.notificationIconStrokeWidth;
 const NOTIFICATION_DOT_SIZE = layout.badge.notificationDotSize;
 const NOTIFICATION_BUBBLE_MIN_WIDTH = layout.badge.notificationMinWidth;
 const NOTIFICATION_PILL_HEIGHT = layout.badge.notificationPillHeight;
 const NOTIFICATION_OFFSET = layout.badge.notificationOffset;
+const NOTIFICATION_BUBBLE_TOP = layout.badge.notificationBubbleTop;
+const NOTIFICATION_BUBBLE_RIGHT = layout.badge.notificationBubbleRight;
+const NOTIFICATION_BUBBLE_BORDER_WIDTH = layout.badge.notificationBubbleBorderWidth;
+const NOTIFICATION_CONTAINER_EXTRA_SIZE = layout.badge.notificationContainerExtraSize;
+const NOTIFICATION_PILL_PADDING_HORIZONTAL = layout.badge.notificationPillPaddingHorizontal;
+const NOTIFICATION_PILL_PADDING_VERTICAL = layout.badge.notificationPillPaddingVertical;
+const NOTIFICATION_COUNT_FONT_SIZE = layout.badge.notificationCountFontSize;
+const NOTIFICATION_COUNT_LINE_HEIGHT = layout.badge.notificationCountLineHeight;
 
 function isNotificationBadgeProps(props: BadgeProps): props is Extract<BadgeProps, { family: 'Notification' }> {
   return props.family === 'Notification';
@@ -45,7 +55,7 @@ export function Badge(props: BadgeProps) {
         }
       >
         <View style={styles.notificationIconWrap}>
-          <Icon name="bell" size={NOTIFICATION_ICON_SIZE} color={colors.text.primary} strokeWidth={2.5} />
+          <Icon name="bell" size={NOTIFICATION_ICON_SIZE} color={colors.text.primary} strokeWidth={NOTIFICATION_ICON_STROKE_WIDTH} />
         </View>
 
         <View
@@ -78,7 +88,7 @@ export function Badge(props: BadgeProps) {
       ]}
       accessibilityRole="text"
     >
-      <Icon name={visual.icon} size={BADGE_ICON_SIZE} color={visual.textColor} strokeWidth={2.25} />
+      <Icon name={visual.icon} size={BADGE_ICON_SIZE} color={visual.textColor} strokeWidth={BADGE_ICON_STROKE_WIDTH} />
       <Text style={[typography.badge, styles.badgeText, { color: visual.textColor }]}>
         {visual.label}
       </Text>
@@ -103,8 +113,8 @@ const styles = StyleSheet.create({
   },
   notificationBadge: {
     position: 'relative',
-    width: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET + 2,
-    height: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET + 2,
+    width: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET + NOTIFICATION_CONTAINER_EXTRA_SIZE,
+    height: NOTIFICATION_ICON_SIZE + NOTIFICATION_OFFSET + NOTIFICATION_CONTAINER_EXTRA_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -116,10 +126,10 @@ const styles = StyleSheet.create({
   },
   notificationBubble: {
     position: 'absolute',
-    top: -3,
-    right: -1,
+    top: NOTIFICATION_BUBBLE_TOP,
+    right: NOTIFICATION_BUBBLE_RIGHT,
     backgroundColor: palette.error.default,
-    borderWidth: 2,
+    borderWidth: NOTIFICATION_BUBBLE_BORDER_WIDTH,
     borderColor: palette.neutral[0],
     justifyContent: 'center',
     alignItems: 'center',
@@ -133,12 +143,12 @@ const styles = StyleSheet.create({
     minWidth: NOTIFICATION_BUBBLE_MIN_WIDTH,
     height: NOTIFICATION_PILL_HEIGHT,
     borderRadius: radius.full,
-    paddingHorizontal: 3,
-    paddingVertical: 0,
+    paddingHorizontal: NOTIFICATION_PILL_PADDING_HORIZONTAL,
+    paddingVertical: NOTIFICATION_PILL_PADDING_VERTICAL,
   },
   notificationCountText: {
-    fontSize: 8,
-    lineHeight: 10,
+    fontSize: NOTIFICATION_COUNT_FONT_SIZE,
+    lineHeight: NOTIFICATION_COUNT_LINE_HEIGHT,
     fontWeight: '700',
     color: colors.text.inverse,
     includeFontPadding: false,
