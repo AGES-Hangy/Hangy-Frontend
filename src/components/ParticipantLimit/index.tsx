@@ -157,7 +157,7 @@ export function ParticipantLimit({
             <Text
               style={[
                 typography.labelM,
-                { color: disabled ? colors.text.disabled : colors.text.primary }
+                { color: disabled ? colors.text.disabled : palette.neutral[700] }
               ]}
             >
               Sem limite
