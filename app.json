@@ -19,6 +19,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Hangy usa suas fotos para definir a capa do evento.",
+          "microphonePermission": false
+        }
+      ],
       "@react-native-community/datetimepicker"
     ]
   }
