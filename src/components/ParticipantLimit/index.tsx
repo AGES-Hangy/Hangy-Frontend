@@ -94,7 +94,7 @@ export function ParticipantLimit({
     const parsed = parseInt(draft, 10);
     const clamped = isNaN(parsed) ? 0 : Math.min(999, Math.max(0, parsed));
     onChangeValue(clamped);
-    setDraft(String(clamped));
+    setDraft(clamped.toString().padStart(2, '0'));
   }
 
   return (
