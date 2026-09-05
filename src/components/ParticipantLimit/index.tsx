@@ -75,7 +75,7 @@ export function ParticipantLimit({
   const [draft, setDraft] = useState(value.toString().padStart(2, '0'));
 
   useEffect(() => {
-    setDraft(String(value));
+    setDraft(value.toString().padStart(2, '0'));
   }, [value]);
 
   function decrement() {
