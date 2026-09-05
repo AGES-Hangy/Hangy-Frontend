@@ -44,8 +44,9 @@ export function ProfileTabs<Value extends string>({
           <Pressable
             key={tab.value}
             onPress={() => onChange(tab.value)}
+            disabled={isDisabled}
             accessibilityRole="tab"
-            accessibilityState={{ selected: isSelected, disabled: tab.disabled }}
+            accessibilityState={{ selected: isSelected, disabled: isDisabled }}
             style={({ pressed }) => [
               styles.tab,
               isUnderline ? styles.underlineTab : styles.segmentedTab,
