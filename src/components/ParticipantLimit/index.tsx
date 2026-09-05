@@ -70,9 +70,9 @@ export function ParticipantLimit({
   const toggleBorderColor = disabled ? palette.neutral[200] : palette.neutral[300];
   const fieldLabelColor = disabled ? colors.text.disabled : palette.neutral[700];
   const countColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
-  const stepperColor = fieldDisabled ? colors.text.disabled : colors.action.primary;
+  const stepperColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
 
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value.toString().padStart(2, '0'));
 
   useEffect(() => {
     setDraft(String(value));
