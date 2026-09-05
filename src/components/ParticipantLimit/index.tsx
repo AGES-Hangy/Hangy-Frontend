@@ -37,7 +37,7 @@ function CustomSwitch({
   const dotX = anim.interpolate({ inputRange: [0, 1], outputRange: [4, 4 + DOT_TRAVEL] });
   const trackBg = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [palette.neutral[300], colors.action.primary],
+    outputRange: [palette.primary[200], colors.action.primary],
   });
   const dotColor = value ? colors.bg.base : colors.surface.sunken;
 
