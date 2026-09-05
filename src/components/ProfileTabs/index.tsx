@@ -6,7 +6,7 @@ import { elevation, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 /**
- * Navegação controlada com aparência segmentada ou indicador inferior.
+ * Navegação controlada com aparência segmentada ou cabeçalho de lista (indicador inferior).
  *
  * ```tsx
  * const items = [
@@ -15,7 +15,7 @@ import { typography } from '@/constants/typography';
  *   { value: 'favorites', label: 'Favoritos' },
  * ] as const;
  *
- * <ProfileTabs items={items} value={tab} onChange={setTab} variant="underline" />
+ * <ProfileTabs items={items} value={tab} onChange={setTab} variant="listHeader" />
  * ```
  */
 export function ProfileTabs<Value extends string>({
@@ -25,13 +25,13 @@ export function ProfileTabs<Value extends string>({
   variant = 'segmented',
   style,
 }: ProfileTabsProps<Value>) {
-  const isUnderline = variant === 'underline';
+  const isListHeader = variant === 'listHeader';
 
   return (
     <View
       style={[
         styles.container,
-        isUnderline ? styles.underlineContainer : styles.segmentedContainer,
+        isListHeader ? styles.listHeaderContainer : styles.segmentedContainer,
         style,
       ]}
       accessibilityRole="tablist"
@@ -49,20 +49,20 @@ export function ProfileTabs<Value extends string>({
             accessibilityState={{ selected: isSelected, disabled: tab.disabled }}
             style={({ pressed }) => [
               styles.tab,
-              isUnderline ? styles.underlineTab : styles.segmentedTab,
+              isListHeader ? styles.listHeaderTab : styles.segmentedTab,
               isSelected &&
-                (isUnderline ? styles.selectedUnderlineTab : styles.selectedSegmentedTab),
+                (isListHeader ? styles.selectedListHeaderTab : styles.selectedSegmentedTab),
               pressed &&
-                (isUnderline ? styles.pressedUnderlineTab : styles.pressedSegmentedTab),
+                (isListHeader ? styles.pressedListHeaderTab : styles.pressedSegmentedTab),
             ]}
           >
             <Text
               numberOfLines={1}
               style={[
                 styles.label,
-                isUnderline ? styles.underlineLabel : styles.segmentedLabel,
+                isListHeader ? styles.listHeaderLabel : styles.segmentedLabel,
                 isSelected &&
-                  (isUnderline ? styles.selectedUnderlineLabel : styles.selectedSegmentedLabel),
+                  (isListHeader ? styles.selectedListHeaderLabel : styles.selectedSegmentedLabel),
                 tab.disabled && styles.disabledLabel,
               ]}
             >
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: colors.surface.sunken,
   },
-  underlineContainer: {
+  listHeaderContainer: {
     height: 44,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border.default,
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: radius.full,
   },
-  underlineTab: {
+  listHeaderTab: {
     flex: 1,
     height: 44,
     borderBottomWidth: 2,
@@ -117,13 +117,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
     ...elevation[1],
   },
-  selectedUnderlineTab: {
+  selectedListHeaderTab: {
     borderBottomColor: colors.action.primary,
   },
   pressedSegmentedTab: {
     backgroundColor: palette.neutral[200],
   },
-  pressedUnderlineTab: {
+  pressedListHeaderTab: {
     backgroundColor: palette.primary[50],
   },
   label: {
@@ -132,13 +132,13 @@ const styles = StyleSheet.create({
   segmentedLabel: {
     color: palette.neutral[500],
   },
-  underlineLabel: {
+  listHeaderLabel: {
     color: colors.text.secondary,
   },
   selectedSegmentedLabel: {
     color: palette.primary[600],
   },
-  selectedUnderlineLabel: {
+  selectedListHeaderLabel: {
     color: colors.text.brand,
   },
   disabledLabel: {

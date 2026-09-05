@@ -1,6 +1,6 @@
 import type { StyleProp, ViewStyle } from 'react-native';
 
-export type ProfileTabsVariant = 'segmented' | 'underline';
+export type ProfileTabsVariant = 'segmented' | 'listHeader';
 
 export type ProfileTabItem<Value extends string = string> = {
   /** Identificador estável retornado por `onChange`. */
