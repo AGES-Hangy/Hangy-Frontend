@@ -71,6 +71,7 @@ export const colors = {
   surface: {
     card: palette.neutral[0],
     sunken: palette.neutral[100],
+    brandTonal: palette.primary[100],
   },
   border: {
     default: palette.neutral[200],
