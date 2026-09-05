@@ -78,7 +78,7 @@ export function Chip({
       } else {
         return {
           container: {
-            backgroundColor: colors.surface.sunken,
+            backgroundColor: colors.surface.brandTonal,
             borderColor: colors.border.focus,
           },
           text: { color: colors.text.brand },
