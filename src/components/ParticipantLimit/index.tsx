@@ -37,7 +37,7 @@ function CustomSwitch({
   const dotX = anim.interpolate({ inputRange: [0, 1], outputRange: [4, 4 + DOT_TRAVEL] });
   const trackBg = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [palette.primary[200], colors.action.primary],
+    outputRange: [palette.neutral[200], colors.action.primary],
   });
   const dotColor = value ? colors.bg.base : colors.surface.sunken;
 
@@ -66,8 +66,9 @@ export function ParticipantLimit({
 
   const stepperBg = fieldDisabled ? colors.surface.sunken : colors.surface.card;
   const stepperBorderColor = fieldDisabled ? palette.neutral[200] : palette.neutral[300];
-  const toggleBg = disabled ? colors.surface.sunken : colors.surface.card;
-  const toggleBorderColor = disabled ? palette.neutral[200] : palette.neutral[300];
+  const toggleDisabled = disabled || !unlimited;
+  const toggleBg = toggleDisabled ? colors.surface.sunken : colors.surface.card;
+  const toggleBorderColor = toggleDisabled ? palette.neutral[200] : palette.neutral[300];
   const fieldLabelColor = disabled ? colors.text.disabled : palette.neutral[700];
   const countColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
   const stepperColor = fieldDisabled ? colors.text.disabled : colors.text.primary;
@@ -157,7 +158,7 @@ export function ParticipantLimit({
             <Text
               style={[
                 typography.labelM,
-                { color: disabled ? colors.text.disabled : palette.neutral[700] }
+                { color: toggleDisabled ? colors.text.disabled : palette.neutral[700] }
               ]}
             >
               Sem limite
@@ -171,7 +172,7 @@ export function ParticipantLimit({
           <Text
             style={[
               typography.bodyS,
-              { color: disabled ? colors.text.disabled : colors.text.secondary }
+              { color: toggleDisabled ? colors.text.disabled : colors.text.secondary }
             ]}
           >
             Qualquer pessoa que vir o evento pode entrar.
