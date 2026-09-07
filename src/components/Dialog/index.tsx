@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import {
+  ActivityIndicator,
   AccessibilityInfo,
   findNodeHandle,
   Modal,
@@ -38,8 +39,23 @@ const VARIANTS = {
   },
 } as const satisfies Record<DialogVariant, unknown>;
 
-export function Dialog({ visible, variant, onConfirm, onCancel }: DialogProps) {
-  const config = VARIANTS[variant];
+export function Dialog({
+  visible,
+  variant,
+  onConfirm,
+  onCancel,
+  title,
+  description,
+  confirmLabel,
+  isLoading = false,
+}: DialogProps) {
+  const variantConfig = VARIANTS[variant];
+  const config = {
+    ...variantConfig,
+    title: title ?? variantConfig.title,
+    description: description ?? variantConfig.description,
+    confirmLabel: confirmLabel ?? variantConfig.confirmLabel,
+  };
   const titleRef = useRef<Text>(null);
 
   function focusTitle() {
@@ -79,22 +95,30 @@ export function Dialog({ visible, variant, onConfirm, onCancel }: DialogProps) {
               <View style={styles.actions}>
                 <Pressable
                   onPress={onConfirm}
+                  disabled={isLoading}
                   accessibilityRole="button"
                   accessibilityLabel={config.confirmLabel}
+                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
                   style={({ pressed }) => [
                     styles.button,
                     styles.confirm,
                     config.destructive && styles.destructive,
-                    pressed && styles.pressed,
+                    pressed && !isLoading && styles.pressed,
                   ]}
                 >
-                  <Text style={styles.confirmLabel}>{config.confirmLabel}</Text>
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color={colors.text.inverse} />
+                  ) : (
+                    <Text style={styles.confirmLabel}>{config.confirmLabel}</Text>
+                  )}
                 </Pressable>
                 <Pressable
                   onPress={onCancel}
+                  disabled={isLoading}
                   accessibilityRole="button"
                   accessibilityLabel="Voltar"
-                  style={({ pressed }) => [styles.button, pressed && styles.cancelPressed]}
+                  accessibilityState={{ disabled: isLoading }}
+                  style={({ pressed }) => [styles.button, pressed && !isLoading && styles.cancelPressed]}
                 >
                   <Text style={styles.cancelLabel}>Voltar</Text>
                 </Pressable>
