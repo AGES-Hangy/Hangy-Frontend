@@ -45,18 +45,22 @@ export const palette = {
   },
   success: {
     bg: '#E6F5EE',
+    border: '#8FD3B4',
     default: '#128A54',
   },
   error: {
     bg: '#FDECEE',
+    border: '#F2A8AF',
     default: '#D33A45',
   },
   warning: {
     bg: '#FDF0E7',
+    border: '#F7C09B',
     default: '#E8590C',
   },
   info: {
     bg: '#EAF1FD',
+    border: '#A9C4F5',
     default: '#2F6FE4',
   },
 } as const;
