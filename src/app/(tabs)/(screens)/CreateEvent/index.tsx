@@ -25,24 +25,18 @@ const EMPTY_FORM: CreateEventFormData = {
   tagIds: [],
 };
 
-/**
- * Container do wizard de criação de evento. É dono de tudo que atravessa
- * etapas: o formulário inteiro, o passo atual, o `Stepper`, o `ScrollView` da
- * página e o rodapé fixo com o botão.
- */
 export default function CreateEvent() {
-  // "Criar evento" fecha o fluxo, não volta um passo — por isso Modal (o `x`
-  // no lugar da seta), como o frame do Figma desenha.
+ 
   useTopAppBar({ variant: 'Modal', title: 'Criar evento' });
 
   // O `x` da barra sai direto via `router.back()` (comportamento padrão do
-  // TopAppBar variante Modal) — nada a implementar aqui. A confirmação de
+  // TopAppBar variante Modal). A confirmação de
   // descarte depende de uma variante `DiscardEvent` que o `Dialog` ainda não
   // tem.
   //
   // Divergência Figma x Design System: o TopAppBar variante Modal alinha o
   // título à esquerda; o Figma pede centralizado. O componente não pode ser
-  // alterado, então fica a divergência.
+  // alterado, então fica a diferente.
 
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -50,7 +44,6 @@ export default function CreateEvent() {
 
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<CreateEventFormData>(EMPTY_FORM);
-  const [footerHeight, setFooterHeight] = useState(0);
 
   const setTitle = (title: string) => setForm((current) => ({ ...current, title }));
   const setDescription = (description: string) =>
@@ -72,7 +65,7 @@ export default function CreateEvent() {
       if (step1Ref.current?.submit()) setStep(2);
       return;
     }
-    // Etapa 2: POST /events e a publicação são da task 094.
+   
   };
 
   return (
@@ -86,10 +79,7 @@ export default function CreateEvent() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: footerHeight + spacing[24] },
-          ]}
+          contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
           {step === 1 ? (
@@ -107,10 +97,7 @@ export default function CreateEvent() {
           )}
         </ScrollView>
 
-        <View
-          style={[styles.footer, { paddingBottom: spacing[16] + insets.bottom }]}
-          onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
-        >
+      <View style={[styles.footer, { paddingBottom: spacing[16] + insets.bottom }]}>
           <Button
             label="Continuar"
             variant="Primary"
@@ -134,12 +121,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing[16],
+     paddingBottom: spacing[24],
   },
   footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     borderTopWidth: 1,
     borderTopColor: colors.border.default,
     backgroundColor: colors.bg.base,
