@@ -100,6 +100,6 @@ const styles = StyleSheet.create({
 
 ## Onde isso já é usado
 
-[Header](../components/Header/index.tsx) e a tela [Home](../app/(tabs)/(screens)/Home/index.tsx)
+[TopAppBar](../components/TopAppBar/index.tsx) e [BottomNav](../components/BottomNav/index.tsx)
 já consomem `colors` — use-os como referência de import/estrutura ao adicionar `typography` e
 `layout` em telas novas ou existentes.
