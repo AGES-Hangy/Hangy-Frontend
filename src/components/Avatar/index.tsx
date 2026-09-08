@@ -46,12 +46,16 @@ export function Avatar({
   accessibilityLabel,
   onCameraPress,
   cameraAccessibilityLabel = 'Alterar foto',
+  diameter,
   style,
 }: AvatarProps) {
   // A união em `AvatarProps` já garante isto no TypeScript. A guarda mantém o
   // componente previsível caso props sem tipagem cheguem de JavaScript/JSON.
   const resolvedSize = variant === 'Store' && !STORE_SIZES.has(size) ? 'MD' : size;
-  const metrics = SIZES[resolvedSize];
+  const namedMetrics = SIZES[resolvedSize];
+  const metrics = diameter && diameter > 0
+    ? { diameter, icon: diameter / 2 }
+    : namedMetrics;
   const isDecorative = accessibilityLabel === undefined;
   const cameraHitSlop = Math.max(0, (MIN_TOUCH_SIZE - CAMERA_SIZE) / 2);
 

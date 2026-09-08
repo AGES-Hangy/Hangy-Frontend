@@ -28,6 +28,11 @@ type AvatarBaseProps = {
   onCameraPress?: () => void;
   /** Padrão: "Alterar foto". */
   cameraAccessibilityLabel?: string;
+  /**
+   * Diâmetro visual em pixels. Os tamanhos nomeados continuam sendo o padrão;
+   * esta opção existe para composições do Design System, como `AvatarGroup`.
+   */
+  diameter?: number;
   /** Escape hatch somente para posicionamento externo. */
   style?: StyleProp<ViewStyle>;
 };
