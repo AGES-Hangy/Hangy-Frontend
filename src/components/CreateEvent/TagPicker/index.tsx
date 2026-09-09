@@ -8,7 +8,6 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import type { TagNode } from '@/hooks/useTags';
 
-import { FieldLabel } from '@/components/CreateEvent/FieldLabel';
 import { MAX_TAGS } from '@/components/CreateEvent/types';
 
 
@@ -47,7 +46,13 @@ export function TagPicker({
 
   return (
     <View>
-      <FieldLabel label="Tags" required hint="Até 5" />
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>
+          Tags
+          <Text style={styles.asterisk}> *</Text>
+        </Text>
+        <Text style={styles.hint}>Até 5</Text>
+      </View>
 
       {showError && !error? (
         <View style={styles.errorLine}>
@@ -128,6 +133,24 @@ export function TagPicker({
 }
 
 const styles = StyleSheet.create({
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing[8],
+  },
+  label: {
+    ...typography.labelM,
+    color: colors.text.primary,
+  },
+  asterisk: {
+    ...typography.labelM,
+    color: colors.feedback.error,
+  },
+  hint: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+  },
   errorLine: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -201,6 +201,8 @@ function resolveIconColor(state: TextFieldState, side: 'leading' | 'trailing'): 
 export function TextField({
   type = 'Text',
   label,
+  required,
+  hint,
   value = '',
   onChangeText,
   placeholder,
@@ -359,7 +361,13 @@ export function TextField({
       </View>
 
       {config.multiline && maxLength !== undefined && (
-        <Text style={[typography.caption, styles.counter, { color: palette.neutral[400] }]}>
+        <Text
+          style={[
+            typography.caption,
+            styles.counter,
+            { color: state === 'Error' ? palette.error.default : palette.neutral[400] },
+          ]}
+        >
           {displayedValue.length}/{maxLength}
         </Text>
       )}
@@ -399,7 +407,15 @@ export function TextField({
     // zIndex do dropdown só vale entre irmãos, entao sem isto os campos
     // seguintes do formulario sao pintados por cima dela.
     <View style={[styles.container, isDropdownOpen && styles.containerAbove, style]}>
-      {label && <Text style={[typography.labelM, { color: visual.labelColor }]}>{label}</Text>}
+      {label && (
+        <View style={styles.labelRow}>
+          <Text style={[typography.labelM, { color: visual.labelColor }]}>
+            {label}
+            {required ? <Text style={styles.asterisk}> *</Text> : null}
+          </Text>
+          {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        </View>
+      )}
 
       {editable ? (
         fieldBody
@@ -495,6 +511,19 @@ const styles = StyleSheet.create({
     // o resto do formulário.
     position: 'relative',
   },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  asterisk: {
+    ...typography.labelM,
+    color: colors.feedback.error,
+  },
+  hint: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+  },
   containerAbove: {
     zIndex: 2,
     // O Android empilha por elevation, não por zIndex.
@@ -527,7 +556,7 @@ const styles = StyleSheet.create({
   counter: {
     position: 'absolute',
     right: spacing[16],
-    bottom: spacing[12],
+    bottom: spacing[16],
   },
   message: {
     // Reserva uma linha desde o inicio: sem isso o formulario inteiro pula

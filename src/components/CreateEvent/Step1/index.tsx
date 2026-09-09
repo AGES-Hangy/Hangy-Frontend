@@ -14,7 +14,6 @@ import { useImageUpload } from '@/hooks/useImageUpload';
 import { useTags } from '@/hooks/useTags';
 
 import { describeMissing, ErrorSummary, type MissingField } from '@/components/CreateEvent/ErrorSummary';
-import { FieldLabel } from '@/components/CreateEvent/FieldLabel';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import type { CreateEventFormData } from '@/components/CreateEvent/types';
 const FIELD_ORDER: MissingField[] = ['title', 'tags'];
@@ -102,9 +101,10 @@ export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
       {showSummary ? <ErrorSummary missing={missing} /> : null}
 
       <View style={styles.field} onLayout={rememberPosition('title')}>
-        <FieldLabel label="Nome do evento" required />
         <TextField
           type="Text"
+          label="Nome do evento"
+          required
           value={data.title}
           onChangeText={onChangeTitle}
           placeholder="Ex.: Clube do Livro"
@@ -116,9 +116,10 @@ export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
       </View>
 
       <View style={styles.field}>
-        <FieldLabel label="Descrição do evento" hint="Opcional" />
         <TextField
           type="TextArea"
+          label="Descrição do evento"
+          hint="Opcional"
           value={data.description}
           onChangeText={onChangeDescription}
           placeholder="Conte o que vai rolar, quem pode ir e o que levar."

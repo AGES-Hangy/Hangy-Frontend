@@ -34,6 +34,10 @@ export type TextFieldProps = {
   type?: TextFieldType;
   /** Label Label M acima do campo. */
   label?: string;
+  /** Acrescenta um asterisco vermelho ao final do label. */
+  required?: boolean;
+  /** Texto auxiliar alinhado à direita do label (ex.: "Opcional", "Até 5"). */
+  hint?: string;
   value?: string;
   onChangeText?: (text: string) => void;
   placeholder?: string;
