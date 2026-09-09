@@ -18,20 +18,16 @@ import { FieldLabel } from './FieldLabel';
 import { TagPicker } from './TagPicker';
 import type { CreateEventFormData } from './types';
 
-/** Ordem visual dos campos obrigatórios — define para qual pendência rolar. */
 const FIELD_ORDER: MissingField[] = ['title', 'tags'];
 
-/** Folga acima do campo ao rolar até a primeira pendência. */
 const SCROLL_MARGIN = spacing[16];
 
 export type Step1Handle = {
-  /** Valida a etapa. Retorna `true` quando pode avançar. */
   submit: () => boolean;
 };
 
 type Step1Props = {
   data: CreateEventFormData;
-  /** `ScrollView` da página, dono do scroll — a etapa só rola até a pendência. */
   scrollRef: React.RefObject<ScrollView | null>;
   onChangeTitle: (value: string) => void;
   onChangeDescription: (value: string) => void;
@@ -39,22 +35,17 @@ type Step1Props = {
   onToggleTag: (id: string) => void;
 };
 
-/**
- * Etapa 1 do formulário: nome, descrição, capa e tags. Não guarda estado de
- * formulário — só o de interação local (tentativa de avanço).
- */
+
 export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
   { data, scrollRef, onChangeTitle, onChangeDescription, onChangeCover, onToggleTag },
   ref,
 ) {
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
-  const { pickImage, upload, cancel, progress, error: coverError } = useImageUpload();
+  const {   pickImage, upload, cancel, isLoading: isUploadingCover, progress, error: coverError,
+} = useImageUpload();
 
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  // Posição vertical de cada campo obrigatório, para rolar até o primeiro
-  // pendente. Foco literal no input depende de o TextField encaminhar `ref`
-  // (hoje não encaminha) — enquanto isso, rolar + anunciar é o mais perto.
   const fieldPositions = useRef<Record<MissingField, number>>({ title: 0, tags: 0 });
 
   const isTitleEmpty = data.title.trim().length === 0;
@@ -65,7 +56,7 @@ export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
   if (hasNoTags) missing.push('tags');
 
   // Validação do nome no blur (erro ao sair do campo vazio) depende de o
-  // TextField repassar `onBlur` — hoje ele não expõe essa prop e o componente
+  // TextField repassar `onBlur` hoje ele não expõe essa prop e o componente
   // não pode ser editado. Por isso o erro do nome só aparece depois de tentar
   // avançar.
   const showTitleError = submitAttempted && isTitleEmpty;
@@ -77,13 +68,16 @@ export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
 
   useImperativeHandle(ref, () => ({
     submit: () => {
-      setSubmitAttempted(true);
+  setSubmitAttempted(true);
 
-      if (missing.length === 0) return true;
+  if (isUploadingCover) {
+    AccessibilityInfo.announceForAccessibility('Aguarde o envio da capa terminar.');
+    return false;
+  }
+
+  if (missing.length === 0) return true;
 
       const firstMissing = FIELD_ORDER.find((field) => missing.includes(field)) ?? missing[0];
-      // Adiado para depois do re-render: o resumo de erros aparece acima dos
-      // campos e empurra as posições medidas por `onLayout`.
       setTimeout(() => {
         const targetY = Math.max(fieldPositions.current[firstMissing] - SCROLL_MARGIN, 0);
         scrollRef.current?.scrollTo({ y: targetY, animated: true });
