@@ -5,15 +5,12 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
-/** Campos obrigatórios da etapa 1 que podem ficar pendentes. */
 export type MissingField = 'title' | 'tags';
 
 type ErrorSummaryProps = {
-  /** Pendências atuais, derivadas do estado do formulário. */
   missing: MissingField[];
 };
 
-/** Segunda linha do resumo — também é o texto anunciado ao leitor de tela. */
 export function describeMissing(missing: MissingField[]): string {
   const hasTitle = missing.includes('title');
   const hasTags = missing.includes('tags');
@@ -31,11 +28,6 @@ function describeCount(count: number): string {
   return count === 1 ? 'Falta 1 campo!' : `Faltam ${count} campos!`;
 }
 
-/**
- * Resumo de erros no topo do formulário, visível só quando houve tentativa de
- * avanço e ainda há pendência. É derivado do estado, não guardado: some
- * sozinho quando o usuário corrige os campos.
- */
 export function ErrorSummary({ missing }: ErrorSummaryProps) {
   return (
     <View style={styles.container} accessibilityRole="alert">

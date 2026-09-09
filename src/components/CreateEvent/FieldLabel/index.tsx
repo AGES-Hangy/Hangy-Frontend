@@ -6,21 +6,10 @@ import { typography } from '@/constants/typography';
 
 type FieldLabelProps = {
   label: string;
-  /** Asterisco em `colors.feedback.error`. */
   required?: boolean;
-  /** Texto à direita: "Opcional", "Até 5". */
   hint?: string;
 };
 
-/**
- * Linha de rótulo dos campos da etapa 1. O `TextField` desenha o rótulo como
- * um `Text` único, sem asterisco e sem slot à direita — então os frames não
- * são reproduzíveis com a prop `label`. Este componente desenha a linha e os
- * campos são passados sem `label`.
- *
- * O layout espelha o cabeçalho do `FileUpload` (row, space-between,
- * `marginBottom: spacing[8]`) para as quatro linhas ficarem alinhadas.
- */
 export function FieldLabel({ label, required, hint }: FieldLabelProps) {
   return (
     <View style={styles.row}>

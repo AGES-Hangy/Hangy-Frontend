@@ -3,7 +3,6 @@ import { StyleSheet, View } from 'react-native';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 
-/** Altura das barras do stepper no frame do Figma — não cai na escala de `spacing`. */
 const BAR_HEIGHT = 6;
 
 type StepperProps = {
@@ -11,11 +10,6 @@ type StepperProps = {
   total?: number;
 };
 
-/**
- * Barra de progresso do wizard de criação de evento: uma barra por etapa,
- * todas da mesma largura. Renderizada uma única vez no container, acima do
- * conteúdo, para a etapa 2 herdá-la sem duplicação.
- */
 export function Stepper({ current, total = 2 }: StepperProps) {
   const steps = Array.from({ length: total }, (_, index) => index + 1);
 
