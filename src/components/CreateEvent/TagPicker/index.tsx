@@ -8,8 +8,8 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import type { TagNode } from '@/hooks/useTags';
 
-import { FieldLabel } from './FieldLabel';
-import { MAX_TAGS } from './types';
+import { FieldLabel } from '@/components/CreateEvent/FieldLabel';
+import { MAX_TAGS } from '@/components/CreateEvent/types';
 
 
 const SKELETON_PILL_HEIGHT = 36;

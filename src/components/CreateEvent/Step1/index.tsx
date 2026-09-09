@@ -17,7 +17,6 @@ import { describeMissing, ErrorSummary, type MissingField } from '@/components/C
 import { FieldLabel } from '@/components/CreateEvent/FieldLabel';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import type { CreateEventFormData } from '@/components/CreateEvent/types';
-
 const FIELD_ORDER: MissingField[] = ['title', 'tags'];
 
 const SCROLL_MARGIN = spacing[16];
