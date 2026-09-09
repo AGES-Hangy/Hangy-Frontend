@@ -65,7 +65,9 @@ export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
   const rememberPosition = (field: MissingField) => (event: LayoutChangeEvent) => {
     fieldPositions.current[field] = event.nativeEvent.layout.y;
   };
-
+// Sem array de dependências de propósito: o handle é recriado a cada render
+// para que `submit` leia o `missing` do render atual. Com `[]`, o submit
+// congelaria o estado do primeiro render e validaria sempre o formulário vazio.
   useImperativeHandle(ref, () => ({
     submit: () => {
   setSubmitAttempted(true);
@@ -78,11 +80,11 @@ export const Step1 = forwardRef<Step1Handle, Step1Props>(function Step1(
   if (missing.length === 0) return true;
 
       const firstMissing = FIELD_ORDER.find((field) => missing.includes(field)) ?? missing[0];
-      setTimeout(() => {
+        requestAnimationFrame(() => {
         const targetY = Math.max(fieldPositions.current[firstMissing] - SCROLL_MARGIN, 0);
         scrollRef.current?.scrollTo({ y: targetY, animated: true });
         AccessibilityInfo.announceForAccessibility(describeMissing(missing));
-      }, 0);
+      });
 
       return false;
     },
