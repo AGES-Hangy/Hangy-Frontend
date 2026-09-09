@@ -67,6 +67,7 @@ export function Avatar({
           {
             width: metrics.diameter,
             height: metrics.diameter,
+            borderRadius: variant === 'Store' ? radius.md : radius.full,
             backgroundColor:
               variant === 'Store' ? palette.secondary[100] : palette.primary[200],
           },
