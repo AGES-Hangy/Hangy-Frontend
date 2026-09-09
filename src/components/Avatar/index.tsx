@@ -122,7 +122,6 @@ const styles = StyleSheet.create({
   circle: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.full,
     overflow: 'hidden',
   },
   camera: {
