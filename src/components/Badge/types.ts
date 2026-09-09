@@ -6,10 +6,7 @@ export type BadgeFamily = 'Privacy' | 'Status' | 'Notification';
 export type PrivacyBadgeValue =
   | 'PUBLIC'
   | 'PRIVATE'
-  | 'INVITE_ONLY'
-  | 'Público'
-  | 'Privado'
-  | 'Por convite';
+  | 'INVITE_ONLY';
 
 export type StatusBadgeValue =
   | 'CONFIRMED'
@@ -56,13 +53,6 @@ const privacyVariantMap: Record<PrivacyBadgeValue, BadgeVisualConfig> = {
     backgroundColor: palette.success.bg,
     borderColor: palette.success.default,
   },
-  'Público': {
-    label: 'Público',
-    icon: 'users',
-    textColor: palette.success.default,
-    backgroundColor: palette.success.bg,
-    borderColor: palette.success.default,
-  },
   PRIVATE: {
     label: 'Privado',
     icon: 'lock',
@@ -70,21 +60,7 @@ const privacyVariantMap: Record<PrivacyBadgeValue, BadgeVisualConfig> = {
     backgroundColor: palette.primary[100],
     borderColor: palette.primary[600],
   },
-  Privado: {
-    label: 'Privado',
-    icon: 'lock',
-    textColor: palette.primary[600],
-    backgroundColor: palette.primary[100],
-    borderColor: palette.primary[600],
-  },
   INVITE_ONLY: {
-    label: 'Por convite',
-    icon: 'ticket',
-    textColor: palette.secondary[700],
-    backgroundColor: palette.secondary[50],
-    borderColor: palette.secondary[700],
-  },
-  'Por convite': {
     label: 'Por convite',
     icon: 'ticket',
     textColor: palette.secondary[700],

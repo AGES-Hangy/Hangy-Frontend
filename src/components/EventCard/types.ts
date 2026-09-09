@@ -1,5 +1,5 @@
 export type EventVariant = 'Featured' | 'Compact' | 'MapPreview' | 'Mini' | 'Request';
-export type EventPrivacy = 'Publico' | 'Privado' | 'PorConvite';
+export type EventPrivacy = 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY';
 export type EventState = 'Default' | 'Confirmed' | 'Pending';
 
 export interface Event {
@@ -16,7 +16,6 @@ export interface Event {
 export interface EventCardProps {
   variant: EventVariant;
   event: Event;
-  privacy?: EventPrivacy;
   state?: EventState;
   isNew?: boolean;
   onPress: () => void;

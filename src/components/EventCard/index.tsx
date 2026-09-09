@@ -54,13 +54,12 @@ const placeholderImage = require('../../../assets/images/hangy.svg');
 export function EventCard({
 	variant,
 	event,
-	privacy = 'Publico',
 	state = 'Default',
 	isNew = false,
 	onPress,
 }: EventCardProps) {
-	const accessibleLabel = `${event.title}, ${formatEventDate(event.date)}, ${event.location}, ${getPrivacyBadgeLabel(privacy)}`;
-	const content = { ...event, privacy, date: formatEventDate(event.date) };
+	const accessibleLabel = `${event.title}, ${formatEventDate(event.date)}, ${event.location}, ${getPrivacyBadgeLabel(event.privacy)}`;
+	const content = { ...event, date: formatEventDate(event.date) };
 
 	return (
 		<Pressable

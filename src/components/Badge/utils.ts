@@ -1,12 +1,12 @@
 import type { PrivacyBadgeValue, StatusBadgeValue } from './types';
 
-export type BackendPrivacy = 'Publico' | 'Privado' | 'PorConvite';
+export type BackendPrivacy = 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY';
 export type BackendStatus = 'Confirmed' | 'Pending' | 'Rejected' | 'Full' | 'Default';
 
 const privacyMap: Record<BackendPrivacy, { label: string; value: PrivacyBadgeValue }> = {
-  Publico: { label: 'Público', value: 'Público' },
-  Privado: { label: 'Privado', value: 'Privado' },
-  PorConvite: { label: 'Por convite', value: 'Por convite' },
+  PUBLIC: { label: 'Público', value: 'PUBLIC' },
+  PRIVATE: { label: 'Privado', value: 'PRIVATE' },
+  INVITE_ONLY: { label: 'Por convite', value: 'INVITE_ONLY' },
 };
 
 const statusMap: Record<Exclude<BackendStatus, 'Default'>, StatusBadgeValue> = {
