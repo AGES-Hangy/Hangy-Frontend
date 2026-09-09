@@ -46,7 +46,7 @@ export function TagPicker({
     <View>
       <FieldLabel label="Tags" required hint="Até 5" />
 
-      {showError ? (
+      {showError && !error? (
         <View style={styles.errorLine}>
           <Icon name="circle-alert" size={16} color={colors.feedback.error} />
           <Text style={styles.errorLineText}>Escolha de 1 a 5 tags.</Text>
@@ -68,8 +68,10 @@ export function TagPicker({
         </View>
       ) : error ? (
         <View style={styles.loadError}>
-          <Icon name="circle-alert" size={16} color={colors.text.secondary} />
-          <Text style={styles.loadErrorText}>Não foi possível carregar as tags.</Text>
+          <View style={styles.loadErrorRow}>
+            <Icon name="circle-alert" size={16} color={colors.feedback.error} />
+            <Text style={styles.loadErrorText}>Não foi possível carregar as tags.</Text>
+          </View>
           <Button
             label="Tentar de novo"
             variant="Tertiary"
@@ -161,11 +163,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface.sunken,
   },
   loadError: {
-    alignItems: 'flex-start',
-    gap: spacing[8],
-  },
-  loadErrorText: {
-    ...typography.bodyM,
-    color: colors.text.secondary,
-  },
+  gap: spacing[8],
+  alignItems: 'flex-start',
+},
+loadErrorRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: spacing[8],
+},
+loadErrorText: {
+  ...typography.bodyM,
+  color: colors.feedback.error,
+},
 });
