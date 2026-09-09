@@ -7,6 +7,7 @@ import type { SectionHeaderProps } from './types';
 
 export function SectionHeader({
   title,
+  variant = 'title',
   action = false,
   actionLabel = 'Ver todos',
   onActionPress,
@@ -15,7 +16,7 @@ export function SectionHeader({
   return (
     <View style={styles.container}>
       <Text
-        style={styles.title}
+        style={variant === 'overline' ? styles.overline : styles.title}
         accessibilityRole="header"
         numberOfLines={1}
       >
@@ -51,6 +52,12 @@ const styles = StyleSheet.create({
     ...typography.h3,
     fontFamily: fontFamily.base,
     color: colors.text.primary,
+    flexShrink: 1,
+  },
+  overline: {
+    ...typography.overline,
+    fontFamily: fontFamily.base,
+    color: colors.text.tertiary,
     flexShrink: 1,
   },
   actionTouchArea: {

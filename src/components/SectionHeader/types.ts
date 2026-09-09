@@ -1,6 +1,8 @@
 export interface SectionHeaderProps {
-  /** Título da seção, renderizado como H3 */
+  /** Título da seção */
   title: string;
+  /** Estilo do título: "title" (H3, color/text/primary) ou "overline" (Overline, color/text/tertiary, CAIXA ALTA). Padrão: "title" */
+  variant?: 'title' | 'overline';
   /** Mostra ou esconde o link de ação (padrão: false) */
   action?: boolean;
   /** Texto do link de ação. Padrão: "Ver todos" */
