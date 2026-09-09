@@ -1,9 +1,3 @@
-/**
- * Divergência registrada de propósito: diferente do Figma, o chip da própria
- * categoria macro também é selecionável aqui. Ele conta no limite de 5 e não
- * seleciona os micros dele automaticamente. Quem for atualizar o Figma
- * depois precisa saber que a regra veio da task, não do design.
- */
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
@@ -17,7 +11,7 @@ import type { TagNode } from '@/hooks/useTags';
 import { FieldLabel } from './FieldLabel';
 import { MAX_TAGS } from './types';
 
-/** Altura das pílulas do esqueleto, conforme o frame de carregamento. */
+
 const SKELETON_PILL_HEIGHT = 36;
 const SKELETON_SECTIONS = [0, 1, 2];
 const SKELETON_PILLS = [0, 1, 2, 3];
@@ -27,12 +21,16 @@ type TagPickerProps = {
   isLoading: boolean;
   error: string | null;
   selectedIds: string[];
-  /** `true` quando a validação de "Continuar" apontou as tags como pendentes. */
   showError: boolean;
   onToggle: (id: string) => void;
   onRetry: () => void;
 };
-
+/**
+ * Divergência registrada de propósito: diferente do Figma, o chip da própria
+ * categoria macro também é selecionável aqui. Ele conta no limite de 5 e não
+ * seleciona os micros dele automaticamente. Quem for atualizar o Figma
+ * depois precisa saber que a regra veio da task, não do design.
+ */
 export function TagPicker({
   tags,
   isLoading,
@@ -42,6 +40,11 @@ export function TagPicker({
   onToggle,
   onRetry,
 }: TagPickerProps) {
+  const limitReached = selectedIds.length >= MAX_TAGS;
+
+  const chipLabel = (name: string, isSelected: boolean) =>
+    !isSelected && limitReached ? `${name}, limite de ${MAX_TAGS} tags atingido` : name;
+
   return (
     <View>
       <FieldLabel label="Tags" required hint="Até 5" />
@@ -82,7 +85,6 @@ export function TagPicker({
       ) : (
         tags.map((macro) => {
           const isMacroSelected = selectedIds.includes(macro.id);
-          const limitReached = selectedIds.length >= MAX_TAGS;
 
           return (
             <View key={macro.id} style={styles.section}>
@@ -97,7 +99,7 @@ export function TagPicker({
                   disabled={!isMacroSelected && limitReached}
                   onPress={() => onToggle(macro.id)}
                   onRemove={() => onToggle(macro.id)}
-                  accessibilityLabel={macro.name}
+                  accessibilityLabel={chipLabel(macro.name, isMacroSelected)}
                 />
                 {macro.children.map((micro) => {
                   const isSelected = selectedIds.includes(micro.id);
@@ -112,7 +114,7 @@ export function TagPicker({
                       disabled={!isSelected && limitReached}
                       onPress={() => onToggle(micro.id)}
                       onRemove={() => onToggle(micro.id)}
-                      accessibilityLabel={micro.name}
+                      accessibilityLabel={chipLabel(micro.name, isSelected)}
                     />
                   );
                 })}
