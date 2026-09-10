@@ -27,6 +27,14 @@ export const spacing = {
   64: 64,
 } as const;
 
+/**
+ * Opacidade ao pressionar, para qualquer componente tocável cujo estado
+ * Pressed o Figma ainda não especifica com um fill próprio (`Button`,
+ * `IconButton`, `PhotoTile`, ...). Quando o design definir esse estado
+ * componente a componente, troque o uso local pelo token correspondente.
+ */
+export const pressedOpacity = 0.85;
+
 // Sombras — offset/blur em px (CSS) convertidos para shadow* do React Native;
 // `elevation` cobre a sombra equivalente no Android.
 export const elevation = {

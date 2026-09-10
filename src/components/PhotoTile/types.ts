@@ -24,8 +24,13 @@ export type PhotoTileProps = {
    * `IconButton` de lixeira aparece no canto superior direito do tile.
    */
   onRemove?: () => void;
-  /** Rótulo do leitor de tela. Padrão: 'Foto do evento'. */
-  accessibilityLabel?: string;
+  /**
+   * Obrigatório: numa grade com várias fotos, um rótulo genérico repetido
+   * ("Foto do evento" doze vezes) não deixa o leitor de tela navegar entre
+   * elas. Descreva a foto ou a posição dela (ex.: `Foto 3 de 12`), e algo
+   * como `'Espaço para foto'` quando o tile está vazio (sem `uri`).
+   */
+  accessibilityLabel: string;
   /** Rótulo do botão de remover. Padrão: 'Remover foto'. */
   removeAccessibilityLabel?: string;
   /**

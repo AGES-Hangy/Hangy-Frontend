@@ -8,13 +8,15 @@ import type {
   IconButtonVariant,
 } from '@/components/IconButton/types';
 import { colors, palette } from '@/constants/colors';
-import { radius } from '@/constants/layout';
+import { pressedOpacity, radius } from '@/constants/layout';
 
 /**
  * Métricas por tamanho — seção IconButton da página Components do Figma:
- * círculo 52/44/36 com ícone 24/20/18.
+ * círculo 52/44/36 com ícone 24/20/18. Exportado porque outros componentes
+ * (ex.: o badge de câmera do `PhotoTile`) reaproveitam esses diâmetros em vez
+ * de duplicar o número mágico.
  */
-const SIZES = {
+export const ICON_BUTTON_SIZES = {
   LG: { diameter: 52, icon: 24 },
   MD: { diameter: 44, icon: 20 },
   SM: { diameter: 36, icon: 18 },
@@ -25,12 +27,6 @@ const SIZES = {
  * 44 — a diferença vai para `hitSlop`, sem aumentar o visual.
  */
 const MIN_TOUCH_SIZE = 44;
-
-/**
- * Opacidade aplicada ao pressionar. O Figma ainda não especifica o estado
- * Pressed do IconButton; quando especificar, troque por token em `VARIANTS`.
- */
-const PRESSED_OPACITY = 0.85;
 
 const BORDER_WIDTH = 1.5;
 
@@ -97,7 +93,7 @@ export function IconButton({
   onPress,
   style,
 }: IconButtonProps) {
-  const metrics = SIZES[size];
+  const metrics = ICON_BUTTON_SIZES[size];
   const visual = disabled ? VARIANTS[variant].disabled : VARIANTS[variant].default;
   const hitSlop = Math.max(0, (MIN_TOUCH_SIZE - metrics.diameter) / 2);
 
@@ -120,7 +116,7 @@ export function IconButton({
           borderWidth: BORDER_WIDTH,
           borderColor: visual.borderColor,
         },
-        pressed && !disabled && { opacity: PRESSED_OPACITY },
+        pressed && !disabled && { opacity: pressedOpacity },
         style,
       ]}
     >
