@@ -17,6 +17,10 @@ export type AvatarGroupProps = {
   avatars: readonly AvatarGroupItem[];
   /** Rótulo do grupo para tecnologias assistivas. */
   accessibilityLabel?: string;
+  /** Diâmetro de cada avatar. Padrão: 40 (a pilha MD do Figma). */
+  size?: number;
+  /** Quanto um avatar sobrepõe o anterior. Padrão: 14. */
+  overlap?: number;
   /** Ajustes de posicionamento externo. */
   style?: StyleProp<ViewStyle>;
 };

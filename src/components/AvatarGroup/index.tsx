@@ -7,8 +7,8 @@ import { radius } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 /** Figma: Avatar MD de 40px, overlap -14 e anel branco de 2px. */
-const AVATAR_SIZE = 40;
-const OVERLAP = 14;
+const DEFAULT_AVATAR_SIZE = 40;
+const DEFAULT_OVERLAP = 14;
 const RING_WIDTH = 2;
 const MAX_VISIBLE = 3;
 const MAX_AVATARS_BEFORE_COUNTER = MAX_VISIBLE - 1;
@@ -19,15 +19,24 @@ const MAX_AVATARS_BEFORE_COUNTER = MAX_VISIBLE - 1;
  *
  * ```tsx
  * <AvatarGroup avatars={[{ source: user.photo }, { variant: 'User' }]} />
+ * // Pilha pequena (24px), como no rodapé do EventCard:
+ * <AvatarGroup avatars={attendees} size={24} overlap={8} />
  * ```
  */
-export function AvatarGroup({ avatars, accessibilityLabel, style }: AvatarGroupProps) {
+export function AvatarGroup({
+  avatars,
+  accessibilityLabel,
+  size = DEFAULT_AVATAR_SIZE,
+  overlap = DEFAULT_OVERLAP,
+  style,
+}: AvatarGroupProps) {
   const hasOverflow = avatars.length > MAX_VISIBLE;
   const displayedAvatars = avatars.slice(0, hasOverflow ? MAX_AVATARS_BEFORE_COUNTER : MAX_VISIBLE);
+  const overlapStyle = { marginLeft: -overlap };
 
   return (
     <View
-      style={[styles.group, style]}
+      style={[styles.group, { height: size }, style]}
       accessibilityRole={accessibilityLabel ? 'image' : undefined}
       accessibilityLabel={accessibilityLabel}
     >
@@ -35,12 +44,12 @@ export function AvatarGroup({ avatars, accessibilityLabel, style }: AvatarGroupP
         return (
           <View
             key={index}
-            style={[styles.avatar, index > 0 && styles.overlapped]}
+            style={[styles.avatar, { width: size, height: size }, index > 0 && overlapStyle]}
           >
             <Avatar
               variant={avatar.variant}
               source={avatar.source}
-              diameter={AVATAR_SIZE}
+              diameter={size}
               accessibilityLabel={accessibilityLabel ? undefined : avatar.accessibilityLabel}
               style={StyleSheet.absoluteFill}
             />
@@ -49,8 +58,10 @@ export function AvatarGroup({ avatars, accessibilityLabel, style }: AvatarGroupP
       })}
 
       {hasOverflow && (
-        <View style={[styles.counter, displayedAvatars.length > 0 && styles.overlapped]}>
-          <Text style={styles.counterLabel}>+{avatars.length - MAX_AVATARS_BEFORE_COUNTER}</Text>
+        <View style={[styles.counter, { width: size, height: size }, displayedAvatars.length > 0 && overlapStyle]}>
+          <Text style={[styles.counterLabel, size < 32 && typography.badge]}>
+            +{avatars.length - MAX_AVATARS_BEFORE_COUNTER}
+          </Text>
         </View>
       )}
     </View>
@@ -61,11 +72,8 @@ const styles = StyleSheet.create({
   group: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: AVATAR_SIZE,
   },
   avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -74,12 +82,7 @@ const styles = StyleSheet.create({
     borderColor: colors.bg.base,
     backgroundColor: palette.primary[200],
   },
-  overlapped: {
-    marginLeft: -OVERLAP,
-  },
   counter: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.full,
