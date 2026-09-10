@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, palette } from '@/constants/colors';
+import { spacing } from '@/constants/layout';
 import { icons } from '@/components/Icon/icons';
 import type { EmptyStateContext, EmptyStateProps } from './types';
 
@@ -16,7 +17,7 @@ const EMPTY_STATE_CONFIG: Record<EmptyStateContext, EmptyStateConfig> = {
   Home: {
     icon: 'compass',
     title: 'Nada por aqui ainda',
-    text: 'Escolha mais interesses para o feed encher.',
+    text: 'Nenhum evento bate com as suas tags nesta semana. Adicione mais interesses ou amplie a distância',
     defaultCtaLabel: 'Editar interesses',
   },
   Map: {
@@ -47,7 +48,7 @@ const EMPTY_STATE_CONFIG: Record<EmptyStateContext, EmptyStateConfig> = {
   },
 };
 
-export function EmptyState({ context, cta = false, ctaLabel, onCtaPress }: EmptyStateProps) {
+export function EmptyState({ context, cta = false, ctaLabel, onCtaPress, ctaAtBottom = false }: EmptyStateProps) {
   const config = EMPTY_STATE_CONFIG[context];
   const Icon = icons[config.icon];
   const text = config.textByCta ? config.textByCta[cta ? 'true' : 'false'] : config.text;
@@ -63,21 +64,23 @@ export function EmptyState({ context, cta = false, ctaLabel, onCtaPress }: Empty
   }
 
   return (
-    <View style={styles.container} accessible={false}>
-      <View style={styles.illustration} accessibilityElementsHidden importantForAccessibility="no">
-        <Icon size={40} color={colors.action.primary} strokeWidth={2} />
+    <View style={[styles.container, ctaAtBottom && styles.containerCtaAtBottom]} accessible={false}>
+      <View style={ctaAtBottom ? styles.centeredContent : undefined}>
+        <View style={styles.illustration} accessibilityElementsHidden importantForAccessibility="no">
+          <Icon size={40} color={colors.action.primary} strokeWidth={2} />
+        </View>
+
+        <Text style={styles.title} accessibilityRole="header">
+          {config.title}
+        </Text>
+
+        <Text style={styles.text}>{text}</Text>
       </View>
-
-      <Text style={styles.title} accessibilityRole="header">
-        {config.title}
-      </Text>
-
-      <Text style={styles.text}>{text}</Text>
 
       {cta && resolvedCtaLabel ? (
         <Pressable
           onPress={onCtaPress}
-          style={({ pressed }) => [styles.ctaButton, pressed && styles.ctaButtonPressed]}
+          style={({ pressed }) => [styles.ctaButton, ctaAtBottom && styles.ctaAtBottom, pressed && styles.ctaButtonPressed]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={resolvedCtaLabel}
@@ -95,6 +98,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 32,
+    gap: 12,
+  },
+  containerCtaAtBottom: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingBottom: spacing[16],
+  },
+  centeredContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 12,
   },
 
@@ -130,6 +144,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 24,
     backgroundColor: colors.action.primary,
+  },
+  ctaAtBottom: {
+    marginTop: spacing[16],
   },
 
   ctaButtonPressed: {
