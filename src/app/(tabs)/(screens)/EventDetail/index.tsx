@@ -10,9 +10,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { useToast } from '@/components/Toast';
-// Placeholders: `Badge` e `PhotoTile` ainda não estão no develop. Quando as
-// tasks 161 e 162 entrarem, troque só esta linha por dois imports diretos.
-import { Badge, PhotoTile } from '@/components/_placeholders';
+import { Badge } from '@/components/Badge';
+// Placeholder: `PhotoTile` ainda não está no develop (task 162, PR #26).
+// Quando entrar, troque só esta linha por um import direto.
+import { PhotoTile } from '@/components/_placeholders';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
@@ -200,7 +201,7 @@ export default function EventDetail() {
               </View>
 
               <View style={styles.infoRow}>
-                <Badge privacy={event.privacy} />
+                <Badge family="Privacy" value={event.privacy} />
               </View>
             </View>
           </View>

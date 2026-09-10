@@ -31,11 +31,6 @@ export function formatDateTime(iso: string): string {
   return data ? `${data} · ${formatTime(iso)}` : '';
 }
 
-/** `30/10/2026 · 16:00 · Parque Esportivo` — o subtítulo do `EventCard`. */
-export function formatEventSummary(iso: string, locationName: string): string {
-  return [formatDateTime(iso), locationName].filter(Boolean).join(' · ');
-}
-
 const MINUTO = 60 * 1000;
 const HORA = 60 * MINUTO;
 const DIA = 24 * HORA;

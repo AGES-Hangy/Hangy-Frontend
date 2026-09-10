@@ -1,22 +1,19 @@
 import { useCallback, useState } from 'react';
-import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
+import { IconButton } from '@/components/IconButton';
 import { useToast } from '@/components/Toast';
-// Placeholders: `EventCard`, `NotificationItem` e `SectionHeader` ainda não
-// estão no develop. Quando as tasks 144, 157 e 145 entrarem, troque só esta
-// linha pelos imports diretos.
-import {
-  EventCard,
-  NotificationItem,
-  ParticipantRow,
-  SectionHeader,
-} from '@/components/_placeholders';
+import { EventCard } from '@/components/EventCard';
+import { SectionHeader } from '@/components/SectionHeader';
+// Placeholder: `NotificationItem` ainda não está no develop (task 157, sprint futura).
+import { NotificationItem } from '@/components/_placeholders';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
@@ -25,7 +22,7 @@ import { useEvent } from '@/hooks/useEvent';
 import { useEventParticipants } from '@/hooks/useEventParticipants';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { EventParticipant } from '@/types/event';
-import { formatDateTime, formatEventSummary, formatRelativeTime } from '@/utils/datetime';
+import { formatDateTime, formatRelativeTime } from '@/utils/datetime';
 
 /** Confirmação aberta no momento — no máximo uma por vez. */
 type Confirmation =
@@ -128,10 +125,15 @@ export default function ManageEvent() {
         {event && (
           <View style={styles.section}>
             <EventCard
-              title={event.title}
-              subtitle={formatEventSummary(event.event_date, event.location_name)}
-              coverUri={event.cover_photo_url}
-              privacy={event.privacy}
+              variant="Compact"
+              event={{
+                id: event.event_id,
+                title: event.title,
+                date: event.event_date,
+                location: event.location_name,
+                imageUrl: event.cover_photo_url ?? '',
+                privacy: event.privacy,
+              }}
               onPress={() => router.push(`/EventDetail?id=${event.event_id}`)}
             />
           </View>
@@ -156,7 +158,10 @@ export default function ManageEvent() {
         {showPending && (
           <View style={styles.group}>
             <View style={styles.section}>
-              <SectionHeader title={`SOLICITAÇÕES PENDENTES (${participants.pendingCount})`} />
+              <SectionHeader
+                title={`SOLICITAÇÕES PENDENTES (${participants.pendingCount})`}
+                variant="overline"
+              />
             </View>
 
             <View style={[styles.section, styles.list]}>
@@ -180,7 +185,10 @@ export default function ManageEvent() {
 
         <View style={styles.group}>
           <View style={styles.section}>
-            <SectionHeader title={`PARTICIPANTES (${participants.confirmedCount})`} />
+            <SectionHeader
+              title={`PARTICIPANTES (${participants.confirmedCount})`}
+              variant="overline"
+            />
           </View>
 
           {participants.confirmedCount === 0 ? (
@@ -270,6 +278,55 @@ function describeConfirmation(confirmation: Confirmation, confirmedCount: number
   };
 }
 
+/** Linha de participante confirmado — não é um componente do Design System, só esta lista. */
+type ParticipantRowProps = {
+  name: string;
+  avatarUri?: string | null;
+  /** Sem isto a linha não mostra o botão de remover. */
+  onRemove?: () => void;
+  onPress?: () => void;
+  removeDisabled?: boolean;
+};
+
+function ParticipantRow({
+  name,
+  avatarUri,
+  onRemove,
+  onPress,
+  removeDisabled = false,
+}: ParticipantRowProps) {
+  return (
+    <View style={styles.participantRow}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={onPress ? `Abrir perfil de ${name}` : undefined}
+        style={styles.participantMain}
+      >
+        <Avatar
+          size="XS"
+          source={avatarUri ? { uri: avatarUri } : undefined}
+          accessibilityLabel={`Foto de ${name}`}
+        />
+        <Text style={styles.participantName} numberOfLines={1}>
+          {name}
+        </Text>
+      </Pressable>
+
+      {onRemove && (
+        <IconButton
+          icon="x"
+          size="SM"
+          variant="Ghost"
+          onPress={onRemove}
+          disabled={removeDisabled}
+          accessibilityLabel={`Remover ${name} do evento`}
+        />
+      )}
+    </View>
+  );
+}
+
 /** Esqueleto de participantes — nunca tela em branco enquanto o GET voa. */
 function ManageEventSkeleton() {
   return (
@@ -343,6 +400,24 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+
+  participantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+    paddingVertical: spacing[8],
+  },
+  participantMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+  },
+  participantName: {
+    flex: 1,
+    ...typography.labelM,
+    color: colors.text.primary,
   },
 
   skeletonBlock: {
