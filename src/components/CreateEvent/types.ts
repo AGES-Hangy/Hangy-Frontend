@@ -9,3 +9,6 @@ export type CreateEventFormData = {
   /** Ids de tags (macro e micro), no máximo 5. */
   tagIds: string[];
 };
+
+/** Campo obrigatório pendente na etapa 1. */
+export type MissingField = 'title' | 'tags';

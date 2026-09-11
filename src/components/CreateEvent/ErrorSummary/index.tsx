@@ -5,7 +5,7 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
-export type MissingField = 'title' | 'tags';
+import type { MissingField } from '@/components/CreateEvent/types';
 
 type ErrorSummaryProps = {
   missing: MissingField[];

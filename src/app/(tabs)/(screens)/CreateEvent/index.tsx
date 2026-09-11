@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,10 +13,11 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 
-import { Step1, type Step1Handle } from '@/components/CreateEvent/Step1';
+import { Step1 } from '@/components/CreateEvent/Step1';
 import { Step2 } from '@/components/CreateEvent/Step2';
 import { Stepper } from '@/components/CreateEvent/Stepper';
 import { MAX_TAGS, type CreateEventFormData } from '@/components/CreateEvent/types';
+import { validateStep1 } from '@/components/CreateEvent/validation';
 
 const EMPTY_FORM: CreateEventFormData = {
   title: '',
@@ -40,10 +41,15 @@ export default function CreateEvent() {
 
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
-  const step1Ref = useRef<Step1Handle>(null);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<CreateEventFormData>(EMPTY_FORM);
+  const [submitCount, setSubmitCount] = useState(0);
+  // O hook de upload vive no Step1; aqui só interessa se ainda está em curso,
+  // para o "Continuar" não avançar e cancelar o envio da capa no meio.
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+
+  const missing = useMemo(() => validateStep1(form), [form.title, form.tagIds]);
 
   const setTitle = (title: string) => setForm((current) => ({ ...current, title }));
   const setDescription = (description: string) =>
@@ -61,11 +67,15 @@ export default function CreateEvent() {
     });
 
   const handleContinue = () => {
-    if (step === 1) {
-      if (step1Ref.current?.submit()) setStep(2);
-      return;
-    }
-   
+    if (step !== 1) return;
+
+    // Contador, não booleano: cada toque precisa valer como uma tentativa nova
+    // para o Step1 rolar de novo até o campo pendente, mesmo sem nada ter
+    // mudado no formulário desde o toque anterior.
+    setSubmitCount((count) => count + 1);
+
+    if (isUploadingCover) return;
+    if (missing.length === 0) setStep(2);
   };
 
   return (
@@ -84,13 +94,15 @@ export default function CreateEvent() {
         >
           {step === 1 ? (
             <Step1
-              ref={step1Ref}
               data={form}
               scrollRef={scrollRef}
+              missing={missing}
+              submitCount={submitCount}
               onChangeTitle={setTitle}
               onChangeDescription={setDescription}
               onChangeCover={setCoverUri}
               onToggleTag={toggleTag}
+              onUploadingChange={setIsUploadingCover}
             />
           ) : (
             <Step2 />
