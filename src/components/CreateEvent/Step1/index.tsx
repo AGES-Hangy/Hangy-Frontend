@@ -1,11 +1,5 @@
 import { useEffect, useRef } from 'react';
-import {
-  AccessibilityInfo,
-  type LayoutChangeEvent,
-  type ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { AccessibilityInfo, type ScrollView, StyleSheet, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
@@ -16,7 +10,6 @@ import { useTags } from '@/hooks/useTags';
 import { describeMissing, ErrorSummary } from '@/components/CreateEvent/ErrorSummary';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import type { CreateEventFormData, MissingField } from '@/components/CreateEvent/types';
-const FIELD_ORDER: MissingField[] = ['title', 'tags'];
 
 const SCROLL_MARGIN = spacing[16];
 
@@ -64,7 +57,12 @@ export function Step1({
     onUploadingChange(isUploadingCover);
   }, [isUploadingCover]);
 
-  const fieldPositions = useRef<Record<MissingField, number>>({ title: 0, tags: 0 });
+  const titleRef = useRef<View>(null);
+  const tagsRef = useRef<View>(null);
+  const fieldRefs: Record<MissingField, React.RefObject<View | null>> = {
+    title: titleRef,
+    tags: tagsRef,
+  };
 
   const submitAttempted = submitCount > 0;
   const isTitleMissing = missing.includes('title');
@@ -77,9 +75,6 @@ export function Step1({
   const showTitleError = submitAttempted && isTitleMissing;
   const showSummary = submitAttempted && missing.length > 0;
 
-  const rememberPosition = (field: MissingField) => (event: LayoutChangeEvent) => {
-    fieldPositions.current[field] = event.nativeEvent.layout.y;
-  };
   // Só `submitCount` nas dependências: o efeito reage ao toque em "Continuar",
   // não às mudanças do formulário, e lê o `missing` do render em que o contador
   // subiu.
@@ -93,11 +88,24 @@ export function Step1({
 
     if (missing.length === 0) return;
 
-    const firstMissing = FIELD_ORDER.find((field) => missing.includes(field)) ?? missing[0];
-    requestAnimationFrame(() => {
-      const targetY = Math.max(fieldPositions.current[firstMissing] - SCROLL_MARGIN, 0);
-      scrollRef.current?.scrollTo({ y: targetY, animated: true });
-      AccessibilityInfo.announceForAccessibility(describeMissing(missing));
+    AccessibilityInfo.announceForAccessibility(describeMissing(missing));
+
+    // `validateStep1` devolve as pendências na ordem da tela, então a primeira
+    // da lista é a que precisa entrar em foco.
+    const firstMissing = missing[0];
+    const node = fieldRefs[firstMissing].current;
+    const scroll = scrollRef.current;
+    // Content container, não o nó externo: na web o `measureLayout` do RNW
+    // devolve `y` relativo à viewport, já descontado o scroll atual, e o alvo
+    // sairia errado com a página rolada.
+    const contentNode = scroll?.getInnerViewNode();
+    if (!node || !scroll || !contentNode) return;
+
+    // Medido agora, e não no `onLayout`: o ErrorSummary entra acima dos campos
+    // neste mesmo render, então qualquer posição guardada antes do toque já
+    // nasce defasada.
+    node.measureLayout(contentNode, (_x, y) => {
+      scroll.scrollTo({ y: Math.max(y - SCROLL_MARGIN, 0), animated: true });
     });
   }, [submitCount]);
 
@@ -113,7 +121,7 @@ export function Step1({
     <View>
       {showSummary ? <ErrorSummary missing={missing} /> : null}
 
-      <View style={styles.field} onLayout={rememberPosition('title')}>
+      <View style={styles.field} ref={titleRef}>
         <TextField
           type="Text"
           label="Nome do evento"
@@ -154,7 +162,7 @@ export function Step1({
         />
       </View>
 
-      <View style={styles.field} onLayout={rememberPosition('tags')}>
+      <View style={styles.field} ref={tagsRef}>
         <TagPicker
           tags={tags}
           isLoading={tagsLoading}
