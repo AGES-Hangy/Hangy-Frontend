@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, type ScrollView, StyleSheet, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
@@ -68,11 +68,12 @@ export function Step1({
   const isTitleMissing = missing.includes('title');
   const areTagsMissing = missing.includes('tags');
 
-  // Validação do nome no blur (erro ao sair do campo vazio) depende de o
-  // TextField repassar `onBlur` hoje ele não expõe essa prop e o componente
-  // não pode ser editado. Por isso o erro do nome só aparece depois de tentar
-  // avançar.
-  const showTitleError = submitAttempted && isTitleMissing;
+  // O erro do nome aparece ao sair do campo vazio e também ao tocar
+  // "Continuar" — daí o `titleBlurred` somado ao `submitAttempted`. O foco
+  // zera o `titleBlurred`: a validação espera a pessoa terminar de editar, em
+  // vez de acusar erro no meio de um apagar-e-reescrever.
+  const [titleBlurred, setTitleBlurred] = useState(false);
+  const showTitleError = (submitAttempted || titleBlurred) && isTitleMissing;
   const showSummary = submitAttempted && missing.length > 0;
 
   // Só `submitCount` nas dependências: o efeito reage ao toque em "Continuar",
@@ -128,6 +129,8 @@ export function Step1({
           required
           value={data.title}
           onChangeText={onChangeTitle}
+          onFocus={() => setTitleBlurred(false)}
+          onBlur={() => setTitleBlurred(true)}
           placeholder="Ex.: Clube do Livro"
           maxLength={50}
           error={showTitleError ? 'Dê um nome ao evento.' : undefined}

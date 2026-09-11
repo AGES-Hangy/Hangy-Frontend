@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { BlurEvent, FocusEvent, StyleProp, ViewStyle } from 'react-native';
 
 /** Eixo `Type` do Figma — muda comportamento e affordance do campo. */
 export type TextFieldType =
@@ -40,6 +40,13 @@ export type TextFieldProps = {
   hint?: string;
   value?: string;
   onChangeText?: (text: string) => void;
+  /**
+   * Foco e blur do campo. Rodam depois dos handlers internos, que controlam o
+   * estado visual `Focused` e a abertura do dropdown — passar estes não
+   * substitui aquele comportamento.
+   */
+  onFocus?: (event: FocusEvent) => void;
+  onBlur?: (event: BlurEvent) => void;
   placeholder?: string;
   /** Texto de apoio abaixo do campo (Body S). */
   helper?: string;

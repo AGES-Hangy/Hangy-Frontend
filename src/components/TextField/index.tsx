@@ -205,6 +205,8 @@ export function TextField({
   hint,
   value = '',
   onChangeText,
+  onFocus,
+  onBlur,
   placeholder,
   helper,
   error,
@@ -353,8 +355,14 @@ export function TextField({
           secureTextEntry={config.secure && isSecureHidden}
           keyboardType={config.keyboardType}
           maxLength={maxLength}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
           accessibilityLabel={accessibilityLabel ?? label}
           accessibilityState={{ disabled }}
         />
