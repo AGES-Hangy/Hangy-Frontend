@@ -4,7 +4,7 @@ import { Icon, icons } from '@/components/Icon';
 import type { IconName } from '@/components/Icon';
 import type { ButtonProps, ButtonSize, ButtonVariant } from '@/components/Button/types';
 import { colors, palette } from '@/constants/colors';
-import { radius, spacing } from '@/constants/layout';
+import { pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 /**
@@ -22,14 +22,6 @@ const SIZES = {
 
 /** Área de toque mínima exigida pelo guia de acessibilidade. */
 const MIN_TOUCH_SIZE = 44;
-
-/**
- * Opacidade aplicada ao pressionar as variantes que o Figma ainda não
- * especifica no estado Pressed (Accent, Tertiary e Danger). Primary e
- * Secondary usam os fills reais do Figma. Quando design definir esses
- * estados, troque a opacidade pelos tokens correspondentes.
- */
-const PRESSED_OPACITY = 0.85;
 
 type Visual = {
   backgroundColor?: string;
@@ -154,7 +146,7 @@ export function Button({
             borderWidth: BORDER_WIDTH,
             borderColor: visual.borderColor,
           },
-          pressed && !disabled && !HAS_PRESSED_FILL.has(variant) && { opacity: PRESSED_OPACITY },
+          pressed && !disabled && !HAS_PRESSED_FILL.has(variant) && { opacity: pressedOpacity },
           style,
         ];
       }}
