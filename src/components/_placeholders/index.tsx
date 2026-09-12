@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { Button } from '@/components/Button';
@@ -17,25 +17,23 @@ import { typography } from '@/constants/typography';
  *
  * | Componente         | Task | Situação                                  |
  * | ------------------ | ---- | ----------------------------------------- |
- * | `PhotoTile`        | 162  | em revisão (PR #26)                       |
  * | `NotificationItem` | 157  | ainda não começou — sprint futura         |
  *
- * `Avatar`, `Badge`, `EventCard` e `SectionHeader` já foram mergeados — as
- * telas importam esses direto de `@/components/<Nome>`.
+ * `Avatar`, `Badge`, `EventCard`, `PhotoTile` e `SectionHeader` já foram
+ * mergeados — as telas importam esses direto de `@/components/<Nome>`.
  *
  * ## Como trocar pelo componente real
  *
- * As telas importam tudo daqui em uma linha só:
+ * As telas importam daqui:
  *
  * ```tsx
- * import { NotificationItem, PhotoTile } from '@/components/_placeholders';
+ * import { NotificationItem } from '@/components/_placeholders';
  * ```
  *
- * Quando um componente real chegar, troque só o import daquele nome:
+ * Quando o componente real chegar, troque o import:
  *
  * ```tsx
- * import { PhotoTile } from '@/components/PhotoTile';
- * import { NotificationItem } from '@/components/_placeholders';
+ * import { NotificationItem } from '@/components/NotificationItem';
  * ```
  *
  * e apague o bloco correspondente deste arquivo. Quando o último sair, a pasta
@@ -46,37 +44,6 @@ import { typography } from '@/constants/typography';
  * cobre o que o frame pede, não o componente inteiro — a versão real é que
  * entrega todos os eixos.
  */
-
-/* -------------------------------------------------------------------------- */
-/* PhotoTile — task 162 (PR #26)                                              */
-/* -------------------------------------------------------------------------- */
-
-export type PhotoTileProps = {
-  state?: 'Default' | 'Expanded' | 'Cover';
-  uri?: string | null;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-};
-
-/** Só a variante `Cover` (largura fluida × 237), que é a que estas telas usam. */
-const COVER_HEIGHT = 237;
-
-export function PhotoTile({ uri, onPress, accessibilityLabel = 'Capa do evento' }: PhotoTileProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole={onPress ? 'button' : 'image'}
-      accessibilityLabel={accessibilityLabel}
-      style={styles.cover}
-    >
-      {uri ? (
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
-      ) : (
-        <Icon name="image" size={40} color={palette.primary[400]} absoluteStrokeWidth />
-      )}
-    </Pressable>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 /* NotificationItem — task 157 (sprint futura)                                */
@@ -158,15 +125,6 @@ export function NotificationItem({
 }
 
 const styles = StyleSheet.create({
-  cover: {
-    width: '100%',
-    height: COVER_HEIGHT,
-    backgroundColor: palette.primary[200],
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-
   notification: {
     flexDirection: 'row',
     alignItems: 'center',

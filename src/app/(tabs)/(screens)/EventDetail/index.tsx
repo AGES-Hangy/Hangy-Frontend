@@ -11,9 +11,7 @@ import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/Badge';
-// Placeholder: `PhotoTile` ainda não está no develop (task 162, PR #26).
-// Quando entrar, troque só esta linha por um import direto.
-import { PhotoTile } from '@/components/_placeholders';
+import { PhotoTile } from '@/components/PhotoTile';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
@@ -119,7 +117,11 @@ export default function EventDetail() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <PhotoTile state="Cover" uri={event.cover_photo_url} />
+          <PhotoTile
+            state="Cover"
+            uri={event.cover_photo_url ?? undefined}
+            accessibilityLabel="Capa do evento"
+          />
 
           {/* Degradê em SVG: o app não tem expo-linear-gradient, e
               react-native-svg já é dependência (o FileUpload usa). */}
