@@ -88,3 +88,14 @@ export interface ParticipantsResponse {
    */
   can_manage: boolean;
 }
+
+export interface EventShare {
+  /** Deep link `hangy://…` — abre o app direto se estiver instalado. */
+  url: string;
+  /** Fallback web — redirecionador simples enquanto não existe página própria. */
+  web_url: string;
+  title: string;
+  event_date: string;
+  location_name: string;
+  cover_photo_url: string | null;
+}

@@ -16,6 +16,7 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEvent } from '@/hooks/useEvent';
+import { useEventShare } from '@/hooks/useEventShare';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
 import { formatDateTime } from '@/utils/datetime';
@@ -55,18 +56,30 @@ export default function EventDetail() {
   const insets = useSafeAreaInsets();
   const { addToast } = useToast();
   const { event, isLoading, error, reload } = useEvent(id);
+  const { getShare, isLoading: isSharing } = useEventShare(id);
 
   // Sem barra superior: os botões desta tela ficam por cima da capa, e uma
   // TopAppBar em cima disso viraria uma segunda linha de ações.
   useTopAppBar(null);
 
   const share = useCallback(async () => {
-    if (!event) return;
-    await Share.share({
-      title: event.title,
-      message: `${event.title} — ${formatDateTime(event.event_date)} · ${event.location_name}`,
-    });
-  }, [event]);
+    const shareData = await getShare();
+    if (!shareData) return;
+
+    try {
+      // `web_url` funciona pra qualquer destinatário (com ou sem o app
+      // instalado); o deep link `hangy://` fica só na resposta, sem uso aqui.
+      await Share.share({
+        title: shareData.title,
+        message: `${shareData.title} — ${formatDateTime(shareData.event_date)} · ${shareData.location_name}\n${shareData.web_url}`,
+        url: shareData.web_url,
+      });
+    } catch {
+      // O link já foi buscado com sucesso — só o share sheet nativo falhou
+      // (ex.: `Share` não existe na Web fora de contexto seguro/mobile).
+      addToast({ type: 'error', message: 'Não foi possível abrir o compartilhamento' });
+    }
+  }, [getShare, addToast]);
 
   if (isLoading) return <EventDetailSkeleton />;
 
@@ -277,6 +290,7 @@ export default function EventDetail() {
             label={action.label}
             variant={action.variant}
             icon={action.icon}
+            isLoading={action.icon === 'share' && isSharing}
             onPress={onMainAction}
             style={styles.ctaButton}
           />

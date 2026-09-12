@@ -3,8 +3,8 @@ export const API_BASE_URL = 'http://localhost:8000';
 /**
  * Liga as respostas de mentira de `src/mocks/eventApi.ts` no lugar da rede.
  *
- * Existe porque os endpoints de evento (tasks de backend 103, 097, 209 e 099)
- * ainda não foram mergeados: com isto ligado dá para percorrer as telas de
+ * Existe porque os endpoints de evento (tasks de backend 103, 097, 209, 099 e
+ * 101) ainda não foram mergeados: com isto ligado dá para percorrer as telas de
  * ponta a ponta, e quando o backend subir é só parar de usar a flag — nenhum
  * hook ou tela muda, o desvio acontece dentro de `apiFetch`.
  *
@@ -24,6 +24,7 @@ export const endpoints = {
   event: (eventId: string) => `/events/${eventId}`,
   eventParticipants: (eventId: string) => `/events/${eventId}/participants`,
   eventCancel: (eventId: string) => `/events/${eventId}/cancel`,
+  eventShare: (eventId: string) => `/events/${eventId}/share`,
   eventParticipant: (eventId: string, participantId: string) =>
     `/events/${eventId}/participants/${participantId}`,
   myCreatedEvents: () => '/users/me/events/created',

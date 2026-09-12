@@ -1,12 +1,12 @@
-import type { EventDetail, EventParticipant, ParticipantsResponse } from '@/types/event';
+import type { EventDetail, EventParticipant, EventShare, ParticipantsResponse } from '@/types/event';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
  * em `@/constants/api`.
  *
- * Existe porque as tasks de backend 103, 097, 209 e 099 ainda não subiram.
- * O formato é cópia do contrato acordado, então quando o backend chegar é só
- * desligar a flag — nada nas telas nem nos hooks muda.
+ * Existe porque as tasks de backend 103, 097, 209, 099 e 101 ainda não
+ * subiram. O formato é cópia do contrato acordado, então quando o backend
+ * chegar é só desligar a flag — nada nas telas nem nos hooks muda.
  *
  * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
  * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
@@ -21,7 +21,7 @@ import type { EventDetail, EventParticipant, ParticipantsResponse } from '@/type
  * | qualquer    | Caminho feliz, na visão do organizador                   |
  * | `guest`     | Visitante comum num evento público (ação `CONFIRM`)      |
  * | `private`   | Evento privado sem participação: sem lista de confirmados|
- * | `cancelled` | `410 Event was cancelled`                                |
+ * | `cancelled` | `410 Event was cancelled` (`/share`: `404`, ver task 101) |
  * | `missing`   | `404 Event not found`                                    |
  * | `boom`      | `500` no detalhe                                         |
  * | `offline`   | Falha de rede                                            |
@@ -189,6 +189,32 @@ function erroDoCenario(eventId: string) {
 }
 
 /**
+ * `/share` não distingue cancelado de inexistente — a task 101 devolve 404
+ * pros dois ("evento inexistente, cancelado ou invisível para quem pede"),
+ * diferente do 410 que `/events/{id}` usa só para o cancelado.
+ */
+function erroCompartilhar(eventId: string) {
+  if (eventId === 'missing' || eventId === 'cancelled') {
+    throw new MockApiError(404, 'Event not found');
+  }
+  if (eventId === 'boom') throw new MockApiError(500, 'Internal server error');
+  if (eventId === 'offline') throw new MockNetworkError();
+}
+
+function compartilhar(eventId: string): EventShare {
+  const evento = detalhe(eventId);
+
+  return {
+    url: `hangy://event/${eventId}`,
+    web_url: `https://hangy.app/e/${eventId}`,
+    title: evento.title,
+    event_date: evento.event_date,
+    location_name: evento.location_name,
+    cover_photo_url: evento.cover_photo_url,
+  };
+}
+
+/**
  * Encaminha uma rota para a resposta de mentira correspondente. A assinatura
  * espelha a de `apiFetch` de propósito: quem chama não sabe qual dos dois
  * respondeu.
@@ -208,6 +234,11 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   if (partes[0] === 'events' && partes[2] === 'participants' && partes.length === 3) {
     erroDoCenario(eventId);
     return participantes(eventId) as T;
+  }
+
+  if (partes[0] === 'events' && partes[2] === 'share' && partes.length === 3 && method === 'GET') {
+    erroCompartilhar(eventId);
+    return compartilhar(eventId) as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'cancel' && method === 'POST') {
