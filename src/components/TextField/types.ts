@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { BlurEvent, FocusEvent, StyleProp, ViewStyle } from 'react-native';
 
 /** Eixo `Type` do Figma — muda comportamento e affordance do campo. */
 export type TextFieldType =
@@ -34,8 +34,19 @@ export type TextFieldProps = {
   type?: TextFieldType;
   /** Label Label M acima do campo. */
   label?: string;
+  /** Acrescenta um asterisco vermelho ao final do label. */
+  required?: boolean;
+  /** Texto auxiliar alinhado à direita do label (ex.: "Opcional", "Até 5"). */
+  hint?: string;
   value?: string;
   onChangeText?: (text: string) => void;
+  /**
+   * Foco e blur do campo. Rodam depois dos handlers internos, que controlam o
+   * estado visual `Focused` e a abertura do dropdown — passar estes não
+   * substitui aquele comportamento.
+   */
+  onFocus?: (event: FocusEvent) => void;
+  onBlur?: (event: BlurEvent) => void;
   placeholder?: string;
   /** Texto de apoio abaixo do campo (Body S). */
   helper?: string;
@@ -75,7 +86,7 @@ export type TextFieldProps = {
   /** `Type=Date`: data selecionada, que alimenta o picker nativo. */
   dateValue?: Date;
   /** `Type=Date`: chamado quando o usuário confirma uma data no picker. */
-  onChangeDate?: (date: Date) => void;
+  onChangeDate?: (date: Date | null) => void;
   /** `Type=Date`: seletor de data (padrão) ou de hora. */
   dateMode?: 'date' | 'time';
   /** `Type=Date`: limites do seletor. */

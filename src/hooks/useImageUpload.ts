@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
@@ -109,20 +109,16 @@ function pickFileWeb(): Promise<PickedImage | null> {
 }
 
 /**
- * Seleção, validação (tipo, tamanho, proporção) e upload da capa de um
+ * Seleção e validação (tipo, tamanho, proporção) da capa de um
  * evento. A proporção 16:9 é garantida pedindo o recorte já na tela do
  * seletor do sistema (`allowsEditing` + `aspect`) no nativo; na web isso não
  * existe, então quem chama recebe a imagem sem recorte lá.
  *
- * O upload em si ainda não tem endpoint no backend — `upload` fica com um
- * TODO até a task 091/backend expor onde hospedar a imagem. Por enquanto ele
- * só simula o progresso para o estado `Uploading` ser exercitável.
+ * O backend ainda não oferece hospedagem de imagens. Esta URI serve apenas
+ * para prévia local e nunca deve ser enviada como `cover_photo_url`.
  */
 export function useImageUpload() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const cancelRequested = useRef(false);
 
   async function pickImage(): Promise<PickedImage | null> {
     setError(null);
@@ -149,38 +145,5 @@ export function useImageUpload() {
     return picked;
   }
 
-  // TODO: substituir a simulação por um fetch real assim que existir um
-  // endpoint de upload (ex.: POST /media) que devolva a URL hospedada.
-  async function upload(image: PickedImage): Promise<{ url: string } | null> {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    cancelRequested.current = false;
-
-    try {
-      for (let step = 1; step <= 10; step += 1) {
-        if (cancelRequested.current) {
-          return null;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 150));
-        setProgress(step * 10);
-      }
-
-      return { url: image.uri };
-    } catch {
-      setError('Não foi possível enviar a capa');
-      return null;
-    } finally {
-      setIsLoading(false);
-      setProgress(undefined);
-    }
-  }
-
-  function cancel() {
-    cancelRequested.current = true;
-    setIsLoading(false);
-    setProgress(undefined);
-  }
-
-  return { pickImage, upload, cancel, isLoading, progress, error };
+  return { pickImage, error };
 }

@@ -1,57 +1,54 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { Share } from 'react-native';
 
-import { API_BASE_URL } from '@/constants/api';
-import { getToken } from '@/utils/auth';
-
-export interface EventShare {
-  title: string;
-  event_date: string;
-  location_name: string;
-  cover_photo_url: string | null;
-  web_url: string;
-}
+import { useToast } from '@/components/Toast';
+import { endpoints } from '@/constants/api';
+import type { EventShare } from '@/types/event';
+import { apiFetch } from '@/utils/http';
+import { describeActionError } from '@/utils/apiErrors';
+import { formatDateTime } from '@/utils/datetime';
 
 /**
- * Carrega os dados públicos usados imediatamente após a publicação.
- * O endpoint também devolve a URL web que é compartilhada pelo sistema.
+ * Link compartilhável do evento — `GET /events/{event_id}/share` (task de
+ * backend 101).
+ *
+ * Devolve `null` em falha: quem chama já tem o toast do erro e só precisa
+ * decidir se abre ou não o share sheet do sistema.
  */
 export function useEventShare(eventId: string | undefined) {
-  const [data, setData] = useState<EventShare | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(eventId));
-  const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!eventId) {
-      setData(null);
-      setError('Evento não encontrado');
-      setIsLoading(false);
-      return;
-    }
+  const getShare = useCallback(async (): Promise<EventShare | null> => {
+    if (!eventId) return null;
 
     setIsLoading(true);
-    setError(null);
 
     try {
-      const token = await getToken();
-      const response = await fetch(`${API_BASE_URL}/events/${eventId}/share`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      if (!response.ok) throw new Error('request-failed');
-
-      const payload = (await response.json()) as EventShare;
-      setData(payload);
-    } catch {
-      setData(null);
-      setError('Não foi possível carregar o evento publicado. Tente novamente.');
+      return await apiFetch<EventShare>(endpoints.eventShare(eventId));
+    } catch (caught) {
+      const failure = describeActionError(caught);
+      addToast({ type: failure.tone, message: failure.message || 'Não foi possível compartilhar' });
+      return null;
     } finally {
       setIsLoading(false);
     }
-  }, [eventId]);
+  }, [addToast, eventId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const share = useCallback(async () => {
+    const data = await getShare();
+    if (!data) return;
 
-  return { data, isLoading, error, reload: load };
+    try {
+      await Share.share({
+        title: data.title,
+        message: `${data.title} — ${formatDateTime(data.event_date)} · ${data.location_name}\n${data.web_url}`,
+        url: data.web_url,
+      });
+    } catch {
+      addToast({ type: 'error', message: 'Não foi possível abrir o compartilhamento' });
+    }
+  }, [addToast, getShare]);
+
+  return { getShare, share, isLoading };
 }

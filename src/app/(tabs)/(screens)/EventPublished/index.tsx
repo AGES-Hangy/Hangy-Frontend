@@ -1,4 +1,5 @@
-import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +13,7 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEventShare } from '@/hooks/useEventShare';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import type { EventShare } from '@/types/event';
 
 export default function EventoPublicado() {
   const { eventId, privacy, tagNames } = useLocalSearchParams<{
@@ -20,11 +22,27 @@ export default function EventoPublicado() {
     tagNames?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { data, isLoading, error } = useEventShare(eventId);
+  const { getShare, share, isLoading } = useEventShare(eventId);
+  const [data, setData] = useState<EventShare | null>(null);
+  const [hasLoadError, setHasLoadError] = useState(false);
 
   // O frame possui cabeçalho próprio; sem isto a TopAppBar padrão apareceria
   // acima dele e duplicaria a navegação.
   useTopAppBar(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void getShare().then((event) => {
+      if (!isMounted) return;
+      setData(event);
+      setHasLoadError(!event);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getShare]);
 
   function handleClose() {
     if (router.canGoBack()) {
@@ -35,13 +53,8 @@ export default function EventoPublicado() {
     router.replace('/Home');
   }
 
-  async function handleShare() {
-    if (!data) return;
-    await Share.share({
-      message: `${data.title} — ${data.web_url}`,
-      url: data.web_url,
-      title: data.title,
-    });
+  function handleShare() {
+    void share();
   }
 
   function handleViewEvent() {
@@ -51,11 +64,6 @@ export default function EventoPublicado() {
       pathname: '/EventDetail',
       params: {
         id: eventId,
-        title: data.title,
-        eventDate: data.event_date,
-        location: data.location_name,
-        imageUrl: data.cover_photo_url ?? '',
-        privacy: privacy ?? 'PUBLIC',
       },
     });
   }
@@ -84,13 +92,13 @@ export default function EventoPublicado() {
         </View>
       )}
 
-      {!isLoading && error && (
+      {!isLoading && hasLoadError && (
         <View style={styles.centerFill}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>Não foi possível carregar o evento publicado.</Text>
         </View>
       )}
 
-      {!isLoading && !error && event && (
+      {!isLoading && !hasLoadError && event && (
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.successIcon}>
             <Icon name="circle-check" size={40} color={palette.success.default} />
@@ -115,7 +123,7 @@ export default function EventoPublicado() {
           size="LG"
           accessibilityLabel="Compartilhar link do evento"
           onPress={handleShare}
-          disabled={!data}
+          disabled={!data || isLoading}
           style={styles.fullWidth}
         />
         <Button
@@ -124,7 +132,7 @@ export default function EventoPublicado() {
           size="LG"
           accessibilityLabel="Ver o evento"
           onPress={handleViewEvent}
-          disabled={!data}
+          disabled={!data || isLoading}
           style={styles.fullWidth}
         />
       </View>
