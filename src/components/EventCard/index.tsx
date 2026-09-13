@@ -64,6 +64,9 @@ export function EventCard({
 	const accessibleLabel = [event.title, dateTime, event.location, getPrivacyBadgeLabel(event.privacy)]
 		.filter(Boolean)
 		.join(', ');
+	if (variant === 'Mini') {
+		return <MiniCard event={event} onPress={onPress} onNotifyPress={onNotifyPress} accessibleLabel={accessibleLabel} />;
+	}
 
 	return (
 		<Pressable
@@ -85,7 +88,6 @@ export function EventCard({
 			{variant === 'Featured' && <FeaturedCard event={event} onNotifyPress={onNotifyPress} />}
 			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
-			{variant === 'Mini' && <MiniCard event={event} onNotifyPress={onNotifyPress} />}
 			{variant === 'Request' && <RequestCard event={event} isNew={isNew} />}
 		</Pressable>
 	);
@@ -244,38 +246,55 @@ function MapPreviewCard({ event }: { event: Event }) {
 	);
 }
 
-function MiniCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () => void }) {
+function MiniCard({
+	event,
+	onPress,
+	onNotifyPress,
+	accessibleLabel,
+}: {
+	event: Event;
+	onPress?: () => void;
+	onNotifyPress?: () => void;
+	accessibleLabel: string;
+}) {
 	const tag = event.tags?.[0];
 	const dateTime = formatEventDateTime(event.date);
+	const hasFooter = Boolean(tag || event.attendeeAvatars?.length);
 
 	return (
 		<View style={[styles.cardElevated, styles.carousel, styles.miniCard]}>
-			<View style={styles.miniImageWrap}>
-				<EventImage event={event} style={styles.miniImage} placeholderColor={palette.primary[200]} />
-				<View style={styles.overlayBadge}>
-					<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
-				</View>
-				<NotifyButton style={styles.miniNotifyPosition} onPress={onNotifyPress} />
-			</View>
-
-			<View style={[styles.carouselContent, styles.miniContent]}>
-				<Text numberOfLines={1} style={styles.miniTitle}>{event.title}</Text>
-				{dateTime && <View style={styles.detailLine}>
-					<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={styles.detailText}>{dateTime}</Text>
-				</View>}
-				{event.location && <View style={styles.detailLine}>
-					<Icon name="map-pin" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
-				</View>}
-
-				{(tag || (event.attendeeAvatars?.length ?? 0) > 0) && (
-					<View style={styles.miniFooter}>
-						{tag ? <Chip label={tag} categoryType="macro" size="sm" isSelected /> : <View />}
-						<AttendeesGroup attendees={event.attendeeAvatars} />
+			<Pressable
+				onPress={onPress}
+				disabled={!onPress}
+				accessibilityRole={onPress ? 'button' : undefined}
+				accessibilityLabel={accessibleLabel}
+				style={({ pressed }) => [styles.miniMain, pressed && styles.pressed]}
+			>
+				<View style={styles.miniImageWrap}>
+					<EventImage event={event} style={styles.miniImage} placeholderColor={palette.primary[200]} />
+					<View style={styles.overlayBadge}>
+						<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
 					</View>
-				)}
-			</View>
+				</View>
+
+				<View style={[styles.carouselContent, styles.miniContent]}>
+					<Text numberOfLines={1} style={styles.miniTitle}>{event.title}</Text>
+					{dateTime && <View style={styles.detailLine}>
+						<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={styles.detailText}>{dateTime}</Text>
+					</View>}
+					{event.location && <View style={styles.detailLine}>
+						<Icon name="map-pin" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
+					</View>}
+				</View>
+			</Pressable>
+
+			{hasFooter && <View style={styles.miniFooter}>
+				{tag ? <Chip label={tag} categoryType="macro" size="sm" isSelected /> : <View />}
+				<AttendeesGroup attendees={event.attendeeAvatars} />
+			</View>}
+			<NotifyButton style={styles.miniNotifyPosition} onPress={onNotifyPress} />
 		</View>
 	);
 }
@@ -448,8 +467,9 @@ const styles = StyleSheet.create({
 		overflow: 'hidden',
 	},
 	miniCard: { minHeight: layout.eventCard.miniHeight },
+	miniMain: { flexGrow: 1 },
 	carouselContent: { padding: spacing[12], gap: spacing[8], alignItems: 'flex-start' },
-	miniContent: { flexGrow: 1 },
+	miniContent: { flexGrow: 1, paddingBottom: 0 },
 
 	miniImageWrap: {
 		width: '100%',
@@ -464,7 +484,16 @@ const styles = StyleSheet.create({
 		right: spacing[8],
 		zIndex: layout.eventCard.overlayZIndex,
 	},
-	miniFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 'auto' },
+	miniFooter: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		width: '100%',
+		marginTop: 'auto',
+		paddingHorizontal: spacing[12],
+		paddingTop: spacing[8],
+		paddingBottom: spacing[12],
+	},
 
 	requestImageWrap: {
 		width: '100%',

@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
@@ -9,8 +10,8 @@ import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useFeed, type FeedSection } from '@/hooks/useFeed';
 
-// As telas EditInterests, SearchResults e EventDetail ainda não existem na base.
-// As ações ficam desabilitadas até essas rotas serem integradas.
+// EditInterests e SearchResults ainda não existem na base. Essas ações ficam
+// desabilitadas até as telas serem integradas.
 export default function Home() {
   const { sections, isLoading, error, isOffline, reload } = useFeed();
 
@@ -81,6 +82,7 @@ function FeedSectionRow({ section }: { section: FeedSection }) {
           <EventCard
             variant="Mini"
             event={item}
+            onPress={() => router.push(`/EventDetail?id=${item.id}`)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
