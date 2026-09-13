@@ -27,6 +27,70 @@ export const spacing = {
   64: 64,
 } as const;
 
+/**
+ * Opacidade ao pressionar, para qualquer componente tocável cujo estado
+ * Pressed o Figma ainda não especifica com um fill próprio (`Button`,
+ * `IconButton`, `PhotoTile`, ...). Quando o design definir esse estado
+ * componente a componente, troque o uso local pelo token correspondente.
+ */
+export const pressedOpacity = 0.85;
+export const layout = {
+  emptyState: {
+    illustrationSize: 96,
+    textMaxWidth: 260,
+    ctaHeight: 52,
+  },
+  badge: {
+    height: 24,
+    paddingHorizontal: 10,
+    iconSize: 12,
+    iconStrokeWidth: 2.25,
+    textGap: 6,
+    borderWidth: 1.5,
+    notificationIconSize: 16,
+    notificationIconStrokeWidth: 2.5,
+    notificationDotSize: 10,
+    notificationPillHeight: 10,
+    notificationMinWidth: 10,
+    notificationOffset: 1,
+    notificationBubbleTop: -3,
+    notificationBubbleRight: -1,
+    notificationBubbleBorderWidth: 2,
+    notificationContainerExtraSize: 2,
+    notificationPillPaddingHorizontal: 3,
+    notificationPillPaddingVertical: 0,
+    notificationCountFontSize: 8,
+    notificationCountLineHeight: 10,
+  },
+  eventCard: {
+    pressedOpacity: 0.82,
+    featuredWidth: 320,
+    featuredHeight: 288,
+    featuredImageHeight: 160,
+    compactMaxWidth: 520,
+    compactHeight: 88,
+    compactImageSize: 72,
+    overlayZIndex: 1,
+    flexShrink: 1,
+    mapPreviewWidth: 280,
+    mapPreviewHeight: 96,
+    mapImageSize: 80,
+    miniWidth: 172,
+    miniHeight: 226,
+    miniImageHeight: 96,
+    /** Pilha de avatares do rodapé de `Featured` e `Mini` — Avatar Person XS (24), passo 16 (overlap 8). */
+    footerAvatarSize: 24,
+    footerAvatarOverlap: 8,
+    requestImageHeight: 88,
+    /** Botões de aceitar/recusar solicitação — ambos h36, raio radius/sm. */
+    requestActionHeight: 36,
+    requestRejectWidth: 52,
+    detailIconSize: 14,
+    chevronSize: 20,
+    imageTransitionDuration: 150,
+  },
+} as const;
+
 // Sombras — offset/blur em px (CSS) convertidos para shadow* do React Native;
 // `elevation` cobre a sombra equivalente no Android.
 export const elevation = {

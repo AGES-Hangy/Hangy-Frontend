@@ -19,5 +19,6 @@ export const typography = {
   labelM: { fontSize: 14, lineHeight: 18, fontWeight: '600', letterSpacing: 0 },
   labelS: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.1 },
   caption: { fontSize: 11, lineHeight: 15, fontWeight: '500', letterSpacing: 0.2 },
+  badge: { fontSize: 11, lineHeight: 15, fontWeight: '600', letterSpacing: 0 },
   overline: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: 1.1 },
 } as const;

@@ -1,109 +1,114 @@
-import {
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { router } from 'expo-router';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BottomNav } from "@/components/BottomNav";
-import { TopAppBar } from "@/components/TopAppBar";
-import { colors } from "@/constants/colors";
-import { spacing } from "@/constants/layout";
-import { typography } from "@/constants/typography";
-import { useFeed, type FeedEvent, type FeedSection } from "@/hooks/useFeed";
-import { useRefreshable } from "@/hooks/useRefreshable";
+import { EmptyState } from '@/components/EmptyState';
+import { EventCard } from '@/components/EventCard';
+import { Icon } from '@/components/Icon';
+import { SectionHeader } from '@/components/SectionHeader';
+import { colors, palette } from '@/constants/colors';
+import { layout, radius, spacing } from '@/constants/layout';
+import { typography } from '@/constants/typography';
+import { useFeed, type FeedSection } from '@/hooks/useFeed';
 
-/**
- * ⚠️ PLACEHOLDER — o `EventCard` de verdade está em review (com erros) e
- * ainda não entrou no repo. Isto não é entrega da task 115, é só o
- * suficiente pra Home renderizar algo e o pull-to-refresh ter o que
- * atualizar. Trocar pelo componente oficial assim que ele mergear; o resto
- * do arquivo não precisa mudar.
- */
-function EventCardPlaceholder({ item }: { item: FeedEvent }) {
-  const date = new Date(item.eventDate);
-  const formattedDate = `${String(date.getDate()).padStart(2, "0")}/${String(
-    date.getMonth() + 1,
-  ).padStart(2, "0")} · ${String(date.getHours()).padStart(2, "0")}:${String(
-    date.getMinutes(),
-  ).padStart(2, "0")}`;
+// EditInterests e SearchResults ainda não existem na base. Essas ações ficam
+// desabilitadas até as telas serem integradas.
+export default function Home() {
+  const { sections, isLoading, error, isOffline, reload } = useFeed();
+
+  if (isLoading) {
+    return <FeedSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <View style={styles.stateContainer}>
+        <View style={styles.errorContent}>
+          <View style={styles.errorMessage}>
+            <Icon name={isOffline ? 'map-pin-off' : 'circle-alert'} color={isOffline ? palette.warning.default : colors.feedback.error} size={40} />
+            <Text style={styles.stateTitle}>{isOffline ? 'Você está sem internet' : 'Algo deu errado do nosso lado'}</Text>
+            <Text style={styles.stateText}>{isOffline ? 'o Hangy precisa de conexão para carregar eventos e o mapa Ao vivo. Verifique o Wi-Fi ou os dados móveis.' : error}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tentar carregar o feed novamente"
+            onPress={() => void reload()}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryLabel}>Tentar de novo</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  const visibleSections = sections.filter((section) => section.items.length > 0);
+
+  if (visibleSections.length === 0) {
+    return (
+      <View style={styles.stateContainer}>
+        <EmptyState context="Home" cta ctaAtBottom ctaDisabled />
+      </View>
+    );
+  }
 
   return (
-    <View style={placeholderStyles.card}>
-      <Text
-        style={[typography.labelM, placeholderStyles.title]}
-        numberOfLines={1}
-      >
-        {item.title}
-      </Text>
-      <Text style={[typography.bodyS, placeholderStyles.meta]}>
-        {formattedDate} · {item.locationName}
-      </Text>
-      <Text style={[typography.bodyS, placeholderStyles.meta]}>
-        {item.participantsCount} participantes
-      </Text>
+    <View style={styles.container}>
+      <FlatList
+        data={visibleSections}
+        keyExtractor={(section) => section.tag.id}
+        renderItem={({ item }) => <FeedSectionRow section={item} />}
+        contentContainerStyle={styles.feedContent}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+      />
     </View>
   );
 }
 
-const placeholderStyles = StyleSheet.create({
-  card: {
-    width: 220,
-    padding: spacing[12],
-    borderRadius: 14,
-    backgroundColor: colors.surface.card,
-    borderWidth: 1.5,
-    borderColor: colors.border.default,
-    gap: spacing[4],
-  },
-  title: { color: colors.text.primary },
-  meta: { color: colors.text.secondary },
-});
+function FeedSectionRow({ section }: { section: FeedSection }) {
+  return (
+    <View style={styles.section}>
+      <SectionHeader
+        title={section.tag.name}
+        action={section.hasMore}
+        actionDisabled
+        actionAccessibilityLabel={`Ver todos os eventos de ${section.tag.name}`}
+      />
+      <FlatList
+        horizontal
+        data={section.items}
+        keyExtractor={(event) => event.id}
+        renderItem={({ item }) => (
+          <EventCard
+            variant="Mini"
+            event={item}
+            onPress={() => router.push(`/EventDetail?id=${item.id}`)}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
+        showsHorizontalScrollIndicator={false}
+        removeClippedSubviews
+      />
+    </View>
+  );
+}
 
-export default function Home() {
-  const { sections, error, refetch } = useFeed();
-  const { isRefreshing, onRefresh } = useRefreshable(refetch);
-
-  // Skeleton de carga inicial, "Ver todos" por seção e o carrossel horizontal
-  // por categoria (visível no Figma) pertencem às tasks irmãs desta US, não
-  // à 115. Aqui é só o essencial pra não quebrar a tela enquanto elas não
-  // existem — uma SectionList vertical simples.
+function FeedSkeleton() {
   return (
     <View style={styles.container}>
-      <TopAppBar variant="Home" />
-
-      <SectionList<FeedEvent, FeedSection>
-        sections={sections}
-        keyExtractor={(item) => item.eventId}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <Text style={typography.h4}>{section.tag.name}</Text>
+      <FlatList
+        data={['first', 'second', 'third']}
+        keyExtractor={(item) => item}
+        renderItem={() => (
+          <View style={styles.section}>
+            <View style={styles.skeletonHeader} />
+            <View style={styles.skeletonRow}>
+              {[0, 1].map((item) => <View key={item} style={styles.skeletonCard} />)}
+            </View>
           </View>
         )}
-        renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <EventCardPlaceholder item={item} />
-          </View>
-        )}
-        contentContainerStyle={styles.content}
-        // Núcleo da task 115: não mostra skeleton e não apaga conteúdo em
-        // erro — só o indicador nativo, tintado com o token de cor.
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.action.primary}
-            colors={[colors.action.primary]}
-          />
-        }
+        contentContainerStyle={styles.feedContent}
       />
-
-      {error && !isRefreshing && sections.length === 0 && (
-        <Text style={[typography.bodyM, styles.errorText]}>{error}</Text>
-      )}
-
-      <BottomNav active="Home" />
     </View>
   );
 }
@@ -113,20 +118,72 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
   },
-  content: {
+  stateContainer: {
+    flex: 1,
+    backgroundColor: colors.bg.base,
+  },
+  errorContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing[16],
-    paddingVertical: spacing[16],
-    gap: spacing[16],
+    paddingBottom: spacing[16],
   },
-  sectionHeader: {
-    paddingVertical: spacing[8],
+  errorMessage: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[12],
+    maxWidth: 320,
   },
-  cardWrapper: {
-    marginBottom: spacing[12],
+  stateTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    textAlign: 'center',
   },
-  errorText: {
-    textAlign: "center",
-    color: colors.feedback.error,
-    padding: spacing[16],
+  stateText: {
+    ...typography.bodyM,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minHeight: 44,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[16],
+    borderRadius: radius.full,
+    backgroundColor: colors.action.primary,
+  },
+  retryLabel: {
+    ...typography.labelM,
+    color: colors.text.inverse,
+  },
+  feedContent: {
+    paddingHorizontal: spacing[16],
+    paddingBottom: spacing[24],
+  },
+  section: {
+    marginBottom: spacing[8],
+  },
+  cardSeparator: {
+    width: spacing[12],
+  },
+  skeletonHeader: {
+    width: '42%',
+    height: typography.h3.lineHeight,
+    marginVertical: spacing[12],
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface.sunken,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    gap: spacing[12],
+  },
+  skeletonCard: {
+    width: layout.eventCard.miniWidth,
+    height: layout.eventCard.miniHeight,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface.sunken,
   },
 });
