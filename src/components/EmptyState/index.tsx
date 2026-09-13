@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, palette } from '@/constants/colors';
-import { spacing } from '@/constants/layout';
+import { layout, radius, spacing } from '@/constants/layout';
+import { typography } from '@/constants/typography';
 import { icons } from '@/components/Icon/icons';
 import type { EmptyStateContext, EmptyStateProps } from './types';
 
@@ -17,7 +18,7 @@ const EMPTY_STATE_CONFIG: Record<EmptyStateContext, EmptyStateConfig> = {
   Home: {
     icon: 'compass',
     title: 'Nada por aqui ainda',
-    text: 'Nenhum evento bate com as suas tags nesta semana. Adicione mais interesses ou amplie a distância',
+    text: 'Ainda não encontramos eventos para mostrar.',
     defaultCtaLabel: 'Editar interesses',
   },
   Map: {
@@ -48,7 +49,7 @@ const EMPTY_STATE_CONFIG: Record<EmptyStateContext, EmptyStateConfig> = {
   },
 };
 
-export function EmptyState({ context, cta = false, ctaLabel, onCtaPress, ctaAtBottom = false }: EmptyStateProps) {
+export function EmptyState({ context, cta = false, ctaLabel, onCtaPress, ctaAtBottom = false, ctaDisabled = false }: EmptyStateProps) {
   const config = EMPTY_STATE_CONFIG[context];
   const Icon = icons[config.icon];
   const text = config.textByCta ? config.textByCta[cta ? 'true' : 'false'] : config.text;
@@ -59,7 +60,7 @@ export function EmptyState({ context, cta = false, ctaLabel, onCtaPress, ctaAtBo
       `[EmptyState] context="${context}" tem cta=true mas nenhum ctaLabel (prop ou padrão) foi definido.`
     );
   }
-  if (__DEV__ && cta && !onCtaPress) {
+  if (__DEV__ && cta && !ctaDisabled && !onCtaPress) {
     console.warn(`[EmptyState] context="${context}" tem cta=true mas onCtaPress não foi passado.`);
   }
 
@@ -80,12 +81,15 @@ export function EmptyState({ context, cta = false, ctaLabel, onCtaPress, ctaAtBo
       {cta && resolvedCtaLabel ? (
         <Pressable
           onPress={onCtaPress}
-          style={({ pressed }) => [styles.ctaButton, ctaAtBottom && styles.ctaAtBottom, pressed && styles.ctaButtonPressed]}
+          disabled={ctaDisabled}
+          accessibilityState={{ disabled: ctaDisabled }}
+          aria-disabled={ctaDisabled}
+          style={({ pressed }) => [styles.ctaButton, ctaAtBottom && styles.ctaAtBottom, ctaDisabled && styles.ctaButtonDisabled, pressed && styles.ctaButtonPressed]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={resolvedCtaLabel}
         >
-          <Text style={styles.ctaLabel}>{resolvedCtaLabel}</Text>
+          <Text style={[styles.ctaLabel, ctaDisabled && styles.ctaLabelDisabled]}>{resolvedCtaLabel}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -96,57 +100,62 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-    gap: 12,
+    paddingHorizontal: spacing[24],
+    paddingVertical: spacing[32],
+    gap: spacing[12],
   },
   containerCtaAtBottom: {
     flex: 1,
     justifyContent: 'space-between',
+    paddingHorizontal: spacing[16],
     paddingBottom: spacing[16],
   },
   centeredContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: spacing[12],
   },
 
   illustration: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: layout.emptyState.illustrationSize,
+    height: layout.emptyState.illustrationSize,
+    borderRadius: radius.full,
     backgroundColor: palette.primary[100],
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: spacing[4],
   },
 
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...typography.h3,
     color: colors.text.primary,
     textAlign: 'center',
   },
 
   text: {
-    fontSize: 16,
+    ...typography.bodyM,
     color: palette.neutral[500],
     textAlign: 'center',
-    maxWidth: 260,
+    maxWidth: layout.emptyState.textMaxWidth,
   },
 
   ctaButton: {
-    marginTop: 8,
-    minHeight: 44,
-    paddingHorizontal: 20,
+    marginTop: spacing[8],
+    minHeight: layout.emptyState.ctaHeight,
+    paddingHorizontal: spacing[20],
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 24,
+    borderRadius: radius.full,
     backgroundColor: colors.action.primary,
   },
   ctaAtBottom: {
     marginTop: spacing[16],
+    alignSelf: 'stretch',
+  },
+
+  ctaButtonDisabled: {
+    backgroundColor: colors.surface.sunken,
   },
 
   ctaButtonPressed: {
@@ -154,8 +163,10 @@ const styles = StyleSheet.create({
   },
 
   ctaLabel: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...typography.labelM,
     color: colors.text.inverse,
+  },
+  ctaLabelDisabled: {
+    color: colors.text.disabled,
   },
 });

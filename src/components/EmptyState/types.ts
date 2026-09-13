@@ -6,4 +6,5 @@ export interface EmptyStateProps {
   ctaLabel?: string;
   onCtaPress?: () => void;
   ctaAtBottom?: boolean;
+  ctaDisabled?: boolean;
 }

@@ -43,6 +43,13 @@ function formatShortTime(value: string) {
 	}).format(parsedDate);
 }
 
+function formatEventDateTime(value: string | null) {
+	if (!value) return null;
+	const date = formatShortDate(value);
+	const time = formatShortTime(value);
+	return time ? `${date} · ${time}` : date;
+}
+
 const placeholderImage = require('../../../assets/images/hangy.svg');
 
 export function EventCard({
@@ -53,12 +60,16 @@ export function EventCard({
 	onPress,
 	onNotifyPress,
 }: EventCardProps) {
-	const accessibleLabel = `${event.title}, ${formatShortDate(event.date)} às ${formatShortTime(event.date)}, ${event.location}, ${getPrivacyBadgeLabel(event.privacy)}`;
+	const dateTime = formatEventDateTime(event.date);
+	const accessibleLabel = [event.title, dateTime, event.location, getPrivacyBadgeLabel(event.privacy)]
+		.filter(Boolean)
+		.join(', ');
 
 	return (
 		<Pressable
 			accessibilityLabel={accessibleLabel}
-			accessibilityRole="button"
+			accessibilityRole={onPress ? 'button' : undefined}
+			disabled={!onPress}
 			onPress={onPress}
 			style={({ pressed }) => [
 				styles.pressable,
@@ -87,7 +98,7 @@ function EventImage({ event, style, placeholderColor }: { event: Event; style: o
 		<View style={[style, { backgroundColor: placeholderColor }]}>
 			<Image
 				accessibilityLabel={`Capa do evento ${event.title}`}
-				source={hasImageError ? placeholderImage : event.imageUrl}
+				source={hasImageError || !event.imageUrl ? placeholderImage : event.imageUrl}
 				placeholder={placeholderImage}
 				onError={() => setHasImageError(true)}
 				contentFit="cover"
@@ -113,6 +124,7 @@ function NotifyButton({ style, onPress }: { style: object; onPress?: () => void 
 			icon="bell"
 			size="SM"
 			variant="Outline"
+			disabled={!onPress}
 			accessibilityLabel="Ativar notificações do evento"
 			onPress={onPress}
 			style={style}
@@ -148,6 +160,7 @@ function AttendeesGroup({ attendees }: { attendees: Event['attendeeAvatars'] }) 
 function FeaturedCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () => void }) {
 	const tags = event.tags ?? [];
 	const hasFooter = tags.length > 0 || (event.attendeeAvatars?.length ?? 0) > 0;
+	const dateTime = formatEventDateTime(event.date);
 
 	return (
 		<View style={[styles.cardFlat, styles.featured]}>
@@ -161,16 +174,14 @@ function FeaturedCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: 
 			    empurrava o conteúdo pra fora da borda e cortava os chips do rodapé. */}
 			<Text numberOfLines={1} style={styles.title}>{event.title}</Text>
 
-			<View style={styles.detailLine}>
+			{dateTime && <View style={styles.detailLine}>
 				<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
-				<Text numberOfLines={1} style={styles.detailText}>
-					{formatShortDate(event.date)} · {formatShortTime(event.date)}
-				</Text>
-			</View>
-			<View style={styles.detailLine}>
+				<Text numberOfLines={1} style={styles.detailText}>{dateTime}</Text>
+			</View>}
+			{event.location && <View style={styles.detailLine}>
 				<Icon name="map-pin" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
 				<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
-			</View>
+			</View>}
 
 			{hasFooter && (
 				<View style={styles.featuredFooter}>
@@ -186,7 +197,7 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 	const stateBadge = getStatusBadgeValue(state);
 	// Figma: uma única linha "data · horário · local", sem ícone — não são três
 	// blocos separados, é um texto só que trunca com reticências se não couber.
-	const meta = `${formatShortDate(event.date)} · ${formatShortTime(event.date)} · ${event.location}`;
+	const meta = [formatEventDateTime(event.date), event.location].filter(Boolean).join(' · ');
 
 	return (
 		<View style={[styles.cardFlat, styles.compact]}>
@@ -196,7 +207,7 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 
 			<View style={styles.compactContent}>
 				<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
-				<Text numberOfLines={1} style={styles.detailText}>{meta}</Text>
+				{meta ? <Text numberOfLines={1} style={styles.detailText}>{meta}</Text> : null}
 				<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
 			</View>
 
@@ -235,9 +246,10 @@ function MapPreviewCard({ event }: { event: Event }) {
 
 function MiniCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () => void }) {
 	const tag = event.tags?.[0];
+	const dateTime = formatEventDateTime(event.date);
 
 	return (
-		<View style={[styles.cardElevated, styles.carousel]}>
+		<View style={[styles.cardElevated, styles.carousel, styles.miniCard]}>
 			<View style={styles.miniImageWrap}>
 				<EventImage event={event} style={styles.miniImage} placeholderColor={palette.primary[200]} />
 				<View style={styles.overlayBadge}>
@@ -246,18 +258,16 @@ function MiniCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () =
 				<NotifyButton style={styles.miniNotifyPosition} onPress={onNotifyPress} />
 			</View>
 
-			<View style={styles.carouselContent}>
+			<View style={[styles.carouselContent, styles.miniContent]}>
 				<Text numberOfLines={1} style={styles.miniTitle}>{event.title}</Text>
-				<View style={styles.detailLine}>
+				{dateTime && <View style={styles.detailLine}>
 					<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={styles.detailText}>
-						{formatShortDate(event.date)} · {formatShortTime(event.date)}
-					</Text>
-				</View>
-				<View style={styles.detailLine}>
+					<Text numberOfLines={1} style={styles.detailText}>{dateTime}</Text>
+				</View>}
+				{event.location && <View style={styles.detailLine}>
 					<Icon name="map-pin" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
 					<Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>
-				</View>
+				</View>}
 
 				{(tag || (event.attendeeAvatars?.length ?? 0) > 0) && (
 					<View style={styles.miniFooter}>
@@ -272,6 +282,7 @@ function MiniCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () =
 
 function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
 	const requesterName = event.requesterName ?? 'Usuário';
+	const dateTime = formatEventDateTime(event.date);
 
 	return (
 		<View style={[styles.cardElevated, styles.carousel]}>
@@ -294,12 +305,10 @@ function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
 						{requesterName} solicitou
 					</Text>
 				</View>
-				<View style={styles.detailLine}>
+				{dateTime && <View style={styles.detailLine}>
 					<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>
-						{formatShortDate(event.date)} · {formatShortTime(event.date)}
-					</Text>
-				</View>
+					<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>{dateTime}</Text>
+				</View>}
 
 				<View style={styles.requestActions}>
 					<Pressable
@@ -432,13 +441,15 @@ const styles = StyleSheet.create({
 	mapImage: { width: '100%', height: '100%' },
 	mapDetails: { flex: 1, gap: spacing[4], alignItems: 'flex-start' },
 
-	// Mini e Request — cards do carrossel: w172 fixa, altura hug, r14, elevação 1.
+	// Mini e Request — cards do carrossel: w172 fixa, r14, elevação 1.
 	carousel: {
 		width: layout.eventCard.miniWidth,
 		borderRadius: radius.md,
 		overflow: 'hidden',
 	},
+	miniCard: { minHeight: layout.eventCard.miniHeight },
 	carouselContent: { padding: spacing[12], gap: spacing[8], alignItems: 'flex-start' },
+	miniContent: { flexGrow: 1 },
 
 	miniImageWrap: {
 		width: '100%',
@@ -453,7 +464,7 @@ const styles = StyleSheet.create({
 		right: spacing[8],
 		zIndex: layout.eventCard.overlayZIndex,
 	},
-	miniFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+	miniFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 'auto' },
 
 	requestImageWrap: {
 		width: '100%',

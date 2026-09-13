@@ -9,6 +9,7 @@ export function SectionHeader({
   title,
   variant = 'title',
   action = false,
+  actionDisabled = false,
   actionLabel = 'Ver todos',
   onActionPress,
   actionAccessibilityLabel,
@@ -26,15 +27,18 @@ export function SectionHeader({
       {action && (
         <Pressable
           onPress={onActionPress}
+          disabled={actionDisabled}
+          accessibilityState={{ disabled: actionDisabled }}
+          aria-disabled={actionDisabled}
           style={styles.actionTouchArea}
           hitSlop={8}
           accessibilityRole="link"
           accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
         >
-          <Text style={styles.actionLabel} numberOfLines={1}>
+          <Text style={[styles.actionLabel, actionDisabled && styles.actionLabelDisabled]} numberOfLines={1}>
             {actionLabel}
           </Text>
-          <Icon name="chevron-right" size={18} color={palette.primary[600]} />
+          <Icon name="chevron-right" size={18} color={actionDisabled ? colors.text.disabled : palette.primary[600]} />
         </Pressable>
       )}
     </View>
@@ -72,4 +76,5 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.base,
     color: palette.primary[600],
   },
+  actionLabelDisabled: { color: colors.text.disabled },
 });

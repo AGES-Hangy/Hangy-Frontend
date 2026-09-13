@@ -16,8 +16,8 @@ export interface FeedSection {
 interface ApiFeedItem {
   event_id: string;
   title: string;
-  event_date: string;
-  location_name: string;
+  event_date: string | null;
+  location_name: string | null;
   cover_photo_url?: string | null;
   privacy: EventPrivacy;
   participants_count?: number;
@@ -50,8 +50,12 @@ function normalizeFeed(data: ApiFeedResponse): FeedSection[] {
   return (data.sections ?? []).map((section) => ({
     tag: section.tag,
     items: [...(section.items ?? [])]
-      .sort((first, second) => new Date(first.event_date).getTime() - new Date(second.event_date).getTime())
-      .map(toEvent),
+      .sort((first, second) => {
+        if (!first.event_date) return second.event_date ? 1 : 0;
+        if (!second.event_date) return -1;
+        return new Date(first.event_date).getTime() - new Date(second.event_date).getTime();
+      })
+      .map((item) => ({ ...toEvent(item), tags: [section.tag.name] })),
     hasMore: section.has_more ?? false,
   }));
 }

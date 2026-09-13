@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
@@ -10,6 +9,8 @@ import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useFeed, type FeedSection } from '@/hooks/useFeed';
 
+// As telas EditInterests, SearchResults e EventDetail ainda não existem na base.
+// As ações ficam desabilitadas até essas rotas serem integradas.
 export default function Home() {
   const { sections, isLoading, error, isOffline, reload } = useFeed();
 
@@ -44,7 +45,7 @@ export default function Home() {
   if (visibleSections.length === 0) {
     return (
       <View style={styles.stateContainer}>
-        <EmptyState context="Home" cta ctaAtBottom onCtaPress={() => router.push('/EditInterests')} />
+        <EmptyState context="Home" cta ctaAtBottom ctaDisabled />
       </View>
     );
   }
@@ -69,7 +70,7 @@ function FeedSectionRow({ section }: { section: FeedSection }) {
       <SectionHeader
         title={section.tag.name}
         action={section.hasMore}
-        onActionPress={() => router.push(`/SearchResults?tagId=${section.tag.id}&type=events`)}
+        actionDisabled
         actionAccessibilityLabel={`Ver todos os eventos de ${section.tag.name}`}
       />
       <FlatList
@@ -80,7 +81,6 @@ function FeedSectionRow({ section }: { section: FeedSection }) {
           <EventCard
             variant="Mini"
             event={item}
-            onPress={() => router.push(`/EventDetail?id=${item.id}`)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
   stateTitle: {
     ...typography.h3,
     color: colors.text.primary,
+    textAlign: 'center',
   },
   stateText: {
     ...typography.bodyM,
@@ -145,6 +146,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     minHeight: 44,
+    alignSelf: 'stretch',
+    alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing[16],
     borderRadius: radius.full,

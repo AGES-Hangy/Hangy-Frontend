@@ -7,8 +7,8 @@ export type EventState = 'Default' | 'Confirmed' | 'Pending';
 export interface Event {
   id: string;
   title: string;
-  date: string; // ISO 8601 — o card formata para exibição
-  location: string;
+  date: string | null; // Eventos privados podem ocultar a data.
+  location: string | null; // Eventos privados podem ocultar o local.
   imageUrl: string;
   privacy: EventPrivacy;
   distance?: string;
@@ -24,7 +24,7 @@ export interface EventCardProps {
   event: Event;
   state?: EventState;
   isNew?: boolean;
-  onPress: () => void;
+  onPress?: () => void;
   /** Sino de notificações em `Featured` e `Mini`. Sem isto o sino fica decorativo. */
   onNotifyPress?: () => void;
 }
