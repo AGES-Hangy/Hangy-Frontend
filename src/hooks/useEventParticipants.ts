@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
-import type { EventParticipant, ParticipantsResponse } from '@/types/event';
+import type { EventParticipantItem, ParticipantsPage, ParticipationStatus } from '@/types/event';
 import { apiFetch } from '@/utils/http';
 import { describeActionError, describeLoadError } from '@/utils/apiErrors';
 import type { LoadError } from '@/utils/apiErrors';
@@ -11,6 +11,12 @@ import type { LoadError } from '@/utils/apiErrors';
  * Participantes de um evento e as ações do organizador sobre eles —
  * `GET /events/{event_id}/participants` (task 097) e
  * `PATCH /events/{event_id}/participants/{participant_id}` (task 099).
+ *
+ * A API não devolve confirmados e pendentes numa resposta só: sem `status` ela
+ * traz os confirmados, e só o organizador pode pedir `status=PENDING` — por
+ * isso são duas chamadas, a segunda só quando `isOrganizer` é `true`. Também
+ * não existe um `can_manage` na resposta: quem decide isso é o papel do
+ * viewer no detalhe do evento, que a tela já tem e passa como `isOrganizer`.
  *
  * Aprovar, recusar e remover são **otimistas**: a lista muda na hora e volta
  * atrás se a API recusar. É o que faz a tela responder no toque em vez de
@@ -22,21 +28,22 @@ import type { LoadError } from '@/utils/apiErrors';
  */
 
 /** Restaura só a pessoa da mutação que falhou, preservando outras ações. */
-function restoreAt(list: EventParticipant[], person: EventParticipant, index: number) {
+function restoreAt(list: EventParticipantItem[], person: EventParticipantItem, index: number) {
   if (list.some((item) => item.participant_id === person.participant_id)) return list;
   const next = [...list];
   next.splice(Math.min(index, next.length), 0, person);
   return next;
 }
 
-export function useEventParticipants(eventId: string | undefined) {
+export function useEventParticipants(eventId: string | undefined, isOrganizer: boolean) {
   const { addToast } = useToast();
 
-  const [confirmed, setConfirmed] = useState<EventParticipant[]>([]);
-  const [pending, setPending] = useState<EventParticipant[]>([]);
+  const [confirmed, setConfirmed] = useState<EventParticipantItem[]>([]);
+  const [pending, setPending] = useState<EventParticipantItem[]>([]);
   const [confirmedCount, setConfirmedCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
-  const [canManage, setCanManage] = useState(false);
+  /** `false` quando o `GET` de pendentes nega: a seção some em vez de mostrar e negar. */
+  const [pendingVisible, setPendingVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadedEventId, setLoadedEventId] = useState<string>();
   const [error, setError] = useState<LoadError | null>(null);
@@ -56,7 +63,7 @@ export function useEventParticipants(eventId: string | undefined) {
       setPending([]);
       setConfirmedCount(0);
       setPendingCount(0);
-      setCanManage(false);
+      setPendingVisible(false);
       setIsLoading(false);
       return;
     }
@@ -65,25 +72,42 @@ export function useEventParticipants(eventId: string | undefined) {
     setError(null);
 
     try {
-      const data = await apiFetch<ParticipantsResponse>(endpoints.eventParticipants(eventId));
-      setConfirmed(data.confirmed);
-      setPending(data.pending);
-      setConfirmedCount(data.confirmed_count);
-      setPendingCount(data.pending_count);
-      setCanManage(data.can_manage);
+      const confirmedPage = await apiFetch<ParticipantsPage>(endpoints.eventParticipants(eventId));
+      setConfirmed(confirmedPage.items);
+      setConfirmedCount(confirmedPage.counts.CONFIRMED ?? confirmedPage.items.length);
+
+      if (isOrganizer) {
+        try {
+          const pendingPage = await apiFetch<ParticipantsPage>(
+            endpoints.eventParticipants(eventId, 'PENDING'),
+          );
+          setPending(pendingPage.items);
+          setPendingCount(pendingPage.counts.PENDING ?? pendingPage.items.length);
+          setPendingVisible(true);
+        } catch {
+          // O papel de organizador pode ter mudado entre telas: um 403 aqui
+          // não invalida os confirmados que já carregaram, só esconde a seção.
+          setPending([]);
+          setPendingCount(0);
+          setPendingVisible(false);
+        }
+      } else {
+        setPending([]);
+        setPendingCount(0);
+        setPendingVisible(false);
+      }
     } catch (caught) {
-      // Um 403 no GET inteiro não traz confirmados para exibir. Não manter
+      // Um 403 no GET dos confirmados não traz lista para exibir. Não manter
       // uma lista antiga nem fingir que o evento está vazio.
       const load403 =
         typeof caught === 'object' && caught !== null && (caught as { status?: number }).status === 403;
 
       if (load403) {
-        // Sem resposta não há lista de confirmados confiável para manter.
         setConfirmed([]);
-        setCanManage(false);
         setPending([]);
         setConfirmedCount(0);
         setPendingCount(0);
+        setPendingVisible(false);
         setError({
           kind: 'unavailable',
           title: 'Participantes indisponíveis',
@@ -97,7 +121,7 @@ export function useEventParticipants(eventId: string | undefined) {
       setLoadedEventId(eventId);
       setIsLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, isOrganizer]);
 
   useEffect(() => {
     load();
@@ -119,12 +143,12 @@ export function useEventParticipants(eventId: string | undefined) {
    */
   const mutate = useCallback(
     async (
-      participant: EventParticipant,
-      status: EventParticipant['status'],
+      participant: EventParticipantItem,
+      status: ParticipationStatus,
       successMessage: string | null,
     ) => {
       const participantId = participant.participant_id;
-      if (!eventId || !canManage || isReadOnly || inFlight.current.has(participantId)) return;
+      if (!eventId || !isOrganizer || isReadOnly || inFlight.current.has(participantId)) return;
 
       inFlight.current.add(participantId);
       const wasPending = status !== 'REMOVED';
@@ -181,35 +205,35 @@ export function useEventParticipants(eventId: string | undefined) {
         markProcessing(participantId, false);
       }
     },
-    [addToast, canManage, confirmed, eventId, isReadOnly, load, markProcessing, pending],
+    [addToast, confirmed, eventId, isOrganizer, isReadOnly, load, markProcessing, pending],
   );
 
   const approve = useCallback(
-    (participant: EventParticipant) =>
+    (participant: EventParticipantItem) =>
       mutate(
         participant,
         'CONFIRMED',
-        `${participant.name} entrou na lista de participantes.`,
+        `${participant.user.name ?? 'Usuário'} entrou na lista de participantes.`,
       ),
     [mutate],
   );
 
   const reject = useCallback(
-    (participant: EventParticipant) =>
+    (participant: EventParticipantItem) =>
       mutate(
         participant,
         'REJECTED',
-        `Solicitação de ${participant.name} recusada.`,
+        `Solicitação de ${participant.user.name ?? 'Usuário'} recusada.`,
       ),
     [mutate],
   );
 
   const remove = useCallback(
-    (participant: EventParticipant) =>
+    (participant: EventParticipantItem) =>
       mutate(
         participant,
         'REMOVED',
-        `${participant.name} saiu da lista de participantes.`,
+        `${participant.user.name ?? 'Usuário'} saiu da lista de participantes.`,
       ),
     [mutate],
   );
@@ -220,8 +244,8 @@ export function useEventParticipants(eventId: string | undefined) {
     /** Contadores da resposta, ajustados nas mutações sem novo `GET`. */
     confirmedCount,
     pendingCount,
-    /** `false` para uma lista visível sem permissão de gestão. */
-    canManage,
+    /** `false` para pendentes não carregados (sem permissão, ou nem pedidos). */
+    pendingVisible,
     isLoading: isLoading || Boolean(eventId && loadedEventId !== eventId),
     error,
     isFull,

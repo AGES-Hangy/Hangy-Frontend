@@ -10,13 +10,19 @@ export type EventPrivacy = 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY';
 
 export type EventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'FINISHED';
 
-export type ParticipationStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'REMOVED';
+export type ParticipationStatus =
+  | 'INVITED'
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'REMOVED';
 
 /**
  * Ação principal do rodapé do detalhe. Vem pronta da API justamente para a
  * tela não precisar deduzir de `privacy` + `participation_status`.
  */
-export type ViewerAction = 'CONFIRM' | 'CANCEL' | 'REQUEST' | 'SHARE' | 'NONE';
+export type ViewerAction = 'CONFIRM' | 'CANCEL' | 'REQUEST' | 'SHARE' | 'MANAGE' | 'NONE';
 
 export type UserType = 'PERSONAL' | 'BUSINESS';
 
@@ -77,16 +83,30 @@ export interface EventParticipant {
   requested_at?: string | null;
 }
 
-export interface ParticipantsResponse {
-  confirmed: EventParticipant[];
-  pending: EventParticipant[];
-  confirmed_count: number;
-  pending_count: number;
-  /**
-   * `false` quando a API responde 403 em pendentes: a tela esconde a seção
-   * inteira em vez de mostrar e negar.
-   */
-  can_manage: boolean;
+/**
+ * Item de `GET /events/{event_id}/participants` — bem mais magro que
+ * `EventParticipant` (o preview do detalhe): sem `avatar_url` nem
+ * `user_type`, e `user.name` pode vir `null`.
+ */
+export interface EventParticipantItem {
+  participant_id: string;
+  user: { id: string; name: string | null };
+  status: ParticipationStatus;
+  /** Quando o registro nasceu — é o "pediu para participar" de um pendente. */
+  joined_at: string;
+}
+
+/**
+ * `GET /events/{event_id}/participants` devolve só confirmados por padrão;
+ * pendentes exigem `?status=PENDING` numa segunda chamada, e só o organizador
+ * pode pedir. Por isso não existe um `can_manage` aqui — quem decide isso é
+ * `EventViewer.is_organizer`, do detalhe do evento.
+ */
+export interface ParticipantsPage {
+  items: EventParticipantItem[];
+  /** A chave `PENDING` só vem quando quem pediu é o organizador. */
+  counts: Partial<Record<'CONFIRMED' | 'PENDING', number>>;
+  next_cursor: string | null;
 }
 
 export interface EventShare {

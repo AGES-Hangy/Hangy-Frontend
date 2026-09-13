@@ -1,4 +1,10 @@
-import type { EventDetail, EventParticipant, EventShare, ParticipantsResponse } from '@/types/event';
+import type {
+  EventDetail,
+  EventParticipant,
+  EventParticipantItem,
+  EventShare,
+  ParticipantsPage,
+} from '@/types/event';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
@@ -164,16 +170,37 @@ function detalhe(eventId: string): EventDetail {
   };
 }
 
-function participantes(eventId: string): ParticipantsResponse {
-  // 403 nos pendentes: a tela só pode mostrar os confirmados.
-  const podeGerenciar = eventId !== 'forbidden' && eventId !== 'guest' && eventId !== 'private';
+/** A API real não manda `avatar_url`/`user_type` nesta lista — só no preview do detalhe. */
+function paraItem(pessoa: EventParticipant): EventParticipantItem {
+  return {
+    participant_id: pessoa.participant_id,
+    user: { id: pessoa.user_id, name: pessoa.name },
+    status: pessoa.status,
+    joined_at: pessoa.requested_at ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Espelha `GET /events/{id}/participants`: sem `status` devolve confirmados;
+ * `status=PENDING` exige ser organizador (o cenário `forbidden` simula a
+ * negativa mesmo sendo organizador, pra testar que a seção só some).
+ */
+function participantes(eventId: string, statusFiltro: string | null): ParticipantsPage {
+  const pedindoPendentes = statusFiltro === 'PENDING';
+  if (pedindoPendentes && eventId === 'forbidden') {
+    throw new MockApiError(403, 'Only the organizer can list pending participants');
+  }
+
+  const ehOrganizador = eventId !== 'guest' && eventId !== 'private';
+  const items = pedindoPendentes ? db.pending : db.confirmed;
+
+  const counts: ParticipantsPage['counts'] = { CONFIRMED: db.confirmed.length };
+  if (ehOrganizador) counts.PENDING = db.pending.length;
 
   return {
-    confirmed: db.confirmed,
-    pending: podeGerenciar ? db.pending : [],
-    confirmed_count: db.confirmed.length,
-    pending_count: podeGerenciar ? db.pending.length : 0,
-    can_manage: podeGerenciar,
+    items: items.map(paraItem),
+    counts,
+    next_cursor: null,
   };
 }
 
@@ -234,7 +261,8 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
 
   if (partes[0] === 'events' && partes[2] === 'participants' && partes.length === 3) {
     erroDoCenario(eventId);
-    return participantes(eventId) as T;
+    const statusFiltro = new URLSearchParams(path.split('?')[1] ?? '').get('status');
+    return participantes(eventId, statusFiltro) as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'share' && partes.length === 3 && method === 'GET') {
@@ -242,10 +270,18 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return compartilhar(eventId) as T;
   }
 
-  if (partes[0] === 'events' && partes[2] === 'cancel' && method === 'POST') {
+  if (partes[0] === 'events' && partes[2] === 'cancel' && method === 'PATCH') {
     if (eventId === 'finished') throw new MockApiError(409, 'Event already finished');
+
+    // Espelha o `CancelEventInput` do backend: `reason` obrigatório, 1-1000 caracteres.
+    const body = init.body ? JSON.parse(String(init.body)) : {};
+    const reason = typeof body.reason === 'string' ? body.reason : '';
+    if (reason.length < 1 || reason.length > 1000) {
+      throw new MockApiError(422, 'Invalid cancellation reason');
+    }
+
     db.cancelled = true;
-    return { status: 'CANCELLED' } as T;
+    return { event_id: eventId, status: 'CANCELLED', updated_at: new Date().toISOString() } as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'participants' && partes.length === 4) {

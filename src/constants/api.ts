@@ -19,10 +19,18 @@ export const USE_API_MOCKS = __DEV__ && process.env.EXPO_PUBLIC_USE_API_MOCKS ==
 /** Quanto esperar por uma resposta antes de desistir. */
 export const API_TIMEOUT_MS = 15000;
 
+/** Maior `limit` aceito por `GET /participants` — a tela não pagina, então pede a página cheia. */
+const PARTICIPANTS_PAGE_LIMIT = 100;
+
 /** Rotas da API de eventos. */
 export const endpoints = {
   event: (eventId: string) => `/events/${eventId}`,
-  eventParticipants: (eventId: string) => `/events/${eventId}/participants`,
+  /** Sem `status`, a API devolve confirmados; `status=PENDING` exige ser o organizador. */
+  eventParticipants: (eventId: string, status?: 'PENDING') => {
+    const params = new URLSearchParams({ limit: String(PARTICIPANTS_PAGE_LIMIT) });
+    if (status) params.set('status', status);
+    return `/events/${eventId}/participants?${params.toString()}`;
+  },
   eventCancel: (eventId: string) => `/events/${eventId}/cancel`,
   eventShare: (eventId: string) => `/events/${eventId}/share`,
   eventParticipant: (eventId: string, participantId: string) =>

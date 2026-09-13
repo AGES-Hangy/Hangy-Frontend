@@ -54,6 +54,8 @@ export function Dialog({
   description,
   confirmLabel,
   isLoading = false,
+  children,
+  confirmDisabled = false,
 }: DialogProps) {
   const variantConfig = VARIANTS[variant];
   const config = {
@@ -98,18 +100,19 @@ export function Dialog({
                 {config.title}
               </Text>
               <Text style={styles.description}>{config.description}</Text>
+              {children && <View style={styles.extra}>{children}</View>}
               <View style={styles.actions}>
                 <Pressable
                   onPress={onConfirm}
-                  disabled={isLoading}
+                  disabled={isLoading || confirmDisabled}
                   accessibilityRole="button"
                   accessibilityLabel={config.confirmLabel}
-                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
+                  accessibilityState={{ disabled: isLoading || confirmDisabled, busy: isLoading }}
                   style={({ pressed }) => [
                     styles.button,
                     styles.confirm,
                     config.destructive && styles.destructive,
-                    pressed && !isLoading && styles.pressed,
+                    pressed && !isLoading && !confirmDisabled && styles.pressed,
                   ]}
                 >
                   {isLoading ? (
@@ -168,6 +171,7 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: spacing[8],
   },
+  extra: { marginTop: spacing[16] },
   actions: { marginTop: spacing[24], gap: spacing[4] },
   button: {
     minHeight: spacing[48],
