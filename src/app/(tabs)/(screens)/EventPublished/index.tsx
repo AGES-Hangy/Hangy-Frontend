@@ -1,5 +1,6 @@
 import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { EventCard } from '@/components/EventCard';
@@ -10,13 +11,28 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useTopAppBar } from '@/hooks/useTopAppBar';
 
 export default function EventoPublicado() {
-  const { eventId, privacy } = useLocalSearchParams<{ eventId: string; privacy: EventPrivacy }>();
+  const { eventId, privacy, tagNames } = useLocalSearchParams<{
+    eventId: string;
+    privacy: EventPrivacy;
+    tagNames?: string;
+  }>();
+  const insets = useSafeAreaInsets();
   const { data, isLoading, error } = useEventShare(eventId);
 
+  // O frame possui cabeçalho próprio; sem isto a TopAppBar padrão apareceria
+  // acima dele e duplicaria a navegação.
+  useTopAppBar(null);
+
   function handleClose() {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/Home');
   }
 
   async function handleShare() {
@@ -29,7 +45,19 @@ export default function EventoPublicado() {
   }
 
   function handleViewEvent() {
-    router.push({ pathname: '/Event/[id]', params: { id: eventId } });
+    if (!data || !eventId) return;
+
+    router.push({
+      pathname: '/EventDetail',
+      params: {
+        id: eventId,
+        title: data.title,
+        eventDate: data.event_date,
+        location: data.location_name,
+        imageUrl: data.cover_photo_url ?? '',
+        privacy: privacy ?? 'PUBLIC',
+      },
+    });
   }
 
   const event: Event | null = data
@@ -38,14 +66,14 @@ export default function EventoPublicado() {
         title: data.title,
         date: data.event_date,
         location: data.location_name,
-        imageUrl: data.cover_photo_url,
-        privacy,
+        imageUrl: data.cover_photo_url ?? '',
+        privacy: privacy ?? 'PUBLIC',
       }
     : null;
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing[12] }]}>
         <IconButton icon="x" accessibilityLabel="Fechar" variant="Ghost" onPress={handleClose} />
         <Text style={styles.headerTitle}>Evento publicado</Text>
       </View>
@@ -70,15 +98,16 @@ export default function EventoPublicado() {
 
           <Text style={styles.title}>Seu evento está no ar</Text>
           <Text style={styles.subtitle}>
-            &quot;{event.title}&quot; já aparece no feed de quem segue os interesses do evento e no
-            mapa Ao Vivo no dia do evento.
+            &quot;{event.title}&quot; já aparece no feed
+            {tagNames ? ` de quem tem as tags ${formatTagNames(tagNames)},` : ''} e no mapa Ao Vivo
+            no dia do evento.
           </Text>
 
           <EventCard variant="Compact" event={event} onPress={handleViewEvent} />
         </ScrollView>
       )}
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[24] }]}>
         <Button
           label="Compartilhar link"
           icon="share-2"
@@ -86,6 +115,7 @@ export default function EventoPublicado() {
           size="LG"
           accessibilityLabel="Compartilhar link do evento"
           onPress={handleShare}
+          disabled={!data}
           style={styles.fullWidth}
         />
         <Button
@@ -94,6 +124,7 @@ export default function EventoPublicado() {
           size="LG"
           accessibilityLabel="Ver o evento"
           onPress={handleViewEvent}
+          disabled={!data}
           style={styles.fullWidth}
         />
       </View>
@@ -140,3 +171,14 @@ const styles = StyleSheet.create({
   },
   fullWidth: { alignSelf: 'stretch' },
 });
+
+function formatTagNames(value: string) {
+  const tags = value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  if (tags.length < 2) return tags[0] ?? '';
+  if (tags.length === 2) return `${tags[0]} e ${tags[1]}`;
+  return `${tags.slice(0, -1).join(', ')} e ${tags.at(-1)}`;
+}

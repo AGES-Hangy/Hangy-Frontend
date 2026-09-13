@@ -9,8 +9,8 @@ import type { TopAppBarProps } from '@/components/TopAppBar';
 const DEFAULT_BAR: TopAppBarProps = { variant: 'Home' };
 
 const TopAppBarContext = createContext<{
-  bar: TopAppBarProps;
-  setBar: (bar: TopAppBarProps | null) => void;
+  bar: TopAppBarProps | null | undefined;
+  setBar: (bar: TopAppBarProps | null | undefined) => void;
 } | null>(null);
 
 /**
@@ -20,11 +20,12 @@ const TopAppBarContext = createContext<{
  * barra que a tela tinha acabado de pedir.
  */
 export function TopAppBarProvider({ children }: { children: ReactNode }) {
-  const [bar, setBarState] = useState<TopAppBarProps | null>(null);
+  // `undefined` significa a barra padrão; `null`, nenhuma barra.
+  const [bar, setBarState] = useState<TopAppBarProps | null | undefined>(undefined);
 
   const value = useMemo(
     () => ({
-      bar: bar ?? DEFAULT_BAR,
+      bar,
       setBar: setBarState,
     }),
     [bar],
@@ -36,7 +37,9 @@ export function TopAppBarProvider({ children }: { children: ReactNode }) {
 /** Renderiza a barra da tela em foco. É o `header` do `(tabs)/_layout.tsx`. */
 export function TopAppBarSlot() {
   const context = useContext(TopAppBarContext);
-  return <TopAppBar {...(context?.bar ?? DEFAULT_BAR)} />;
+  const bar = context?.bar;
+  if (bar === null) return null;
+  return <TopAppBar {...(bar ?? DEFAULT_BAR)} />;
 }
 
 /**
@@ -47,11 +50,11 @@ export function TopAppBarSlot() {
  * Sem isto vale o padrão (a barra da Home) — só as telas que fogem dele
  * chamam o hook.
  */
-export function useTopAppBar(props: TopAppBarProps) {
+export function useTopAppBar(props: TopAppBarProps | null) {
   const context = useContext(TopAppBarContext);
   const setBar = context?.setBar;
 
-  const { variant, title, unreadCount, showBack } = props;
+  const { variant, title, unreadCount, showBack } = props ?? {};
 
   // Depende só dos valores que mudam a aparência: `action` e as callbacks
   // trocam de identidade a cada render e reexecutariam o efeito à toa.
@@ -68,7 +71,7 @@ export function useTopAppBar(props: TopAppBarProps) {
   useFocusEffect(
     useCallback(() => {
       setBar?.(bar);
-      return () => setBar?.(null);
+      return () => setBar?.(undefined);
     }, [setBar, bar]),
   );
 }
