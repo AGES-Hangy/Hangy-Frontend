@@ -89,8 +89,12 @@ export function useCreateEventStep2() {
       });
 
       if (response.status === 400) {
-        const json = (await response.json()) as { detail: string };
-        setPublishError(json.detail);
+        const json = (await response.json()) as { detail?: string };
+        setPublishError(
+          json.detail === 'Event date must be in the future'
+            ? 'Essa data já passou. Escolha o dia de hoje ou uma data futura.'
+            : json.detail || 'Não foi possível criar o evento',
+        );
         return null;
       }
 

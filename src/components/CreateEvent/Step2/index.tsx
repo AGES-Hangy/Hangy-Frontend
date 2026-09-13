@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  type LayoutChangeEvent,
+  type ScrollView,
   StyleSheet,
   Text,
   View,
@@ -23,9 +23,9 @@ const PRIVACY_ITEMS = [
 ] as const;
 
 const PRIVACY_DESCRIPTION: Record<Privacy, string> = {
-  PUBLIC: 'Aparece no feed e no Ao Vivo para quem estiver por perto.',
-  PRIVATE: 'Só aparece para quem você convidar diretamente.',
-  INVITE_ONLY: 'Só aparece para quem receber o link ou convite.',
+  PUBLIC: 'Qualquer pessoa pode ver o evento e confirmar presença.',
+  PRIVATE: 'Qualquer pessoa pode ver o evento, mas precisa solicitar entrada e aguardar sua aprovação.',
+  INVITE_ONLY: 'Só aparece para pessoas convidadas; não entra no feed nem na busca.',
 };
 
 export type Step2Handle = {
@@ -34,8 +34,9 @@ export type Step2Handle = {
 
 export type Step2Props = {
   data: CreateEventFormData;
-  onChangeDate: (v: Date) => void;
-  onChangeTime: (v: Date) => void;
+  scrollRef: React.RefObject<ScrollView | null>;
+  onChangeDate: (v: Date | null) => void;
+  onChangeTime: (v: Date | null) => void;
   onChangeLocation: (v: string) => void;
   onChangeParticipantLimit: (v: number) => void;
   onChangeUnlimited: (v: boolean) => void;
@@ -44,18 +45,14 @@ export type Step2Props = {
   publishError: string | null;
 };
 
-type MissingField = 'dateRow' | 'location';
+type MissingField = 'dateRow' | 'location' | 'privacy';
 
 const FIELD_SCROLL_MARGIN = spacing[16];
 
 function isFutureDate(date: Date | null, time: Date | null): boolean {
-  if (!date) return true;
+  if (!date || !time) return true;
   const combined = new Date(date);
-  if (time) {
-    combined.setHours(time.getHours(), time.getMinutes(), 0, 0);
-  } else {
-    combined.setHours(0, 0, 0, 0);
-  }
+  combined.setHours(time.getHours(), time.getMinutes(), 0, 0);
   return combined.getTime() > Date.now();
 }
 
@@ -71,6 +68,7 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
 export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
   {
     data,
+    scrollRef,
     onChangeDate,
     onChangeTime,
     onChangeLocation,
@@ -84,40 +82,49 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 ) {
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  const fieldPositions = useRef<Record<MissingField, number>>({
-    dateRow: 0,
-    location: 0,
-  });
+  const dateRowRef = useRef<View>(null);
+  const locationRef = useRef<View>(null);
+  const privacyRef = useRef<View>(null);
 
   const isDateMissing = !data.date;
   const isTimeMissing = !data.time;
   const isLocationMissing = data.location.trim().length === 0;
+  const isInviteeMissing = data.privacy === 'INVITE_ONLY' && data.inviteeIds.length === 0;
   const isDateInPast = data.date !== null && !isFutureDate(data.date, data.time);
 
   const showDateRowError = submitAttempted && (isDateMissing || isTimeMissing || isDateInPast);
   const showLocationError = submitAttempted && isLocationMissing;
 
-  const rememberPosition = (field: MissingField) => (event: LayoutChangeEvent) => {
-    fieldPositions.current[field] = event.nativeEvent.layout.y;
-  };
-
   useImperativeHandle(ref, () => ({
     submit: () => {
       setSubmitAttempted(true);
 
-      if (isDateMissing || isDateInPast || isTimeMissing || isLocationMissing) {
+      if (isDateMissing || isDateInPast || isTimeMissing || isLocationMissing || isInviteeMissing) {
         const firstMissing: MissingField =
-          isDateMissing || isDateInPast || isTimeMissing ? 'dateRow' : 'location';
+          isDateMissing || isDateInPast || isTimeMissing
+            ? 'dateRow'
+            : isLocationMissing ? 'location' : 'privacy';
 
         const messages: string[] = [];
         if (isDateMissing) messages.push('data');
         else if (isDateInPast) messages.push('data futura');
         if (isTimeMissing) messages.push('horário');
         if (isLocationMissing) messages.push('local');
+        if (isInviteeMissing) messages.push('ao menos um convidado');
 
         requestAnimationFrame(() => {
-          const targetY = Math.max(fieldPositions.current[firstMissing] - FIELD_SCROLL_MARGIN, 0);
-          void targetY;
+          const scroll = scrollRef.current;
+          const contentNode = scroll?.getInnerViewNode();
+          const field = {
+            dateRow: dateRowRef,
+            location: locationRef,
+            privacy: privacyRef,
+          }[firstMissing].current;
+          if (scroll && contentNode && field) {
+            field.measureLayout(contentNode, (_x, y) => {
+              scroll.scrollTo({ y: Math.max(y - FIELD_SCROLL_MARGIN, 0), animated: true });
+            });
+          }
           AccessibilityInfo.announceForAccessibility(`Preencha: ${messages.join(', ')}.`);
         });
 
@@ -137,7 +144,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         </View>
       ) : null}
 
-      <View onLayout={rememberPosition('dateRow')}>
+      <View ref={dateRowRef}>
         <View style={styles.dateRow}>
           <View style={styles.dateField}>
             <FieldLabel label="Data do evento" required />
@@ -175,25 +182,29 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
               {isDateInPast
                 ? 'Essa data já passou. Escolha o dia de hoje ou uma data futura.'
                 : isDateMissing
-                  ? 'Selecione uma data.'
-                  : 'Selecione um horário.'}
+                  ? 'Informe uma data válida.'
+                  : 'Informe um horário válido.'}
             </Text>
           </View>
         ) : null}
       </View>
 
-      <View onLayout={rememberPosition('location')}>
+      <View ref={locationRef}>
         <FieldLabel label="Local" required />
         <TextField
           type="Location"
           value={data.location}
           onChangeText={onChangeLocation}
           placeholder="Digite o local do evento"
+          maxLength={120}
           error={showLocationError ? 'Informe o local do evento' : undefined}
           reserveMessageSpace
           accessibilityLabel="Local do evento, obrigatório"
           disabled={isPublishing}
         />
+        <Text style={[typography.bodyS, styles.locationNotice]}>
+          A seleção de locais ainda não está disponível; publicar ficará bloqueado.
+        </Text>
       </View>
 
       <ParticipantLimit
@@ -204,7 +215,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         disabled={isPublishing}
       />
 
-      <View style={styles.section}>
+      <View ref={privacyRef} style={styles.section}>
         <Text style={[typography.labelM, styles.fieldLabel]}>Visibilidade</Text>
 
         <ProfileTabs
@@ -216,6 +227,14 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         <Text style={[typography.bodyS, { color: colors.text.secondary, marginTop: spacing[8] }]}>
           {PRIVACY_DESCRIPTION[data.privacy]}
         </Text>
+        {data.privacy === 'INVITE_ONLY' && (
+          <Text
+            style={[typography.bodyS, { color: submitAttempted ? palette.error.default : colors.text.secondary }]}
+            accessibilityRole={submitAttempted ? 'alert' : undefined}
+          >
+            A seleção de convidados ainda não está disponível. Escolha Público ou Privado para continuar.
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -251,6 +270,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing[4],
+    marginTop: spacing[4],
+  },
+  locationNotice: {
+    color: colors.text.secondary,
     marginTop: spacing[4],
   },
   section: {

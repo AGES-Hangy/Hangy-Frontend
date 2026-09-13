@@ -58,6 +58,30 @@ function formatDateValue(date: Date, mode: 'date' | 'time'): string {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
 }
 
+function parseDateValue(value: string, mode: 'date' | 'time'): Date | null {
+  if (mode === 'time') {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) return null;
+    const result = new Date();
+    result.setHours(hours, minutes, 0, 0);
+    return result;
+  }
+
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const result = new Date(year, month - 1, day);
+  if (result.getFullYear() !== year || result.getMonth() !== month - 1 || result.getDate() !== day) {
+    return null;
+  }
+  return result;
+}
+
 type TypeConfig = {
   leadingIcon?: IconName;
   trailingIcon?: IconName;
@@ -230,6 +254,7 @@ export function TextField({
   const [focused, setFocused] = useState(false);
   const [isSecureHidden, setIsSecureHidden] = useState(true);
   const [isIosPickerOpen, setIsIosPickerOpen] = useState(false);
+  const [webDateDraft, setWebDateDraft] = useState<string | null>(null);
 
   const isDateField = type === 'Date';
   // Campo de horário mostra relógio, não calendário. O Figma só desenhou o
@@ -242,8 +267,9 @@ export function TextField({
 
   // O texto mostrado é o `value` quando a tela controla a formatação, e a data
   // formatada quando ela só passa o `dateValue`.
-  const displayedValue =
-    isDateField && value.length === 0 && dateValue
+  const displayedValue = isDateField && Platform.OS === 'web'
+    ? webDateDraft ?? (dateValue ? formatDateValue(dateValue, dateMode) : value)
+    : isDateField && value.length === 0 && dateValue
       ? formatDateValue(dateValue, dateMode)
       : value;
 
@@ -344,7 +370,12 @@ export function TextField({
             config.multiline && styles.inputMultiline,
           ]}
           value={displayedValue}
-          onChangeText={onChangeText}
+          onChangeText={isDateField && Platform.OS === 'web'
+            ? (text) => {
+                setWebDateDraft(text);
+                onChangeDate?.(parseDateValue(text, dateMode));
+              }
+            : onChangeText}
           placeholder={placeholder}
           placeholderTextColor={disabled ? colors.text.disabled : colors.text.tertiary}
           editable={editable && !disabled}
@@ -353,14 +384,17 @@ export function TextField({
           pointerEvents={editable ? 'auto' : 'none'}
           multiline={config.multiline}
           secureTextEntry={config.secure && isSecureHidden}
-          keyboardType={config.keyboardType}
-          maxLength={maxLength}
+          keyboardType={isDateField && Platform.OS === 'web' ? 'numbers-and-punctuation' : config.keyboardType}
+          maxLength={isDateField && Platform.OS === 'web' ? (dateMode === 'time' ? 5 : 10) : maxLength}
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
           }}
           onBlur={(event) => {
             setFocused(false);
+            if (isDateField && Platform.OS === 'web' && webDateDraft && parseDateValue(webDateDraft, dateMode)) {
+              setWebDateDraft(null);
+            }
             onBlur?.(event);
           }}
           accessibilityLabel={accessibilityLabel ?? label}

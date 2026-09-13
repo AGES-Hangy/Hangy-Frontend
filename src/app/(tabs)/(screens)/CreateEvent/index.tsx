@@ -1,16 +1,21 @@
 import { useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
-import { colors } from '@/constants/colors';
+import { Icon } from '@/components/Icon';
+import { colors, palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
+import { typography } from '@/constants/typography';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
 
@@ -28,6 +33,7 @@ const EMPTY_FORM: CreateEventFormData = {
   date: null,
   time: null,
   location: '',
+  locationCoordinates: null,
   participantLimit: 10,
   unlimited: false,
   privacy: 'PUBLIC',
@@ -35,7 +41,8 @@ const EMPTY_FORM: CreateEventFormData = {
 };
 
 export default function CreateEvent() {
-  useTopAppBar({ variant: 'Modal', title: 'Criar evento' });
+  const [publishedTitle, setPublishedTitle] = useState<string | null>(null);
+  useTopAppBar({ variant: 'Modal', title: publishedTitle ? 'Evento publicado' : 'Criar evento' });
 
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -44,7 +51,7 @@ export default function CreateEvent() {
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<CreateEventFormData>(EMPTY_FORM);
   const [submitCount, setSubmitCount] = useState(0);
-  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const missing = useMemo(() => validateStep1(form), [form.title, form.tagIds]);
 
@@ -61,17 +68,34 @@ export default function CreateEvent() {
     });
 
   const handleContinue = () => {
+    setLocalError(null);
     setSubmitCount((c) => c + 1);
-    if (isUploadingCover) return;
     if (missing.length === 0) {
       setStep(2);
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     }
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
+    setLocalError(null);
     const valid = step2Ref.current?.submit();
     if (!valid) return;
+
+    const showLocalError = (message: string) => {
+      setLocalError(message);
+      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+      AccessibilityInfo.announceForAccessibility(message);
+    };
+
+    if (form.coverUri) {
+      showLocalError('Remova a capa para publicar sem imagem. O envio de capas ainda não está disponível.');
+      return;
+    }
+
+    if (!form.locationCoordinates) {
+      showLocalError('Não é possível publicar sem confirmar o local. A seleção de locais ainda não está disponível.');
+      return;
+    }
 
     const eventDate = new Date(form.date!);
     if (form.time) {
@@ -79,20 +103,39 @@ export default function CreateEvent() {
     }
     const endDate = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
 
-    void publishEvent({
+    const result = await publishEvent({
       title: form.title,
       description: form.description || null,
-      cover_photo_url: form.coverUri,
+      cover_photo_url: null,
       tag_ids: form.tagIds,
       event_date: eventDate.toISOString(),
       end_date: endDate.toISOString(),
-      // TODO: substituir por geocoding real do campo location (task futura)
-      location: { latitude: 0, longitude: 0 },
+      location: form.locationCoordinates,
       location_name: form.location || null,
       max_participants: form.unlimited ? null : form.participantLimit,
       privacy: form.privacy,
     });
+    if (result) setPublishedTitle(result.title);
   };
+
+  if (publishedTitle) {
+    return (
+      <View style={styles.successScreen}>
+        <View style={styles.successContent}>
+          <View style={styles.successIcon}>
+            <Icon name="circle-check" size={32} color={palette.success.default} />
+          </View>
+          <Text style={[typography.h2, styles.successTitle]}>Seu evento está no ar</Text>
+          <Text style={[typography.bodyM, styles.successDescription]}>
+            O evento “{publishedTitle}” foi publicado com sucesso.
+          </Text>
+        </View>
+        <View style={[styles.successFooter, { paddingBottom: spacing[16] + insets.bottom }]}>
+          <Button label="Ir para o início" onPress={() => router.replace('/Home')} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -119,20 +162,20 @@ export default function CreateEvent() {
               onChangeDescription={setDescription}
               onChangeCover={setCoverUri}
               onToggleTag={toggleTag}
-              onUploadingChange={setIsUploadingCover}
             />
           ) : (
             <Step2
               ref={step2Ref}
               data={form}
+              scrollRef={scrollRef}
               onChangeDate={(v) => setForm((f) => ({ ...f, date: v }))}
               onChangeTime={(v) => setForm((f) => ({ ...f, time: v }))}
-              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v }))}
+              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: null }))}
               onChangeParticipantLimit={(v) => setForm((f) => ({ ...f, participantLimit: v }))}
               onChangeUnlimited={(v) => setForm((f) => ({ ...f, unlimited: v }))}
               onChangePrivacy={(v: Privacy) => setForm((f) => ({ ...f, privacy: v }))}
               isPublishing={isPublishing}
-              publishError={publishError}
+              publishError={localError ?? publishError}
             />
           )}
         </ScrollView>
@@ -146,18 +189,21 @@ export default function CreateEvent() {
               variant="Secondary"
               size="LG"
               style={styles.backButton}
-              onPress={() => setStep(1)}
+              onPress={() => {
+                setLocalError(null);
+                setStep(1);
+              }}
               disabled={isPublishing}
               accessibilityLabel="Voltar para a etapa anterior"
             />
           )}
           <Button
-            label={step === 1 ? 'Continuar' : isPublishing ? 'Publicando...' : 'Publicar'}
+            label={step === 1 ? 'Continuar' : 'Publicar'}
             variant="Primary"
             size="LG"
             style={styles.primaryButton}
             onPress={step === 1 ? handleContinue : handlePublish}
-            disabled={isPublishing}
+            isLoading={step === 2 && isPublishing}
           />
         </View>
       </KeyboardAvoidingView>
@@ -195,5 +241,33 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 2,
+  },
+  successScreen: {
+    flex: 1,
+    backgroundColor: colors.bg.base,
+  },
+  successContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[24],
+  },
+  successIcon: {
+    backgroundColor: palette.success.bg,
+    borderRadius: 32,
+    padding: spacing[16],
+    marginBottom: spacing[24],
+  },
+  successTitle: {
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  successDescription: {
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing[8],
+  },
+  successFooter: {
+    padding: spacing[16],
   },
 });

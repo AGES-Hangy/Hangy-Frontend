@@ -7,7 +7,7 @@ export type CreateEventFormData = {
   // Etapa 1
   title: string;
   description: string;
-  /** URI local da capa. */
+  /** URI local da capa, usada somente para prévia até existir upload real. */
   coverUri: string | null;
   /** IDs de tags (macro e micro), no máximo 5. */
   tagIds: string[];
@@ -15,6 +15,8 @@ export type CreateEventFormData = {
   date: Date | null;
   time: Date | null;
   location: string;
+  /** Coordenadas de um local selecionado e confirmado, nunca inferidas do texto. */
+  locationCoordinates: { latitude: number; longitude: number } | null;
   participantLimit: number;
   unlimited: boolean;
   privacy: Privacy;
