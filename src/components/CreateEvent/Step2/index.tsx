@@ -82,6 +82,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 ) {
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
+  const containerRef = useRef<View>(null);
   const dateRowRef = useRef<View>(null);
   const locationRef = useRef<View>(null);
   const privacyRef = useRef<View>(null);
@@ -114,7 +115,11 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 
         requestAnimationFrame(() => {
           const scroll = scrollRef.current;
-          const contentNode = scroll?.getInnerViewNode();
+          // O próprio container do Step2, não `scroll.getInnerViewNode()`: na
+          // New Architecture (Fabric) esse método devolve um número de tag
+          // nativa, e `measureLayout` exige uma ref de componente nativo —
+          // passar o número faz a chamada virar no-op silencioso.
+          const contentNode = containerRef.current;
           const field = {
             dateRow: dateRowRef,
             location: locationRef,
@@ -136,7 +141,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
   }));
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} ref={containerRef}>
       {publishError ? (
         <View style={styles.errorBanner} accessibilityRole="alert">
           <Icon name="triangle-alert" size={16} color={palette.error.default} />
@@ -202,9 +207,6 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
           accessibilityLabel="Local do evento, obrigatório"
           disabled={isPublishing}
         />
-        <Text style={[typography.bodyS, styles.locationNotice]}>
-          A seleção de locais ainda não está disponível; publicar ficará bloqueado.
-        </Text>
       </View>
 
       <ParticipantLimit
@@ -227,14 +229,6 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         <Text style={[typography.bodyS, { color: colors.text.secondary, marginTop: spacing[8] }]}>
           {PRIVACY_DESCRIPTION[data.privacy]}
         </Text>
-        {data.privacy === 'INVITE_ONLY' && (
-          <Text
-            style={[typography.bodyS, { color: submitAttempted ? palette.error.default : colors.text.secondary }]}
-            accessibilityRole={submitAttempted ? 'alert' : undefined}
-          >
-            A seleção de convidados ainda não está disponível. Escolha Público ou Privado para continuar.
-          </Text>
-        )}
       </View>
     </View>
   );

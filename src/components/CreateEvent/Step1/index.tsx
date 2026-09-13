@@ -41,6 +41,7 @@ export function Step1({
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
   const { pickImage, error: coverError } = useImageUpload();
 
+  const containerRef = useRef<View>(null);
   const titleRef = useRef<View>(null);
   const tagsRef = useRef<View>(null);
   const fieldRefs: Record<MissingField, React.RefObject<View | null>> = {
@@ -77,8 +78,13 @@ export function Step1({
     const scroll = scrollRef.current;
     // Content container, não o nó externo: na web o `measureLayout` do RNW
     // devolve `y` relativo à viewport, já descontado o scroll atual, e o alvo
-    // sairia errado com a página rolada.
-    const contentNode = scroll?.getInnerViewNode();
+    // sairia errado com a página rolada. E não `scroll.getInnerViewNode()`
+    // para chegar nesse container: na New Architecture (Fabric) esse método
+    // devolve um número de tag nativa, e `measureLayout` exige uma ref de
+    // componente nativo — passar o número faz a chamada virar no-op
+    // silencioso. Como o Step1 é o único filho do ScrollView, sua própria
+    // raiz já é esse container.
+    const contentNode = containerRef.current;
     if (!node || !scroll || !contentNode) return;
 
     // Medido agora, e não no `onLayout`: o ErrorSummary entra acima dos campos
@@ -95,7 +101,7 @@ export function Step1({
   };
 
   return (
-    <View>
+    <View ref={containerRef}>
       {showSummary ? <ErrorSummary missing={missing} /> : null}
 
       <View style={styles.field} ref={titleRef}>
