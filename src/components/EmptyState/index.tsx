@@ -47,10 +47,18 @@ const EMPTY_STATE_CONFIG: Record<EmptyStateContext, EmptyStateConfig> = {
   },
 };
 
-export function EmptyState({ context, cta = false, ctaLabel, onCtaPress }: EmptyStateProps) {
+export function EmptyState({
+  context,
+  cta = false,
+  ctaLabel,
+  onCtaPress,
+  title,
+  text: textOverride,
+}: EmptyStateProps) {
   const config = EMPTY_STATE_CONFIG[context];
   const Icon = icons[config.icon];
-  const text = config.textByCta ? config.textByCta[cta ? 'true' : 'false'] : config.text;
+  const text =
+    textOverride ?? (config.textByCta ? config.textByCta[cta ? 'true' : 'false'] : config.text);
   const resolvedCtaLabel = ctaLabel ?? config.defaultCtaLabel;
 
   if (__DEV__ && cta && !resolvedCtaLabel) {
@@ -69,7 +77,7 @@ export function EmptyState({ context, cta = false, ctaLabel, onCtaPress }: Empty
       </View>
 
       <Text style={styles.title} accessibilityRole="header">
-        {config.title}
+        {title ?? config.title}
       </Text>
 
       <Text style={styles.text}>{text}</Text>
