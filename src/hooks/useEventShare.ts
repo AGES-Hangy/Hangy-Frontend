@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
+import { Share } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
 import type { EventShare } from '@/types/event';
 import { apiFetch } from '@/utils/http';
 import { describeActionError } from '@/utils/apiErrors';
+import { formatDateTime } from '@/utils/datetime';
 
 /**
  * Link compartilhável do evento — `GET /events/{event_id}/share` (task de
@@ -33,5 +35,20 @@ export function useEventShare(eventId: string | undefined) {
     }
   }, [addToast, eventId]);
 
-  return { getShare, isLoading };
+  const share = useCallback(async () => {
+    const data = await getShare();
+    if (!data) return;
+
+    try {
+      await Share.share({
+        title: data.title,
+        message: `${data.title} — ${formatDateTime(data.event_date)} · ${data.location_name}\n${data.web_url}`,
+        url: data.web_url,
+      });
+    } catch {
+      addToast({ type: 'error', message: 'Não foi possível abrir o compartilhamento' });
+    }
+  }, [addToast, getShare]);
+
+  return { getShare, share, isLoading };
 }

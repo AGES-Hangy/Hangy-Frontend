@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import { endpoints } from '@/constants/api';
 import type { EventDetail } from '@/types/event';
@@ -41,9 +42,11 @@ export function useEvent(eventId: string | undefined) {
     }
   }, [eventId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // A gestão muda participantes e contadores. Ao voltar ao detalhe, o foco
+  // dispara um novo GET para não mostrar a resposta anterior à aprovação.
+  useFocusEffect(useCallback(() => {
+    void load();
+  }, [load]));
 
   return { event, isLoading, error, reload: load };
 }

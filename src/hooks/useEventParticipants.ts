@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
@@ -21,10 +21,12 @@ import type { LoadError } from '@/utils/apiErrors';
  * `GET`, como a task pede.
  */
 
-/** Instantâneo das listas, para desfazer uma ação otimista que falhou. */
-interface Snapshot {
-  confirmed: EventParticipant[];
-  pending: EventParticipant[];
+/** Restaura só a pessoa da mutação que falhou, preservando outras ações. */
+function restoreAt(list: EventParticipant[], person: EventParticipant, index: number) {
+  if (list.some((item) => item.participant_id === person.participant_id)) return list;
+  const next = [...list];
+  next.splice(Math.min(index, next.length), 0, person);
+  return next;
 }
 
 export function useEventParticipants(eventId: string | undefined) {
@@ -32,19 +34,32 @@ export function useEventParticipants(eventId: string | undefined) {
 
   const [confirmed, setConfirmed] = useState<EventParticipant[]>([]);
   const [pending, setPending] = useState<EventParticipant[]>([]);
+  const [confirmedCount, setConfirmedCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
   const [canManage, setCanManage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedEventId, setLoadedEventId] = useState<string>();
   const [error, setError] = useState<LoadError | null>(null);
 
   /** Ids com um `PATCH` em voo — cada card olha o seu. */
   const [processing, setProcessing] = useState<ReadonlySet<string>>(new Set());
+  const inFlight = useRef(new Set<string>());
   /** `409 Event is full`: aprovar fica desabilitado em todos os pendentes. */
   const [isFull, setIsFull] = useState(false);
   /** Evento encerrado ou sem permissão: a tela vira somente leitura. */
   const [isReadOnly, setIsReadOnly] = useState(false);
 
   const load = useCallback(async () => {
-    if (!eventId) return;
+    if (!eventId) {
+      setLoadedEventId(undefined);
+      setConfirmed([]);
+      setPending([]);
+      setConfirmedCount(0);
+      setPendingCount(0);
+      setCanManage(false);
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -53,20 +68,33 @@ export function useEventParticipants(eventId: string | undefined) {
       const data = await apiFetch<ParticipantsResponse>(endpoints.eventParticipants(eventId));
       setConfirmed(data.confirmed);
       setPending(data.pending);
+      setConfirmedCount(data.confirmed_count);
+      setPendingCount(data.pending_count);
       setCanManage(data.can_manage);
     } catch (caught) {
-      // 403 ao listar pendentes não é erro de tela: é "você só pode ver os
-      // confirmados". A seção some e o resto continua.
+      // Um 403 no GET inteiro não traz confirmados para exibir. Não manter
+      // uma lista antiga nem fingir que o evento está vazio.
       const load403 =
         typeof caught === 'object' && caught !== null && (caught as { status?: number }).status === 403;
 
       if (load403) {
+        // Sem resposta não há lista de confirmados confiável para manter.
+        setConfirmed([]);
         setCanManage(false);
         setPending([]);
+        setConfirmedCount(0);
+        setPendingCount(0);
+        setError({
+          kind: 'unavailable',
+          title: 'Participantes indisponíveis',
+          message: 'Você não pode ver os participantes deste evento.',
+          canRetry: false,
+        });
       } else {
         setError(describeLoadError(caught));
       }
     } finally {
+      setLoadedEventId(eventId);
       setIsLoading(false);
     }
   }, [eventId]);
@@ -93,17 +121,33 @@ export function useEventParticipants(eventId: string | undefined) {
     async (
       participant: EventParticipant,
       status: EventParticipant['status'],
-      applyOptimistic: (snapshot: Snapshot) => Snapshot,
       successMessage: string | null,
     ) => {
-      if (!eventId) return;
+      const participantId = participant.participant_id;
+      if (!eventId || !canManage || isReadOnly || inFlight.current.has(participantId)) return;
 
-      const snapshot: Snapshot = { confirmed, pending };
-      const optimistic = applyOptimistic(snapshot);
+      inFlight.current.add(participantId);
+      const wasPending = status !== 'REMOVED';
+      const originalIndex = (wasPending ? pending : confirmed).findIndex(
+        (p) => p.participant_id === participantId,
+      );
+      if (originalIndex < 0) {
+        inFlight.current.delete(participantId);
+        return;
+      }
 
-      setConfirmed(optimistic.confirmed);
-      setPending(optimistic.pending);
-      markProcessing(participant.participant_id, true);
+      if (wasPending) {
+        setPending((current) => current.filter((p) => p.participant_id !== participantId));
+        setPendingCount((current) => current - 1);
+      } else {
+        setConfirmed((current) => current.filter((p) => p.participant_id !== participantId));
+        setConfirmedCount((current) => current - 1);
+      }
+      if (status === 'CONFIRMED') {
+        setConfirmed((current) => [...current, { ...participant, status }]);
+        setConfirmedCount((current) => current + 1);
+      }
+      markProcessing(participantId, true);
 
       try {
         await apiFetch(endpoints.eventParticipant(eventId, participant.participant_id), {
@@ -113,9 +157,19 @@ export function useEventParticipants(eventId: string | undefined) {
 
         if (successMessage) addToast({ type: 'success', message: successMessage });
       } catch (caught) {
-        // Rollback: a API recusou, então a lista volta ao que era.
-        setConfirmed(snapshot.confirmed);
-        setPending(snapshot.pending);
+        // Reverte apenas esta pessoa: restaurar um snapshot completo apagaria
+        // o sucesso de outra ação que terminou enquanto esta estava em voo.
+        if (status === 'CONFIRMED') {
+          setConfirmed((current) => current.filter((p) => p.participant_id !== participantId));
+          setConfirmedCount((current) => current - 1);
+        }
+        if (wasPending) {
+          setPending((current) => restoreAt(current, participant, originalIndex));
+          setPendingCount((current) => current + 1);
+        } else {
+          setConfirmed((current) => restoreAt(current, participant, originalIndex));
+          setConfirmedCount((current) => current + 1);
+        }
 
         const failure = describeActionError(caught);
         if (failure.message) addToast({ type: failure.tone, message: failure.message });
@@ -123,10 +177,11 @@ export function useEventParticipants(eventId: string | undefined) {
         if (failure.readOnly) setIsReadOnly(true);
         if (failure.shouldReload) load();
       } finally {
-        markProcessing(participant.participant_id, false);
+        inFlight.current.delete(participantId);
+        markProcessing(participantId, false);
       }
     },
-    [addToast, confirmed, eventId, load, markProcessing, pending],
+    [addToast, canManage, confirmed, eventId, isReadOnly, load, markProcessing, pending],
   );
 
   const approve = useCallback(
@@ -134,12 +189,6 @@ export function useEventParticipants(eventId: string | undefined) {
       mutate(
         participant,
         'CONFIRMED',
-        (snapshot) => ({
-          pending: snapshot.pending.filter(
-            (p) => p.participant_id !== participant.participant_id,
-          ),
-          confirmed: [...snapshot.confirmed, { ...participant, status: 'CONFIRMED' }],
-        }),
         `${participant.name} entrou na lista de participantes.`,
       ),
     [mutate],
@@ -150,12 +199,6 @@ export function useEventParticipants(eventId: string | undefined) {
       mutate(
         participant,
         'REJECTED',
-        (snapshot) => ({
-          confirmed: snapshot.confirmed,
-          pending: snapshot.pending.filter(
-            (p) => p.participant_id !== participant.participant_id,
-          ),
-        }),
         `Solicitação de ${participant.name} recusada.`,
       ),
     [mutate],
@@ -166,12 +209,6 @@ export function useEventParticipants(eventId: string | undefined) {
       mutate(
         participant,
         'REMOVED',
-        (snapshot) => ({
-          pending: snapshot.pending,
-          confirmed: snapshot.confirmed.filter(
-            (p) => p.participant_id !== participant.participant_id,
-          ),
-        }),
         `${participant.name} saiu da lista de participantes.`,
       ),
     [mutate],
@@ -180,12 +217,12 @@ export function useEventParticipants(eventId: string | undefined) {
   return {
     confirmed,
     pending,
-    /** Contadores locais: já refletem a última ação, sem novo `GET`. */
-    confirmedCount: confirmed.length,
-    pendingCount: pending.length,
-    /** `false` quando a API nega os pendentes — a seção nem é renderizada. */
+    /** Contadores da resposta, ajustados nas mutações sem novo `GET`. */
+    confirmedCount,
+    pendingCount,
+    /** `false` para uma lista visível sem permissão de gestão. */
     canManage,
-    isLoading,
+    isLoading: isLoading || Boolean(eventId && loadedEventId !== eventId),
     error,
     isFull,
     isReadOnly,

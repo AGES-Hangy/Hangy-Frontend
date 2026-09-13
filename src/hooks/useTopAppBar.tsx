@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFocusEffect } from 'expo-router';
 
@@ -68,13 +68,20 @@ export function useTopAppBar(props: TopAppBarProps | null) {
 
   const { variant, title, unreadCount, showBack } = props ?? {};
   const hidden = props === null;
+  const action = props?.action;
+  const actionRef = useRef(action);
+  actionRef.current = action;
 
-  // Depende só dos valores que mudam a aparência: `action` e as callbacks
-  // trocam de identidade a cada render e reexecutariam o efeito à toa.
+  // A barra fica no contexto enquanto a tela está em foco. A callback lê a
+  // ação mais recente, inclusive após o GET, sem reinstalar a barra a cada
+  // render nem capturar `event = null` da primeira montagem.
   const bar = useMemo<BarState>(
-    () => (props === null ? 'hidden' : props),
+    () => (props === null ? 'hidden' : {
+      ...props,
+      action: action ? { ...action, onPress: () => actionRef.current?.onPress?.() } : undefined,
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hidden, variant, title, unreadCount, showBack],
+    [hidden, variant, title, unreadCount, showBack, action?.icon, action?.accessibilityLabel],
   );
 
   // No foco, e não na montagem: numa tab bar as telas continuam montadas ao

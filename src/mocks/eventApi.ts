@@ -133,12 +133,13 @@ function detalhe(eventId: string): EventDetail {
     event_id: eventId,
     title: 'Futebol na PUC',
     description: DESCRICAO,
-    event_date: '2026-10-30T16:00:00Z',
-    end_date: '2026-10-30T19:00:00Z',
+    // O frame mostra 16:00 em Porto Alegre (UTC-3).
+    event_date: '2026-10-30T19:00:00Z',
+    end_date: '2026-10-30T22:00:00Z',
     location: { latitude: -30.0577, longitude: -51.1738 },
     location_name: 'DRY Moments',
-    privacy: ehPrivado ? 'PRIVATE' : 'INVITE_ONLY',
-    status: db.cancelled ? 'CANCELLED' : 'PUBLISHED',
+    privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
+    status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
     cover_photo_url: 'https://picsum.photos/seed/hangy-evento/900/600',
     tags: [
       { id: 't1', name: 'Esportes' },
@@ -165,7 +166,7 @@ function detalhe(eventId: string): EventDetail {
 
 function participantes(eventId: string): ParticipantsResponse {
   // 403 nos pendentes: a tela só pode mostrar os confirmados.
-  const podeGerenciar = eventId !== 'forbidden';
+  const podeGerenciar = eventId !== 'forbidden' && eventId !== 'guest' && eventId !== 'private';
 
   return {
     confirmed: db.confirmed,

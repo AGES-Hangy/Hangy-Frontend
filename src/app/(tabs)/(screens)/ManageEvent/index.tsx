@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,9 +20,10 @@ import { typography } from '@/constants/typography';
 import { useCancelEvent } from '@/hooks/useCancelEvent';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventParticipants } from '@/hooks/useEventParticipants';
+import { useEventShare } from '@/hooks/useEventShare';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { EventParticipant } from '@/types/event';
-import { formatDateTime, formatRelativeTime } from '@/utils/datetime';
+import { formatRelativeTime } from '@/utils/datetime';
 
 /** Confirmação aberta no momento — no máximo uma por vez. */
 type Confirmation =
@@ -45,8 +46,13 @@ export default function ManageEvent() {
   const { addToast } = useToast();
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload: reloadEvent } = useEvent(id);
-  const participants = useEventParticipants(id);
-  const { cancelEvent, isLoading: isCancelling } = useCancelEvent(id);
+  const canSeeParticipants = Boolean(
+    event && event.event_id === id &&
+    (event.viewer.is_organizer || event.viewer.can_see_participants),
+  );
+  const participants = useEventParticipants(canSeeParticipants ? id : undefined);
+  const { cancelEvent, isLoading: isCancelling, isReadOnly: cancelReadOnly } = useCancelEvent(id);
+  const { share } = useEventShare(id);
 
   /**
    * Qual confirmação está aberta. É um estado só, e não um booleano por
@@ -56,22 +62,20 @@ export default function ManageEvent() {
    */
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
 
-  const share = useCallback(async () => {
-    if (!event) return;
-    await Share.share({
-      title: event.title,
-      message: `${event.title} — ${formatDateTime(event.event_date)} · ${event.location_name}`,
-    });
-  }, [event]);
+  // O GET dos participantes pode permitir ver confirmados sem dar permissão
+  // de gestão. Exigimos também o papel do detalhe, mesmo em acesso direto.
+  const canManage = Boolean(event?.viewer.is_organizer && participants.canManage);
 
   useTopAppBar({
     variant: 'Detail',
-    title: 'Gerenciar evento',
-    action: { icon: 'share', accessibilityLabel: 'Compartilhar evento', onPress: share },
+    title: canManage ? 'Gerenciar evento' : 'Participantes',
+    action: canManage
+      ? { icon: 'share', accessibilityLabel: 'Compartilhar evento', onPress: share }
+      : undefined,
   });
 
   async function onConfirm() {
-    if (!confirmation) return;
+    if (!confirmation || !canManage) return;
 
     if (confirmation.kind === 'removeParticipant') {
       participants.remove(confirmation.participant);
@@ -110,11 +114,27 @@ export default function ManageEvent() {
     );
   }
 
-  const isLocked = participants.isReadOnly;
+  if (!canSeeParticipants) {
+    return (
+      <View style={styles.errorScreen}>
+        <EmptyState
+          context="MyEvents"
+          title="Participantes indisponíveis"
+          text="A lista de participantes deste evento não está disponível para você."
+          cta
+          ctaLabel="Voltar"
+          onCtaPress={router.back}
+        />
+      </View>
+    );
+  }
+
+  const isLocked = participants.isReadOnly || cancelReadOnly ||
+    event?.status === 'FINISHED' || event?.status === 'CANCELLED';
   const dialogCopy = describeConfirmation(confirmation, participants.confirmedCount);
   // A seção de pendentes não é renderizada quando a API nega — esconder é
   // melhor do que mostrar e negar no toque.
-  const showPending = participants.canManage && participants.pendingCount > 0;
+  const showPending = canManage && participants.pendingCount > 0;
 
   return (
     <View style={styles.screen}>
@@ -139,7 +159,7 @@ export default function ManageEvent() {
           </View>
         )}
 
-        {isLocked && (
+        {canManage && isLocked && (
           <View style={styles.section}>
             <View style={styles.lockedBanner}>
               <Icon
@@ -174,9 +194,9 @@ export default function ManageEvent() {
                   unread
                   isProcessing={participants.isProcessing(person.participant_id)}
                   // Evento lotado desabilita só o aprovar; recusar continua.
-                  approveDisabled={participants.isFull || isLocked}
-                  onApprove={() => participants.approve(person)}
-                  onReject={() => participants.reject(person)}
+                  approveDisabled={participants.isFull}
+                  onApprove={isLocked ? undefined : () => participants.approve(person)}
+                  onReject={isLocked ? undefined : () => participants.reject(person)}
                 />
               ))}
             </View>
@@ -206,7 +226,9 @@ export default function ManageEvent() {
                   avatarUri={person.avatar_url}
                   onPress={() => router.push(`/Profile?userId=${person.user_id}&name=${person.name}`)}
                   onRemove={
-                    isLocked ? undefined : () => setConfirmation({ kind: "removeParticipant", participant: person })
+                    !canManage || isLocked
+                      ? undefined
+                      : () => setConfirmation({ kind: 'removeParticipant', participant: person })
                   }
                   removeDisabled={participants.isProcessing(person.participant_id)}
                 />
@@ -216,25 +238,27 @@ export default function ManageEvent() {
         </View>
       </ScrollView>
 
-      <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[20] }]}>
-        <Button
-          label="Editar evento"
-          variant="Secondary"
-          disabled={isLocked}
-          onPress={() =>
-            // A tela de edição é a US3.3; o botão já está no frame desta.
-            addToast({ type: 'info', message: 'A edição do evento chega com a US3.3.' })
-          }
-          style={styles.actionButton}
-        />
-        <Button
-          label="Cancelar evento"
-          variant="Danger"
-          disabled={isLocked}
-          onPress={() => setConfirmation({ kind: "cancelEvent" })}
-          style={styles.actionButton}
-        />
-      </View>
+      {canManage && (
+        <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[20] }]}>
+          <Button
+            label="Editar evento"
+            variant="Secondary"
+            disabled={isLocked}
+            onPress={() =>
+              // A tela de edição é a US3.3; o botão já está no frame desta.
+              addToast({ type: 'info', message: 'A edição do evento chega com a US3.3.' })
+            }
+            style={styles.actionButton}
+          />
+          <Button
+            label="Cancelar evento"
+            variant="Danger"
+            disabled={isLocked}
+            onPress={() => setConfirmation({ kind: 'cancelEvent' })}
+            style={styles.actionButton}
+          />
+        </View>
+      )}
 
       <Dialog
         visible={confirmation !== null}

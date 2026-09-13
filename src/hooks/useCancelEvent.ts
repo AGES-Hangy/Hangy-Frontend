@@ -15,6 +15,7 @@ import { describeActionError } from '@/utils/apiErrors';
 export function useCancelEvent(eventId: string | undefined) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   const cancelEvent = useCallback(async (): Promise<boolean> => {
     if (!eventId) return false;
@@ -28,11 +29,12 @@ export function useCancelEvent(eventId: string | undefined) {
     } catch (caught) {
       const failure = describeActionError(caught);
       if (failure.message) addToast({ type: failure.tone, message: failure.message });
+      if (failure.readOnly) setIsReadOnly(true);
       return false;
     } finally {
       setIsLoading(false);
     }
   }, [addToast, eventId]);
 
-  return { cancelEvent, isLoading };
+  return { cancelEvent, isLoading, isReadOnly };
 }
