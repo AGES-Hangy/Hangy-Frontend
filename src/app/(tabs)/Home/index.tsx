@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
 import { EventCard } from '@/components/EventCard';
@@ -9,11 +9,11 @@ import { colors, palette } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useFeed, type FeedSection } from '@/hooks/useFeed';
+import { useRefreshable } from '@/hooks/useRefreshable';
 
-// EditInterests e SearchResults ainda não existem na base. Essas ações ficam
-// desabilitadas até as telas serem integradas.
 export default function Home() {
-  const { sections, isLoading, error, isOffline, reload } = useFeed();
+  const { sections, isLoading, error, isOffline, reload, refresh } = useFeed();
+  const { isRefreshing, onRefresh } = useRefreshable(refresh);
 
   if (isLoading) {
     return <FeedSkeleton />;
@@ -60,6 +60,14 @@ export default function Home() {
         contentContainerStyle={styles.feedContent}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.action.primary}
+            colors={[colors.action.primary]}
+          />
+        }
       />
     </View>
   );
