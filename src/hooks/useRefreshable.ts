@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function useRefreshable(refetch: () => Promise<boolean | void>) {
+export function useRefreshable(refresh: () => Promise<void>) {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const requestIdRef = useRef(0);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -12,15 +11,10 @@ export function useRefreshable(refetch: () => Promise<boolean | void>) {
   }, []);
 
   const onRefresh = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
     setIsRefreshing(true);
-
-    await refetch();
-
-    if (!isMountedRef.current || requestId !== requestIdRef.current) return;
-
-    setIsRefreshing(false);
-  }, [refetch]);
+    await refresh();
+    if (isMountedRef.current) setIsRefreshing(false);
+  }, [refresh]);
 
   return { isRefreshing, onRefresh };
 }
