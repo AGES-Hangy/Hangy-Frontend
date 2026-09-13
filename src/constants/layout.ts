@@ -35,6 +35,11 @@ export const spacing = {
  */
 export const pressedOpacity = 0.85;
 export const layout = {
+  emptyState: {
+    illustrationSize: 96,
+    textMaxWidth: 260,
+    ctaHeight: 52,
+  },
   badge: {
     height: 24,
     paddingHorizontal: 10,
@@ -71,6 +76,7 @@ export const layout = {
     mapPreviewHeight: 96,
     mapImageSize: 80,
     miniWidth: 172,
+    miniHeight: 226,
     miniImageHeight: 96,
     /** Pilha de avatares do rodapé de `Featured` e `Mini` — Avatar Person XS (24), passo 16 (overlap 8). */
     footerAvatarSize: 24,

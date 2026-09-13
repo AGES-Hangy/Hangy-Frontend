@@ -5,6 +5,8 @@ export interface EmptyStateProps {
   cta?: boolean;
   ctaLabel?: string;
   onCtaPress?: () => void;
+  ctaAtBottom?: boolean;
+  ctaDisabled?: boolean;
   /**
    * Sobrescreve o título do `context`. Existe para os casos em que a mensagem
    * vem do servidor e não de um estado fixo do app — evento cancelado, evento

@@ -5,6 +5,8 @@ export interface SectionHeaderProps {
   variant?: 'title' | 'overline';
   /** Mostra ou esconde o link de ação (padrão: false) */
   action?: boolean;
+  /** Mantém a ação visível enquanto a tela de destino ainda não está disponível. */
+  actionDisabled?: boolean;
   /** Texto do link de ação. Padrão: "Ver todos" */
   actionLabel?: string;
   /** Callback do link — a tela decide para onde navegar, o componente não hardcoda rota */
