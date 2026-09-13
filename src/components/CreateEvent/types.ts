@@ -1,13 +1,27 @@
 /** Máximo de tags (macro e micro) que um evento pode ter — regra da US. */
 export const MAX_TAGS = 5;
 
+export type Privacy = 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY';
+
 export type CreateEventFormData = {
+  // Etapa 1
   title: string;
   description: string;
-  /** URI local da capa. Não há endpoint de upload ainda. */
+  /** URI local da capa, usada somente para prévia até existir upload real. */
   coverUri: string | null;
-  /** Ids de tags (macro e micro), no máximo 5. */
+  /** IDs de tags (macro e micro), no máximo 5. */
   tagIds: string[];
+  // Etapa 2
+  date: Date | null;
+  time: Date | null;
+  location: string;
+  /** Coordenadas de um local selecionado e confirmado, nunca inferidas do texto. */
+  locationCoordinates: { latitude: number; longitude: number } | null;
+  participantLimit: number;
+  unlimited: boolean;
+  privacy: Privacy;
+  /** IDs dos usuários convidados — obrigatório quando privacy = INVITE_ONLY. */
+  inviteeIds: string[];
 };
 
 /** Campo obrigatório pendente na etapa 1. */

@@ -86,7 +86,7 @@ export type TextFieldProps = {
   /** `Type=Date`: data selecionada, que alimenta o picker nativo. */
   dateValue?: Date;
   /** `Type=Date`: chamado quando o usuário confirma uma data no picker. */
-  onChangeDate?: (date: Date) => void;
+  onChangeDate?: (date: Date | null) => void;
   /** `Type=Date`: seletor de data (padrão) ou de hora. */
   dateMode?: 'date' | 'time';
   /** `Type=Date`: limites do seletor. */

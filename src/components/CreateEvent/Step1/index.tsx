@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, type ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, type ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
 import { spacing } from '@/constants/layout';
+import { colors } from '@/constants/colors';
+import { typography } from '@/constants/typography';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useTags } from '@/hooks/useTags';
 
@@ -24,8 +26,6 @@ type Step1Props = {
   onChangeDescription: (value: string) => void;
   onChangeCover: (uri: string | null) => void;
   onToggleTag: (id: string) => void;
-  /** O container precisa saber para não avançar com a capa ainda subindo. */
-  onUploadingChange: (isUploading: boolean) => void;
 };
 
 export function Step1({
@@ -37,25 +37,9 @@ export function Step1({
   onChangeDescription,
   onChangeCover,
   onToggleTag,
-  onUploadingChange,
 }: Step1Props) {
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
-  const {   pickImage, upload, cancel, isLoading: isUploadingCover, progress, error: coverError,
-} = useImageUpload();
-
-  // Se a pessoa avança para a etapa 2 com um upload em curso, este componente
-  // desmonta e o upload seguiria rodando sem ninguém para receber o resultado.
-  // O efeito sem array de dependências mantém o ref apontando para o `cancel`
-  // do render atual, em vez de mutá-lo durante o render.
-  const cancelRef = useRef(cancel);
-  useEffect(() => {
-    cancelRef.current = cancel;
-  });
-  useEffect(() => () => cancelRef.current?.(), []);
-
-  useEffect(() => {
-    onUploadingChange(isUploadingCover);
-  }, [isUploadingCover]);
+  const { pickImage, error: coverError } = useImageUpload();
 
   const titleRef = useRef<View>(null);
   const tagsRef = useRef<View>(null);
@@ -82,11 +66,6 @@ export function Step1({
   useEffect(() => {
     if (submitCount === 0) return;
 
-    if (isUploadingCover) {
-      AccessibilityInfo.announceForAccessibility('Aguarde o envio da capa terminar.');
-      return;
-    }
-
     if (missing.length === 0) return;
 
     AccessibilityInfo.announceForAccessibility(describeMissing(missing));
@@ -112,10 +91,7 @@ export function Step1({
 
   const handlePickCover = async () => {
     const picked = await pickImage();
-    if (!picked) return;
-
-    const result = await upload(picked);
-    if (result) onChangeCover(result.url);
+    if (picked) onChangeCover(picked.uri);
   };
 
   return (
@@ -157,12 +133,15 @@ export function Step1({
           label="Capa"
           badge="Opcional"
           value={data.coverUri ? { uri: data.coverUri } : null}
-          progress={progress}
           error={coverError ?? undefined}
           onPick={handlePickCover}
           onRemove={() => onChangeCover(null)}
-          onCancel={cancel}
         />
+        {data.coverUri && (
+          <Text style={styles.coverNotice}>
+            Capa selecionada apenas para prévia. Remova-a para publicar sem capa; o envio de imagens ainda não está disponível.
+          </Text>
+        )}
       </View>
 
       <View style={styles.field} ref={tagsRef}>
@@ -183,5 +162,10 @@ export function Step1({
 const styles = StyleSheet.create({
   field: {
     marginBottom: spacing[24],
+  },
+  coverNotice: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+    marginTop: spacing[8],
   },
 });
