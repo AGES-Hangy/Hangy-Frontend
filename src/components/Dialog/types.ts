@@ -1,4 +1,4 @@
-export type DialogVariant = 'LeaveEvent' | 'DeleteEvent' | 'SendRequest';
+export type DialogVariant = 'LeaveEvent' | 'DeleteEvent' | 'SendRequest' | 'DiscardEvent';
 
 export type DialogProps = {
   visible: boolean;

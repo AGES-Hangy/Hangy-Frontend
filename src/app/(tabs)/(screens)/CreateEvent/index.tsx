@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
+import { Dialog } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { colors, palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
@@ -42,7 +43,7 @@ const EMPTY_FORM: CreateEventFormData = {
 
 export default function CreateEvent() {
   const [publishedTitle, setPublishedTitle] = useState<string | null>(null);
-  useTopAppBar({ variant: 'Modal', title: publishedTitle ? 'Evento publicado' : 'Criar evento' });
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -52,6 +53,35 @@ export default function CreateEvent() {
   const [form, setForm] = useState<CreateEventFormData>(EMPTY_FORM);
   const [submitCount, setSubmitCount] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // A tela é uma aba de `Tabs` (ver (tabs)/_layout.tsx) e continua montada ao
+  // trocar de aba — sem isto, sair e reabrir manteria o formulário preenchido
+  // ou, pior, cairia direto na tela de "evento publicado" de uma criação
+  // anterior.
+  const resetForm = useCallback(() => {
+    setForm(EMPTY_FORM);
+    setStep(1);
+    setSubmitCount(0);
+    setLocalError(null);
+    setPublishedTitle(null);
+  }, []);
+
+  const handleDiscard = useCallback(() => {
+    setShowDiscardConfirm(false);
+    resetForm();
+    router.back();
+  }, [resetForm]);
+
+  const handleLeavePublished = useCallback(() => {
+    resetForm();
+    router.back();
+  }, [resetForm]);
+
+  useTopAppBar({
+    variant: 'Modal',
+    title: publishedTitle ? 'Evento publicado' : 'Criar evento',
+    onBack: publishedTitle ? handleLeavePublished : () => setShowDiscardConfirm(true),
+  });
 
   const missing = useMemo(() => validateStep1(form), [form.title, form.tagIds]);
 
@@ -131,7 +161,13 @@ export default function CreateEvent() {
           </Text>
         </View>
         <View style={[styles.successFooter, { paddingBottom: spacing[16] + insets.bottom }]}>
-          <Button label="Ir para o início" onPress={() => router.replace('/Home')} />
+          <Button
+            label="Ir para o início"
+            onPress={() => {
+              resetForm();
+              router.replace('/Home');
+            }}
+          />
         </View>
       </View>
     );
@@ -170,7 +206,7 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               onChangeDate={(v) => setForm((f) => ({ ...f, date: v }))}
               onChangeTime={(v) => setForm((f) => ({ ...f, time: v }))}
-              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: null }))}
+              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: { latitude: 0, longitude: 0 } }))}
               onChangeParticipantLimit={(v) => setForm((f) => ({ ...f, participantLimit: v }))}
               onChangeUnlimited={(v) => setForm((f) => ({ ...f, unlimited: v }))}
               onChangePrivacy={(v: Privacy) => setForm((f) => ({ ...f, privacy: v }))}
@@ -207,6 +243,13 @@ export default function CreateEvent() {
           />
         </View>
       </KeyboardAvoidingView>
+
+      <Dialog
+        visible={showDiscardConfirm}
+        variant="DiscardEvent"
+        onConfirm={handleDiscard}
+        onCancel={() => setShowDiscardConfirm(false)}
+      />
     </View>
   );
 }

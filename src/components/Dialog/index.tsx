@@ -37,6 +37,12 @@ const VARIANTS = {
     confirmLabel: 'Enviar solicitação',
     destructive: false,
   },
+  DiscardEvent: {
+    title: 'Sair sem publicar?',
+    description: 'Os detalhes preenchidos serão perdidos.',
+    confirmLabel: 'Sair',
+    destructive: true,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({
