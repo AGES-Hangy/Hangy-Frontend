@@ -8,6 +8,15 @@ on:
     tags:
       - "*"
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: Branch to mirror
+        required: true
+        default: develop
+        type: choice
+        options:
+          - develop
+          - main
 
 permissions:
   contents: read
@@ -30,22 +39,22 @@ jobs:
 
       - name: Push changed ref to GitLab
         env:
-          GITLAB_USERNAME: ${{ vars.GITLAB_USERNAME }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           GITLAB_REPOSITORY: tools.ages.pucrs.br/2026-2/2jk-4jk/hangy/hangy-frontend.git
+          GITLAB_TARGET_BRANCH: ${{ inputs.target_branch }}
         shell: bash
         run: |
           set -euo pipefail
 
-          : "${GITLAB_USERNAME:?Repository variable GITLAB_USERNAME is required}"
           : "${GITLAB_TOKEN:?Repository secret GITLAB_TOKEN is required}"
 
-          gitlab_url="https://${GITLAB_USERNAME}:${GITLAB_TOKEN}@${GITLAB_REPOSITORY}"
+          git remote remove gitlab 2>/dev/null || true
+          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPOSITORY}"
 
           push_with_retry() {
             local attempt
             for attempt in 1 2 3; do
-              if git push "${gitlab_url}" "$@"; then
+              if git push gitlab "$@"; then
                 return 0
               fi
               if (( attempt == 3 )); then
@@ -57,12 +66,15 @@ jobs:
             done
           }
 
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            push_with_retry refs/remotes/origin/main:refs/heads/main
-            push_with_retry refs/remotes/origin/develop:refs/heads/develop
-            push_with_retry --tags
-          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
             push_with_retry "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
           else
-            push_with_retry "refs/remotes/origin/${GITHUB_REF_NAME}:refs/heads/${GITHUB_REF_NAME}"
+            branch="${GITHUB_REF_NAME}"
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              branch="${GITLAB_TARGET_BRANCH}"
+            fi
+
+            git fetch origin "${branch}"
+            git checkout -B "${branch}" "refs/remotes/origin/${branch}"
+            push_with_retry "refs/heads/${branch}:refs/heads/${branch}"
           fi
