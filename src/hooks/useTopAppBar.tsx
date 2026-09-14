@@ -71,17 +71,23 @@ export function useTopAppBar(props: TopAppBarProps | null) {
   const action = props?.action;
   const actionRef = useRef(action);
   actionRef.current = action;
+  const onBack = props?.onBack;
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
 
-  // A barra fica no contexto enquanto a tela está em foco. A callback lê a
-  // ação mais recente, inclusive após o GET, sem reinstalar a barra a cada
-  // render nem capturar `event = null` da primeira montagem.
+  // A barra fica no contexto enquanto a tela está em foco. As callbacks leem
+  // a versão mais recente de `action`/`onBack`, inclusive após o GET, sem
+  // reinstalar a barra a cada render nem capturar uma closure velha (ex.:
+  // `onBack` decidindo com base num estado que só existia na primeira
+  // montagem).
   const bar = useMemo<BarState>(
     () => (props === null ? 'hidden' : {
       ...props,
+      onBack: onBack ? () => onBackRef.current?.() : undefined,
       action: action ? { ...action, onPress: () => actionRef.current?.onPress?.() } : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hidden, variant, title, unreadCount, showBack, action?.icon, action?.accessibilityLabel],
+    [hidden, variant, title, unreadCount, showBack, Boolean(onBack), action?.icon, action?.accessibilityLabel],
   );
 
   // No foco, e não na montagem: numa tab bar as telas continuam montadas ao

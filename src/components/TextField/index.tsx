@@ -24,6 +24,17 @@ import { colors, palette } from '@/constants/colors';
 import { elevation, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
+/**
+ * No iOS, `lineHeight` customizado no `TextInput` faz o texto vir desalinhado
+ * e cortado embaixo (bug conhecido do RN, não reproduz no Android nem no
+ * web) — ali o texto digitado cai pro `lineHeight` natural da fonte; só
+ * afeta o valor digitado, os `<Text>` de label/mensagem continuam com a
+ * tipografia normal.
+ */
+const INPUT_TEXT_STYLE = Platform.OS === 'ios'
+  ? { ...typography.bodyL, lineHeight: undefined }
+  : typography.bodyL;
+
 /** Métricas da seção TextField da página Components do Figma. */
 const FIELD_HEIGHT = 56;
 const TEXT_AREA_HEIGHT = 120;
@@ -364,7 +375,7 @@ export function TextField({
 
         <TextInput
           style={[
-            typography.bodyL,
+            INPUT_TEXT_STYLE,
             styles.input,
             { color: visual.valueColor },
             config.multiline && styles.inputMultiline,

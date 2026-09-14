@@ -76,7 +76,7 @@ export function EmptyState({
 
   return (
     <View style={[styles.container, ctaAtBottom && styles.containerCtaAtBottom]} accessible={false}>
-      <View style={ctaAtBottom ? styles.centeredContent : undefined}>
+      <View style={[styles.body, ctaAtBottom && styles.centeredContent]}>
         <View style={styles.illustration} accessibilityElementsHidden importantForAccessibility="no">
           <Icon size={40} color={colors.action.primary} strokeWidth={2} />
         </View>
@@ -120,11 +120,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[16],
     paddingBottom: spacing[16],
   },
+  /**
+   * Sem isto, a `illustration` (largura fixa, menor que o texto) cai no
+   * `flex-start` do `stretch` padrão em vez de ficar centralizada — o título
+   * e o texto centralizam sozinhos via `textAlign`, mas o círculo não.
+   */
+  body: {
+    alignItems: 'center',
+    gap: spacing[12],
+  },
   centeredContent: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing[12],
   },
 
   illustration: {

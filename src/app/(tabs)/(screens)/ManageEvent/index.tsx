@@ -9,9 +9,9 @@ import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
-import { useToast } from '@/components/Toast';
 import { EventCard } from '@/components/EventCard';
 import { SectionHeader } from '@/components/SectionHeader';
+import { TextField } from '@/components/TextField';
 // Placeholder: `NotificationItem` ainda não está no develop (task 157, sprint futura).
 import { NotificationItem } from '@/components/_placeholders';
 import { colors, palette } from '@/constants/colors';
@@ -22,14 +22,17 @@ import { useEvent } from '@/hooks/useEvent';
 import { useEventParticipants } from '@/hooks/useEventParticipants';
 import { useEventShare } from '@/hooks/useEventShare';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
-import type { EventParticipant } from '@/types/event';
+import type { EventParticipantItem } from '@/types/event';
 import { formatRelativeTime } from '@/utils/datetime';
 
 /** Confirmação aberta no momento — no máximo uma por vez. */
 type Confirmation =
   | { kind: 'cancelEvent' }
-  | { kind: 'removeParticipant'; participant: EventParticipant }
+  | { kind: 'removeParticipant'; participant: EventParticipantItem }
   | null;
+
+/** Limite do backend para `CancelEventInput.reason` (1-1000 caracteres). */
+const CANCEL_REASON_MAX_LENGTH = 1000;
 
 /**
  * Gestão do evento — frames `Gerenciar meu evento`, `... - cancelar evento` e
@@ -43,14 +46,16 @@ type Confirmation =
 export default function ManageEvent() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
-  const { addToast } = useToast();
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload: reloadEvent } = useEvent(id);
   const canSeeParticipants = Boolean(
     event && event.event_id === id &&
     (event.viewer.is_organizer || event.viewer.can_see_participants),
   );
-  const participants = useEventParticipants(canSeeParticipants ? id : undefined);
+  const participants = useEventParticipants(
+    canSeeParticipants ? id : undefined,
+    Boolean(event?.viewer.is_organizer),
+  );
   const { cancelEvent, isLoading: isCancelling, isReadOnly: cancelReadOnly } = useCancelEvent(id);
   const { share } = useEventShare(id);
 
@@ -61,10 +66,12 @@ export default function ManageEvent() {
    * estado só existe um `Dialog` na árvore, e ele nunca fica ambíguo.
    */
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
+  /** Motivo do cancelamento — só importa enquanto `confirmation.kind === 'cancelEvent'`. */
+  const [cancelReason, setCancelReason] = useState('');
 
-  // O GET dos participantes pode permitir ver confirmados sem dar permissão
-  // de gestão. Exigimos também o papel do detalhe, mesmo em acesso direto.
-  const canManage = Boolean(event?.viewer.is_organizer && participants.canManage);
+  // A API de participantes não tem um "can_manage": quem decide se dá para
+  // gerenciar é só o papel do viewer no detalhe do evento.
+  const canManage = Boolean(event?.viewer.is_organizer);
 
   useTopAppBar({
     variant: 'Detail',
@@ -74,17 +81,25 @@ export default function ManageEvent() {
       : undefined,
   });
 
+  function closeConfirmation() {
+    setConfirmation(null);
+    setCancelReason('');
+  }
+
   async function onConfirm() {
     if (!confirmation || !canManage) return;
 
     if (confirmation.kind === 'removeParticipant') {
       participants.remove(confirmation.participant);
-      setConfirmation(null);
+      closeConfirmation();
       return;
     }
 
-    const cancelled = await cancelEvent();
-    setConfirmation(null);
+    const trimmedReason = cancelReason.trim();
+    if (!trimmedReason) return;
+
+    const cancelled = await cancelEvent(trimmedReason);
+    closeConfirmation();
     // Só sai da tela se o backend confirmou: com 409 o evento continua lá.
     if (cancelled) router.replace('/Profile');
   }
@@ -134,7 +149,7 @@ export default function ManageEvent() {
   const dialogCopy = describeConfirmation(confirmation, participants.confirmedCount);
   // A seção de pendentes não é renderizada quando a API nega — esconder é
   // melhor do que mostrar e negar no toque.
-  const showPending = canManage && participants.pendingCount > 0;
+  const showPending = participants.pendingVisible && participants.pendingCount > 0;
 
   return (
     <View style={styles.screen}>
@@ -188,9 +203,8 @@ export default function ManageEvent() {
               {participants.pending.map((person) => (
                 <NotificationItem
                   key={person.participant_id}
-                  title={person.name}
-                  subtitle={`pediu para participar · ${formatRelativeTime(person.requested_at)}`}
-                  avatarUri={person.avatar_url}
+                  title={person.user.name ?? 'Usuário'}
+                  subtitle={`pediu para participar · ${formatRelativeTime(person.joined_at)}`}
                   unread
                   isProcessing={participants.isProcessing(person.participant_id)}
                   // Evento lotado desabilita só o aprovar; recusar continua.
@@ -222,9 +236,10 @@ export default function ManageEvent() {
               {participants.confirmed.map((person) => (
                 <ParticipantRow
                   key={person.participant_id}
-                  name={person.name}
-                  avatarUri={person.avatar_url}
-                  onPress={() => router.push(`/Profile?userId=${person.user_id}&name=${person.name}`)}
+                  name={person.user.name ?? 'Usuário'}
+                  onPress={() =>
+                    router.push(`/Profile?userId=${person.user.id}&name=${person.user.name ?? 'Usuário'}`)
+                  }
                   onRemove={
                     !canManage || isLocked
                       ? undefined
@@ -244,10 +259,7 @@ export default function ManageEvent() {
             label="Editar evento"
             variant="Secondary"
             disabled={isLocked}
-            onPress={() =>
-              // A tela de edição é a US3.3; o botão já está no frame desta.
-              addToast({ type: 'info', message: 'A edição do evento chega com a US3.3.' })
-            }
+            onPress={() => router.push(`/EditEvent?id=${id}`)}
             style={styles.actionButton}
           />
           <Button
@@ -268,9 +280,24 @@ export default function ManageEvent() {
         confirmLabel={dialogCopy.confirmLabel}
         // Só o cancelamento espera a rede; remover é otimista e fecha na hora.
         isLoading={confirmation?.kind === 'cancelEvent' && isCancelling}
+        // O backend exige um motivo (1-1000 caracteres) para cancelar.
+        confirmDisabled={confirmation?.kind === 'cancelEvent' && cancelReason.trim().length === 0}
         onConfirm={onConfirm}
-        onCancel={() => setConfirmation(null)}
-      />
+        onCancel={closeConfirmation}
+      >
+        {confirmation?.kind === 'cancelEvent' && (
+          <TextField
+            type="TextArea"
+            label="Motivo do cancelamento"
+            required
+            placeholder="Explique por que o evento está sendo cancelado"
+            value={cancelReason}
+            onChangeText={setCancelReason}
+            maxLength={CANCEL_REASON_MAX_LENGTH}
+            disabled={isCancelling}
+          />
+        )}
+      </Dialog>
     </View>
   );
 }
@@ -283,7 +310,7 @@ export default function ManageEvent() {
 function describeConfirmation(confirmation: Confirmation, confirmedCount: number) {
   if (confirmation?.kind === 'removeParticipant') {
     return {
-      title: `Remover ${confirmation.participant.name}?`,
+      title: `Remover ${confirmation.participant.user.name ?? 'Usuário'}?`,
       description:
         'A pessoa deixa de constar na lista de participantes e é notificada da remoção.',
       confirmLabel: 'Remover',

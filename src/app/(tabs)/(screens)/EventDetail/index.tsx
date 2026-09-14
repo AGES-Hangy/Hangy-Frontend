@@ -41,12 +41,13 @@ const SCRIM_OPACITY = 0.82;
  */
 const MAIN_ACTION: Record<
   ViewerAction,
-  { label: string; variant: 'Primary' | 'Danger'; icon?: 'share' } | null
+  { label: string; variant: 'Primary' | 'Danger'; icon?: 'share' | 'settings' } | null
 > = {
   CONFIRM: { label: 'Confirmar presença', variant: 'Primary' },
   REQUEST: { label: 'Solicitar participação', variant: 'Primary' },
   CANCEL: { label: 'Cancelar presença', variant: 'Danger' },
   SHARE: { label: 'Compartilhar link', variant: 'Primary', icon: 'share' },
+  MANAGE: { label: 'Gerenciar evento', variant: 'Primary', icon: 'settings' },
   NONE: null,
 };
 
@@ -94,6 +95,11 @@ export default function EventDetail() {
   function onMainAction() {
     if (event!.viewer.available_action === 'SHARE') {
       share();
+      return;
+    }
+
+    if (event!.viewer.available_action === 'MANAGE') {
+      router.push(`/ManageEvent?id=${event!.event_id}`);
       return;
     }
 

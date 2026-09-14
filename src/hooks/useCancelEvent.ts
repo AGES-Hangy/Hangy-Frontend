@@ -6,7 +6,8 @@ import { apiFetch } from '@/utils/http';
 import { describeActionError } from '@/utils/apiErrors';
 
 /**
- * Cancelamento de um evento — `POST /events/{event_id}/cancel` (task 209).
+ * Cancelamento de um evento — `PATCH /events/{event_id}/cancel` (task 209).
+ * O backend exige um `reason` (1-1000 caracteres) no corpo.
  *
  * Devolve `true` só quando o backend confirmou; a tela usa isso para decidir
  * se navega para fora. Nada de otimismo aqui: cancelar avisa todo mundo e é
@@ -17,13 +18,16 @@ export function useCancelEvent(eventId: string | undefined) {
   const [isLoading, setIsLoading] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
 
-  const cancelEvent = useCallback(async (): Promise<boolean> => {
+  const cancelEvent = useCallback(async (reason: string): Promise<boolean> => {
     if (!eventId) return false;
 
     setIsLoading(true);
 
     try {
-      await apiFetch(endpoints.eventCancel(eventId), { method: 'POST' });
+      await apiFetch(endpoints.eventCancel(eventId), {
+        method: 'PATCH',
+        body: JSON.stringify({ reason }),
+      });
       addToast({ type: 'success', message: 'Evento cancelado. Os confirmados foram avisados.' });
       return true;
     } catch (caught) {

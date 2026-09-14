@@ -125,7 +125,7 @@ export function describeActionError(error: unknown): ActionError {
     };
   }
 
-  if (status === 400 && detail === 'Invalid status transition') {
+  if (status === 400 && detail === 'Invalid participant status transition') {
     return {
       message: 'Essa ação não é mais possível para este participante',
       tone: 'warning',

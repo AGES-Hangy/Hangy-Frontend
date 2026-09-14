@@ -25,10 +25,10 @@ type TagPickerProps = {
   onRetry: () => void;
 };
 /**
- * Divergência registrada de propósito: diferente do Figma, o chip da própria
- * categoria macro também é selecionável aqui. Ele conta no limite de 5 e não
- * seleciona os micros dele automaticamente. Quem for atualizar o Figma
- * depois precisa saber que a regra veio da task, não do design.
+ * A tag macro (ex.: "Esportes") só aparece como cabeçalho da seção — não dá
+ * pra selecioná-la. É assim no Figma, e bate com o próprio backend: quem
+ * cria o evento escolhe tags micro (ex.: "Futebol"), e é a API quem sobe
+ * isso pra categoria macro na Home (`FeedService._group_by_macro_tag`).
  */
 export function TagPicker({
   tags,
@@ -89,23 +89,10 @@ export function TagPicker({
         </View>
       ) : (
         tags.map((macro) => {
-          const isMacroSelected = selectedIds.includes(macro.id);
-
           return (
             <View key={macro.id} style={styles.section}>
               <Text style={styles.sectionHeader}>{macro.name.toUpperCase()}</Text>
               <View style={styles.chipRow}>
-                <Chip
-                  label={macro.name}
-                  categoryType="macro"
-                  size="md"
-                  isSelected={isMacroSelected}
-                  showRemoveIcon={isMacroSelected}
-                  disabled={!isMacroSelected && limitReached}
-                  onPress={() => onToggle(macro.id)}
-                  onRemove={() => onToggle(macro.id)}
-                  accessibilityLabel={chipLabel(macro.name, isMacroSelected)}
-                />
                 {macro.children.map((micro) => {
                   const isSelected = selectedIds.includes(micro.id);
                   return (

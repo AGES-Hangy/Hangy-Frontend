@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export type DialogVariant = 'LeaveEvent' | 'DeleteEvent' | 'SendRequest' | 'DiscardEvent';
 
 export type DialogProps = {
@@ -7,6 +9,19 @@ export type DialogProps = {
   onConfirm: () => void;
 
   onCancel: () => void;
+
+  /**
+   * Conteúdo extra entre a descrição e os botões — ex.: o campo de motivo do
+   * cancelamento de evento, que a variante fixa não tem como acomodar.
+   */
+  children?: ReactNode;
+
+  /**
+   * Desliga o botão de confirmar mesmo sem `isLoading`, para quando o
+   * `children` exige um preenchimento (ex.: motivo obrigatório) antes de
+   * liberar a ação.
+   */
+  confirmDisabled?: boolean;
 
   /**
    * Sobrescreve o título da variante. Existe para o texto que depende de dado
