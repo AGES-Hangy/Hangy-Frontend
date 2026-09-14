@@ -21,6 +21,8 @@ interface ApiFeedItem {
   cover_photo_url?: string | null;
   privacy: EventPrivacy;
   participants_count?: number;
+  /** Tag(s) do próprio evento que casaram com esta seção (ex.: "Futebol" em "Esportes"). */
+  tags?: { id: string; name: string }[];
 }
 
 interface ApiFeedSection {
@@ -55,7 +57,12 @@ function normalizeFeed(data: ApiFeedResponse): FeedSection[] {
         if (!second.event_date) return -1;
         return new Date(first.event_date).getTime() - new Date(second.event_date).getTime();
       })
-      .map((item) => ({ ...toEvent(item), tags: [section.tag.name] })),
+      .map((item) => ({
+        ...toEvent(item),
+        // A tag micro do próprio evento (ex.: "Futebol"); a macro da seção
+        // ("Esportes") já é o título da seção, repeti-la no card é redundante.
+        tags: item.tags?.length ? item.tags.map((tag) => tag.name) : [section.tag.name],
+      })),
     hasMore: section.has_more ?? false,
   }));
 }
