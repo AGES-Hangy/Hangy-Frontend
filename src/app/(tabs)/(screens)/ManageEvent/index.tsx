@@ -9,7 +9,6 @@ import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
-import { useToast } from '@/components/Toast';
 import { EventCard } from '@/components/EventCard';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TextField } from '@/components/TextField';
@@ -47,7 +46,6 @@ const CANCEL_REASON_MAX_LENGTH = 1000;
 export default function ManageEvent() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
-  const { addToast } = useToast();
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload: reloadEvent } = useEvent(id);
   const canSeeParticipants = Boolean(
@@ -261,10 +259,7 @@ export default function ManageEvent() {
             label="Editar evento"
             variant="Secondary"
             disabled={isLocked}
-            onPress={() =>
-              // A tela de edição é a US3.3; o botão já está no frame desta.
-              addToast({ type: 'info', message: 'A edição do evento chega com a US3.3.' })
-            }
+            onPress={() => router.push(`/EditEvent?id=${id}`)}
             style={styles.actionButton}
           />
           <Button

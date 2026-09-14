@@ -113,6 +113,17 @@ function estadoInicial() {
       pessoa('p12', 'Antonio Prado', 'PENDING', horasAtras(5)),
     ],
     cancelled: false,
+    /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
+    overrides: null as null | {
+      title: string;
+      description: string | null;
+      cover_photo_url: string | null;
+      event_date: string;
+      end_date: string;
+      location: { latitude: number; longitude: number };
+      location_name: string | null;
+      tag_ids: string[];
+    },
   };
 }
 
@@ -131,26 +142,27 @@ const DESCRICAO = [
   'O Jogo de Futebol Universitário da PUC promete unir estudantes, atletas e apaixonados pelo esporte em um evento cheio de energia e diversão. Será o momento perfeito para vibrar com cada jogada, torcer pelo seu time e celebrar o orgulho de vestir as cores da universidade.',
 ].join('\n');
 
+/** Só os dois ids que este mock conhece — `useTags` não passa por `resolveMock`. */
+const NOME_DA_TAG: Record<string, string> = { t1: 'Esportes', t2: 'Futebol' };
+
 function detalhe(eventId: string): EventDetail {
   const ehOrganizador = eventId !== 'guest' && eventId !== 'private';
   const ehPrivado = eventId === 'private';
+  const overrides = db.overrides;
 
   return {
     event_id: eventId,
-    title: 'Futebol na PUC',
-    description: DESCRICAO,
+    title: overrides?.title ?? 'Futebol na PUC',
+    description: overrides?.description ?? DESCRICAO,
     // O frame mostra 16:00 em Porto Alegre (UTC-3).
-    event_date: '2026-10-30T19:00:00Z',
-    end_date: '2026-10-30T22:00:00Z',
-    location: { latitude: -30.0577, longitude: -51.1738 },
-    location_name: 'DRY Moments',
+    event_date: overrides?.event_date ?? '2026-10-30T19:00:00Z',
+    end_date: overrides?.end_date ?? '2026-10-30T22:00:00Z',
+    location: overrides?.location ?? { latitude: -30.0577, longitude: -51.1738 },
+    location_name: overrides?.location_name ?? 'DRY Moments',
     privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
     status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
-    cover_photo_url: 'https://picsum.photos/seed/hangy-evento/900/600',
-    tags: [
-      { id: 't1', name: 'Esportes' },
-      { id: 't2', name: 'Futebol' },
-    ],
+    cover_photo_url: overrides?.cover_photo_url ?? 'https://picsum.photos/seed/hangy-evento/900/600',
+    tags: (overrides?.tag_ids ?? ['t1', 't2']).map((id) => ({ id, name: NOME_DA_TAG[id] ?? id })),
     organizer: { id: 'org-1', name: 'Ana Souza', user_type: 'PERSONAL', avatar_url: null },
     viewer: {
       is_organizer: ehOrganizador,
@@ -257,6 +269,30 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   if (partes[0] === 'events' && partes.length === 2 && method === 'GET') {
     erroDoCenario(eventId);
     return detalhe(eventId) as T;
+  }
+
+  if (partes[0] === 'events' && partes.length === 2 && method === 'PATCH') {
+    if (eventId === 'finished') throw new MockApiError(409, 'Event already finished');
+
+    const body = init.body ? JSON.parse(String(init.body)) : {};
+    db.overrides = {
+      title: body.title,
+      description: body.description ?? null,
+      cover_photo_url: body.cover_photo_url ?? null,
+      event_date: body.event_date,
+      end_date: body.end_date,
+      location: body.location,
+      location_name: body.location_name ?? null,
+      tag_ids: body.tag_ids ?? [],
+    };
+
+    return {
+      event_id: eventId,
+      title: db.overrides.title,
+      event_date: db.overrides.event_date,
+      status: db.cancelled ? 'CANCELLED' : 'PUBLISHED',
+      updated_at: new Date().toISOString(),
+    } as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'participants' && partes.length === 3) {
