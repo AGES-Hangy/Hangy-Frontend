@@ -45,7 +45,7 @@ jobs:
           push_with_retry() {
             local attempt
             for attempt in 1 2 3; do
-              if git push "${gitlab_url}" "$@"; then
+              if git push "${gitlab_url}" --force "$@"; then
                 return 0
               fi
               if (( attempt == 3 )); then
