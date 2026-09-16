@@ -24,6 +24,17 @@ import { colors, palette } from '@/constants/colors';
 import { elevation, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
+/**
+ * No iOS, `lineHeight` customizado no `TextInput` faz o texto vir desalinhado
+ * e cortado embaixo (bug conhecido do RN, não reproduz no Android nem no
+ * web) — ali o texto digitado cai pro `lineHeight` natural da fonte; só
+ * afeta o valor digitado, os `<Text>` de label/mensagem continuam com a
+ * tipografia normal.
+ */
+const INPUT_TEXT_STYLE = Platform.OS === 'ios'
+  ? { ...typography.bodyL, lineHeight: undefined }
+  : typography.bodyL;
+
 /** Métricas da seção TextField da página Components do Figma. */
 const FIELD_HEIGHT = 56;
 const TEXT_AREA_HEIGHT = 120;
@@ -56,6 +67,30 @@ function formatDateValue(date: Date, mode: 'date' | 'time'): string {
 
   if (mode === 'time') return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
+function parseDateValue(value: string, mode: 'date' | 'time'): Date | null {
+  if (mode === 'time') {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) return null;
+    const result = new Date();
+    result.setHours(hours, minutes, 0, 0);
+    return result;
+  }
+
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const result = new Date(year, month - 1, day);
+  if (result.getFullYear() !== year || result.getMonth() !== month - 1 || result.getDate() !== day) {
+    return null;
+  }
+  return result;
 }
 
 type TypeConfig = {
@@ -201,8 +236,12 @@ function resolveIconColor(state: TextFieldState, side: 'leading' | 'trailing'): 
 export function TextField({
   type = 'Text',
   label,
+  required,
+  hint,
   value = '',
   onChangeText,
+  onFocus,
+  onBlur,
   placeholder,
   helper,
   error,
@@ -226,6 +265,7 @@ export function TextField({
   const [focused, setFocused] = useState(false);
   const [isSecureHidden, setIsSecureHidden] = useState(true);
   const [isIosPickerOpen, setIsIosPickerOpen] = useState(false);
+  const [webDateDraft, setWebDateDraft] = useState<string | null>(null);
 
   const isDateField = type === 'Date';
   // Campo de horário mostra relógio, não calendário. O Figma só desenhou o
@@ -238,8 +278,9 @@ export function TextField({
 
   // O texto mostrado é o `value` quando a tela controla a formatação, e a data
   // formatada quando ela só passa o `dateValue`.
-  const displayedValue =
-    isDateField && value.length === 0 && dateValue
+  const displayedValue = isDateField && Platform.OS === 'web'
+    ? webDateDraft ?? (dateValue ? formatDateValue(dateValue, dateMode) : value)
+    : isDateField && value.length === 0 && dateValue
       ? formatDateValue(dateValue, dateMode)
       : value;
 
@@ -334,13 +375,18 @@ export function TextField({
 
         <TextInput
           style={[
-            typography.bodyL,
+            INPUT_TEXT_STYLE,
             styles.input,
             { color: visual.valueColor },
             config.multiline && styles.inputMultiline,
           ]}
           value={displayedValue}
-          onChangeText={onChangeText}
+          onChangeText={isDateField && Platform.OS === 'web'
+            ? (text) => {
+                setWebDateDraft(text);
+                onChangeDate?.(parseDateValue(text, dateMode));
+              }
+            : onChangeText}
           placeholder={placeholder}
           placeholderTextColor={disabled ? colors.text.disabled : colors.text.tertiary}
           editable={editable && !disabled}
@@ -349,17 +395,32 @@ export function TextField({
           pointerEvents={editable ? 'auto' : 'none'}
           multiline={config.multiline}
           secureTextEntry={config.secure && isSecureHidden}
-          keyboardType={config.keyboardType}
-          maxLength={maxLength}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          keyboardType={isDateField && Platform.OS === 'web' ? 'numbers-and-punctuation' : config.keyboardType}
+          maxLength={isDateField && Platform.OS === 'web' ? (dateMode === 'time' ? 5 : 10) : maxLength}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            if (isDateField && Platform.OS === 'web' && webDateDraft && parseDateValue(webDateDraft, dateMode)) {
+              setWebDateDraft(null);
+            }
+            onBlur?.(event);
+          }}
           accessibilityLabel={accessibilityLabel ?? label}
           accessibilityState={{ disabled }}
         />
       </View>
 
       {config.multiline && maxLength !== undefined && (
-        <Text style={[typography.caption, styles.counter, { color: palette.neutral[400] }]}>
+        <Text
+          style={[
+            typography.caption,
+            styles.counter,
+            { color: state === 'Error' ? palette.error.default : palette.neutral[400] },
+          ]}
+        >
           {displayedValue.length}/{maxLength}
         </Text>
       )}
@@ -399,7 +460,15 @@ export function TextField({
     // zIndex do dropdown só vale entre irmãos, entao sem isto os campos
     // seguintes do formulario sao pintados por cima dela.
     <View style={[styles.container, isDropdownOpen && styles.containerAbove, style]}>
-      {label && <Text style={[typography.labelM, { color: visual.labelColor }]}>{label}</Text>}
+      {label && (
+        <View style={styles.labelRow}>
+          <Text style={[typography.labelM, { color: visual.labelColor }]}>
+            {label}
+            {required ? <Text style={styles.asterisk}> *</Text> : null}
+          </Text>
+          {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        </View>
+      )}
 
       {editable ? (
         fieldBody
@@ -495,6 +564,19 @@ const styles = StyleSheet.create({
     // o resto do formulário.
     position: 'relative',
   },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  asterisk: {
+    ...typography.labelM,
+    color: colors.feedback.error,
+  },
+  hint: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+  },
   containerAbove: {
     zIndex: 2,
     // O Android empilha por elevation, não por zIndex.
@@ -527,7 +609,7 @@ const styles = StyleSheet.create({
   counter: {
     position: 'absolute',
     right: spacing[16],
-    bottom: spacing[12],
+    bottom: spacing[16],
   },
   message: {
     // Reserva uma linha desde o inicio: sem isso o formulario inteiro pula

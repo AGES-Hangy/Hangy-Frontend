@@ -19,7 +19,7 @@ concurrency:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - name: Checkout repository
@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Push main, develop and tags to GitLab
+      - name: Push changed ref to GitLab
         env:
           GITLAB_USERNAME: ${{ vars.GITLAB_USERNAME }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
@@ -42,7 +42,27 @@ jobs:
 
           gitlab_url="https://${GITLAB_USERNAME}:${GITLAB_TOKEN}@${GITLAB_REPOSITORY}"
 
-          git push "${gitlab_url}" --force \
-            refs/remotes/origin/main:refs/heads/main \
-            refs/remotes/origin/develop:refs/heads/develop
-          git push "${gitlab_url}" --tags
+          push_with_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              if git push "${gitlab_url}" --force "$@"; then
+                return 0
+              fi
+              if (( attempt == 3 )); then
+                echo "GitLab push failed after ${attempt} attempts" >&2
+                return 1
+              fi
+              echo "GitLab push failed (attempt ${attempt}/3); retrying in 20 seconds" >&2
+              sleep 20
+            done
+          }
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            push_with_retry refs/remotes/origin/main:refs/heads/main
+            push_with_retry refs/remotes/origin/develop:refs/heads/develop
+            push_with_retry --tags
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            push_with_retry "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          else
+            push_with_retry "refs/remotes/origin/${GITHUB_REF_NAME}:refs/heads/${GITHUB_REF_NAME}"
+          fi
