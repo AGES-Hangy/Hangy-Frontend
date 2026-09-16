@@ -16,11 +16,18 @@ import { getToken } from '@/utils/auth';
 const FRAME_WIDTH = 393;
 const FRAME_HEIGHT = 874;
 
+/** Tempo mínimo exibindo a splash, pra não piscar em sessões que resolvem rápido demais. */
+const MIN_VISIBLE_MS = 1000;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function Splash() {
   useEffect(() => {
     let isMounted = true;
 
-    getToken().then((token) => {
+    Promise.all([getToken(), wait(MIN_VISIBLE_MS)]).then(([token]) => {
       if (!isMounted) return;
       router.replace(token ? '/Home' : '/Login');
     });
