@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Read [AGENTS.md](AGENTS.md) first for shared implementation and review rules learned
+from this repository's PRs. For PR reviews, follow
+[revisar-pr-hangy](.agents/skills/revisar-pr-hangy/SKILL.md). Keep those shared rules
+in AGENTS.md rather than duplicating them here; inspect the current code when an
+architectural description below is out of date.
+
 ## Commands
 
 ```bash
