@@ -7,6 +7,7 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 const BOX_SIZE = 22;
+const CHECK_ICON_SIZE = 16;
 const BORDER_WIDTH = 1.8;
 const MIN_TOUCH_SIZE = 44;
 const INDETERMINATE_BAR_WIDTH = 12;
@@ -98,7 +99,7 @@ export function Checkbox({
 						]}
 					/>
 				) : checked ? (
-					<Icon name="check" size={BOX_SIZE} color={visual.contentColor} strokeWidth={2} />
+					<Icon name="check" size={CHECK_ICON_SIZE} color={visual.contentColor} strokeWidth={2} />
 				) : null}
 			</View>
 			{label ? <Text style={[typography.bodyL, styles.label, { color: visual.labelColor }]}>{label}</Text> : null}
