@@ -1,0 +1,120 @@
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { Icon } from '@/components/Icon';
+import type { CheckboxProps } from '@/components/Checkbox/types';
+import { colors, palette } from '@/constants/colors';
+import { radius, spacing } from '@/constants/layout';
+import { typography } from '@/constants/typography';
+
+const BOX_SIZE = 22;
+const BORDER_WIDTH = 1;
+const MIN_TOUCH_SIZE = 44;
+const INDETERMINATE_BAR_WIDTH = 12;
+const INDETERMINATE_BAR_HEIGHT = 2;
+
+type Visual = {
+	backgroundColor: string;
+	borderColor: string;
+	contentColor: string;
+};
+
+const VISUALS: Record<'unchecked' | 'checked' | 'indeterminate' | 'disabled', Visual> = {
+	unchecked: {
+		backgroundColor: colors.bg.base,
+		borderColor: colors.border.strong,
+		contentColor: colors.text.inverse,
+	},
+	checked: {
+		backgroundColor: colors.action.primary,
+		borderColor: colors.action.primary,
+		contentColor: colors.text.inverse,
+	},
+	indeterminate: {
+		backgroundColor: colors.action.primary,
+		borderColor: colors.action.primary,
+		contentColor: colors.text.inverse,
+	},
+	disabled: {
+		backgroundColor: palette.neutral[200],
+		borderColor: palette.neutral[300],
+		contentColor: colors.text.disabled,
+	},
+};
+
+function getVisualState(checked: boolean, indeterminate: boolean, disabled: boolean) {
+	if (disabled) return 'disabled';
+	if (indeterminate) return 'indeterminate';
+	return checked ? 'checked' : 'unchecked';
+}
+
+export function Checkbox({
+	checked = false,
+	indeterminate = false,
+	disabled = false,
+	label,
+	onChange,
+}: CheckboxProps) {
+	const visual = VISUALS[getVisualState(checked, indeterminate, disabled)];
+	const verticalHitSlop = Math.max(0, (MIN_TOUCH_SIZE - BOX_SIZE) / 2);
+
+	return (
+		<Pressable
+			onPress={() => !disabled && onChange?.(!checked)}
+			disabled={disabled}
+			hitSlop={{ top: verticalHitSlop, bottom: verticalHitSlop }}
+			accessibilityRole="checkbox"
+			accessibilityLabel={label ?? 'Checkbox'}
+			accessibilityState={{ checked: indeterminate ? false : checked, disabled }}
+			style={styles.container}
+		>
+			<View
+				style={[
+					styles.box,
+					{
+						backgroundColor: visual.backgroundColor,
+						borderColor: visual.borderColor,
+					},
+				]}
+			>
+				{indeterminate ? (
+					<View
+						style={[
+							styles.indeterminateBar,
+							{ backgroundColor: visual.contentColor },
+						]}
+					/>
+				) : checked ? (
+					<Icon name="check" size={BOX_SIZE} color={visual.contentColor} strokeWidth={2} />
+				) : null}
+			</View>
+			{label ? <Text style={[typography.bodyM, styles.label, { color: colors.text.primary }]}>{label}</Text> : null}
+		</Pressable>
+	);
+}
+
+const styles = StyleSheet.create({
+	container: {
+		minHeight: MIN_TOUCH_SIZE,
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing[8],
+	},
+	box: {
+		width: BOX_SIZE,
+		height: BOX_SIZE,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderWidth: BORDER_WIDTH,
+		borderRadius: radius.sm,
+	},
+	indeterminateBar: {
+		width: INDETERMINATE_BAR_WIDTH,
+		height: INDETERMINATE_BAR_HEIGHT,
+		borderRadius: radius.full,
+	},
+	label: {
+		flexShrink: 1,
+	},
+});
+
+export type { CheckboxProps } from '@/components/Checkbox/types';
