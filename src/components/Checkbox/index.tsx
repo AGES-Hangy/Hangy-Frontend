@@ -7,7 +7,7 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 const BOX_SIZE = 22;
-const BORDER_WIDTH = 1;
+const BORDER_WIDTH = 1.8;
 const MIN_TOUCH_SIZE = 44;
 const INDETERMINATE_BAR_WIDTH = 12;
 const INDETERMINATE_BAR_HEIGHT = 2;
@@ -16,33 +16,47 @@ type Visual = {
 	backgroundColor: string;
 	borderColor: string;
 	contentColor: string;
+	labelColor: string;
 };
 
-const VISUALS: Record<'unchecked' | 'checked' | 'indeterminate' | 'disabled', Visual> = {
+const VISUALS: Record<
+		'unchecked' | 'checked' | 'indeterminate' | 'disabled' | 'disabledChecked',
+		Visual
+	> = {
 	unchecked: {
 		backgroundColor: colors.bg.base,
 		borderColor: colors.border.strong,
 		contentColor: colors.text.inverse,
+		labelColor: colors.text.primary,
 	},
 	checked: {
 		backgroundColor: colors.action.primary,
 		borderColor: colors.action.primary,
 		contentColor: colors.text.inverse,
+		labelColor: colors.text.primary,
 	},
 	indeterminate: {
 		backgroundColor: colors.action.primary,
 		borderColor: colors.action.primary,
 		contentColor: colors.text.inverse,
+		labelColor: colors.text.primary,
 	},
 	disabled: {
-		backgroundColor: palette.neutral[200],
-		borderColor: palette.neutral[300],
+		backgroundColor: colors.bg.base,
+		borderColor: palette.neutral[200],
 		contentColor: colors.text.disabled,
+		labelColor: colors.text.disabled,
+	},
+	disabledChecked: {
+		backgroundColor: palette.neutral[200],
+		borderColor: palette.neutral[200],
+		contentColor: colors.bg.base,
+		labelColor: colors.text.disabled,
 	},
 };
 
 function getVisualState(checked: boolean, indeterminate: boolean, disabled: boolean) {
-	if (disabled) return 'disabled';
+	if (disabled) return checked || indeterminate ? 'disabledChecked' : 'disabled';
 	if (indeterminate) return 'indeterminate';
 	return checked ? 'checked' : 'unchecked';
 }
@@ -61,10 +75,10 @@ export function Checkbox({
 		<Pressable
 			onPress={() => !disabled && onChange?.(!checked)}
 			disabled={disabled}
-			hitSlop={{ top: verticalHitSlop, bottom: verticalHitSlop }}
 			accessibilityRole="checkbox"
 			accessibilityLabel={label ?? 'Checkbox'}
 			accessibilityState={{ checked: indeterminate ? false : checked, disabled }}
+			hitSlop={verticalHitSlop}
 			style={styles.container}
 		>
 			<View
@@ -87,7 +101,7 @@ export function Checkbox({
 					<Icon name="check" size={BOX_SIZE} color={visual.contentColor} strokeWidth={2} />
 				) : null}
 			</View>
-			{label ? <Text style={[typography.bodyM, styles.label, { color: colors.text.primary }]}>{label}</Text> : null}
+			{label ? <Text style={[typography.bodyL, styles.label, { color: visual.labelColor }]}>{label}</Text> : null}
 		</Pressable>
 	);
 }
@@ -105,7 +119,7 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 		borderWidth: BORDER_WIDTH,
-		borderRadius: radius.sm,
+		borderRadius: radius.xs,
 	},
 	indeterminateBar: {
 		width: INDETERMINATE_BAR_WIDTH,
