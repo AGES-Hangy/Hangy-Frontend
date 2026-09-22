@@ -4,7 +4,6 @@ import type { AvatarGroupItem } from '@/components/AvatarGroup/types';
 
 type NotificationItemBaseProps = {
   title: string;
-  /** Segunda linha: evento · data · hora no Request, tempo relativo nos demais. */
   subtitle: string;
   /** Padrão: false — não lida ganha fundo primary/50 e o ponto de 8px à esquerda. */
   read?: boolean;
@@ -30,6 +29,8 @@ type NotificationActionProps = {
  * Solicitação para participar de um evento. `imageUri` é a capa do evento
  * (caso do frame) e `avatarUri` a foto de quem pediu, para contextos em que
  * o evento é implícito — mutuamente exclusivas, fallback no ícone `image`.
+ * Para a foto de pessoa sem URL, passe `avatarUri={null}`: omitir as duas
+ * props cai no ícone `image`.
  */
 export type NotificationItemRequestProps = NotificationItemBaseProps &
   NotificationActionProps & { type: 'Request' } & (
