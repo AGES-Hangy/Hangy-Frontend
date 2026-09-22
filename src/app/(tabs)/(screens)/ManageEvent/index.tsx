@@ -10,10 +10,9 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { EventCard } from '@/components/EventCard';
+import { NotificationItem } from '@/components/NotificationItem';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TextField } from '@/components/TextField';
-// Placeholder: `NotificationItem` ainda não está no develop (task 157, sprint futura).
-import { NotificationItem } from '@/components/_placeholders';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
@@ -203,13 +202,13 @@ export default function ManageEvent() {
               {participants.pending.map((person) => (
                 <NotificationItem
                   key={person.participant_id}
+                  type="Request"
                   title={person.user.name ?? 'Usuário'}
                   subtitle={`pediu para participar · ${formatRelativeTime(person.joined_at)}`}
-                  unread
+                  avatarUri={null}
                   isProcessing={participants.isProcessing(person.participant_id)}
-                  // Evento lotado desabilita só o aprovar; recusar continua.
-                  approveDisabled={participants.isFull}
-                  onApprove={isLocked ? undefined : () => participants.approve(person)}
+                  acceptDisabled={participants.isFull}
+                  onAccept={isLocked ? undefined : () => participants.approve(person)}
                   onReject={isLocked ? undefined : () => participants.reject(person)}
                 />
               ))}
