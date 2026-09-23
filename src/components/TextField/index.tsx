@@ -243,6 +243,8 @@ export function TextField({
   onFocus,
   onBlur,
   placeholder,
+  keyboardType,
+  autoCapitalize,
   helper,
   error,
   success,
@@ -395,7 +397,8 @@ export function TextField({
           pointerEvents={editable ? 'auto' : 'none'}
           multiline={config.multiline}
           secureTextEntry={config.secure && isSecureHidden}
-          keyboardType={isDateField && Platform.OS === 'web' ? 'numbers-and-punctuation' : config.keyboardType}
+          keyboardType={isDateField && Platform.OS === 'web' ? 'numbers-and-punctuation' : keyboardType ?? config.keyboardType}
+          autoCapitalize={autoCapitalize}
           maxLength={isDateField && Platform.OS === 'web' ? (dateMode === 'time' ? 5 : 10) : maxLength}
           onFocus={(event) => {
             setFocused(true);
