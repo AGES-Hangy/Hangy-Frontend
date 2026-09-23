@@ -99,14 +99,6 @@ export default function Login() {
             </Pressable>
           </View>
         )}
-        <View style={styles.accountType} accessibilityRole="tablist">
-          <Pressable style={styles.accountTypeSelected} accessibilityRole="tab" accessibilityState={{ selected: true }}>
-            <Text style={styles.accountTypeSelectedText}>Pessoa Física</Text>
-          </Pressable>
-          <Pressable style={styles.accountTypeOption} accessibilityRole="tab" accessibilityState={{ selected: false }}>
-            <Text style={styles.accountTypeText}>Empresa</Text>
-          </Pressable>
-        </View>
         <TextField
           label="E-mail"
           placeholder="seuemail@exemplo.com"
@@ -186,36 +178,6 @@ const styles = StyleSheet.create({
     padding: spacing[16],
     paddingTop: spacing[20],
     gap: spacing[12],
-  },
-  accountType: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface.sunken,
-    borderRadius: radius.full,
-    minHeight: 44,
-    padding: spacing[4],
-  },
-  accountTypeSelected: {
-    flex: 1,
-    minHeight: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.bg.base,
-    borderRadius: radius.full,
-  },
-  accountTypeOption: {
-    flex: 1,
-    minHeight: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  accountTypeSelectedText: {
-    ...typography.labelS,
-    color: colors.text.brand,
-  },
-  accountTypeText: {
-    ...typography.labelS,
-    color: colors.text.secondary,
   },
   title: {
     ...typography.h2,
