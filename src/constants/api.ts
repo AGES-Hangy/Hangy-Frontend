@@ -24,6 +24,7 @@ const PARTICIPANTS_PAGE_LIMIT = 100;
 
 /** Rotas da API de eventos. */
 export const endpoints = {
+  login: () => '/auth/login',
   event: (eventId: string) => `/events/${eventId}`,
   /** Sem `status`, a API devolve confirmados; `status=PENDING` exige ser o organizador. */
   eventParticipants: (eventId: string, status?: 'PENDING') => {
