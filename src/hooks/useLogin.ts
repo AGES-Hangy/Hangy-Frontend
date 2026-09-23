@@ -1,12 +1,20 @@
 import { useState } from 'react';
 
-import { API_BASE_URL, API_TIMEOUT_MS } from '@/constants/api';
+import { API_BASE_URL, endpoints } from '@/constants/api';
 import { saveToken } from '@/utils/auth';
+import { UserType } from '@/types/event';
+
+interface LoginUser {
+  id: string;
+  email: string;
+  userType: UserType;
+  name: string;
+}
 
 interface LoginResult {
   accessToken: string;
   tokenType: string;
-  userType: 'PERSONAL' | 'BUSINESS';
+  user: LoginUser;
 }
 
 export type LoginFieldErrors = Partial<Record<'email' | 'password', string>>;
@@ -16,7 +24,10 @@ export function useLogin() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
 
-  async function login(email: string, password: string): Promise<LoginResult | null> {
+  async function login(
+    email: string,
+    password: string,
+  ): Promise<LoginResult | null> {
     setIsLoading(true);
     setError(null);
     setFieldErrors({});
@@ -24,12 +35,16 @@ export function useLogin() {
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}${endpoints.login()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-        signal: controller.signal,
       });
+
+      if (response.status === 403) {
+        setError('Esta conta foi excluída');
+        return null;
+      }
 
       if (!response.ok) {
         const data = await response.json().catch(() => null) as {
@@ -66,12 +81,15 @@ export function useLogin() {
       return {
         accessToken: data.access_token,
         tokenType: data.token_type,
-        userType: data.user.user_type,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          userType: data.user.user_type,
+          name: data.user.name,
+        },
       };
-    } catch (requestError) {
-      setError(requestError instanceof DOMException && requestError.name === 'AbortError'
-        ? 'A conexão demorou demais'
-        : 'Sem conexão com a internet');
+    } catch {
+      setError('Não foi possível conectar ao servidor');
       return null;
     } finally {
       clearTimeout(timeoutId);
