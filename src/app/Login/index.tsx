@@ -20,23 +20,26 @@ import { typography } from '@/constants/typography';
 import { useLogin } from '@/hooks/useLogin';
 import { removeToken } from '@/utils/auth';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function Login() {
-  const [cpf, setCpf] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [touched, setTouched] = useState({ email: false, password: false });
   const { login, isLoading, error, fieldErrors } = useLogin();
   const { addToast, showErrorToast } = useToast();
 
-  const cpfDigits = cpf.replace(/\D/g, '');
-  const cpfError = fieldErrors.email ?? (touched.email && !cpfDigits
-    ? 'Informe seu CPF.'
-    : touched.email && cpfDigits.length !== 11
-      ? 'Digite um CPF válido.'
+  const normalizedEmail = email.trim();
+  const isEmailValid = EMAIL_REGEX.test(normalizedEmail);
+  const emailError = fieldErrors.email ?? (touched.email && !normalizedEmail
+    ? 'Informe seu e-mail.'
+    : touched.email && !isEmailValid
+      ? 'Digite um e-mail válido.'
       : undefined);
   const passwordError = fieldErrors.password ?? (touched.password && !password
     ? 'Informe sua senha.'
     : undefined);
-  const isValid = cpfDigits.length === 11 && password.length > 0;
+  const isValid = isEmailValid && password.length > 0;
   const isRetryableError = error === 'Não foi possível carregar. Tente de novo.'
     || error === 'Sem conexão com a internet'
     || error === 'A conexão demorou demais';
@@ -64,7 +67,7 @@ export default function Login() {
     setTouched({ email: true, password: true });
     if (!isValid) return;
 
-    const result = await login(cpf, password);
+    const result = await login(normalizedEmail, password);
     if (result) {
       router.replace(result.userType === 'BUSINESS' ? '/HomeComercial' : '/Feed');
     }
@@ -105,15 +108,16 @@ export default function Login() {
           </Pressable>
         </View>
         <TextField
-          label="CPF"
-          placeholder="999.999.999-99"
-          keyboardType="number-pad"
-          value={cpf}
-          onChangeText={setCpf}
+          label="E-mail"
+          placeholder="seuemail@exemplo.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
           onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-          error={cpfError}
+          error={emailError}
           disabled={isLoading}
-          accessibilityLabel="CPF"
+          accessibilityLabel="E-mail"
         />
         <TextField
           type="Password"
