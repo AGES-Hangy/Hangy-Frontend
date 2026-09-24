@@ -48,7 +48,7 @@ export type NotificationItemConnectionProps = NotificationItemBaseProps &
 /** Aviso sobre um evento, sem decisão a tomar. */
 export type NotificationItemActivityProps = NotificationItemBaseProps & {
   type: 'Activity';
-  imageUri?: string | null;
+  avatarUri?: string | null;
   /**
    * Capa do evento à direita. Decorativa: fica fora da árvore de
    * acessibilidade, e o que ela representa entra no label agregado do item.

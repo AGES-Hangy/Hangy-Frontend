@@ -81,7 +81,7 @@ function renderLeading(props: NotificationItemProps) {
     case 'Connection':
       return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
     case 'Activity':
-      return <Thumb key={props.imageUri ?? ''} uri={props.imageUri} size={metrics.thumbSize} />;
+      return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
     case 'ConnectionGroup':
       return <AvatarGroup avatars={props.avatars} />;
   }
