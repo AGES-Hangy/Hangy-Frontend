@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -10,9 +9,7 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 export default function Sample() {
-	const [password, setPassword] = useState('');
-	const [confirmation, setConfirmation] = useState('');
-	const canSubmit = password.length >= 8 && confirmation.length > 0 && confirmation === password;
+	const email = 'marina@example.com';
 
 	return (
 		<View style={styles.screen}>
@@ -28,53 +25,36 @@ export default function Sample() {
 
 			<View style={styles.panel}>
 				<ScrollView contentContainerStyle={styles.panelContent} keyboardShouldPersistTaps="handled">
-					<Pressable
-						onPress={() => router.replace('/PasswordReset/Code')}
-						accessibilityRole="button"
-						accessibilityLabel="Voltar para o código"
-						style={styles.back}
-					>
-						<Text style={styles.backText}>‹ Voltar</Text>
-					</Pressable>
 					<View style={styles.heading}>
-						<Text style={styles.title}>Crie uma nova senha</Text>
-						<Text style={styles.description}>Escolha uma senha segura para sua conta.</Text>
+						<Text style={styles.title}>Recuperar senha</Text>
+						<Text style={styles.description}>
+							Enviaremos um código de redefinição para o e-mail cadastrado.
+						</Text>
 					</View>
 
 					<View style={styles.form}>
 						<View style={styles.fieldGroup}>
-							<Text style={styles.fieldLabel}>Nova senha</Text>
+							<Text style={styles.fieldLabel}>E-mail</Text>
 							<TextInput
-								style={styles.input}
-								value={password}
-								onChangeText={setPassword}
-								placeholder="Digite sua nova senha"
+								style={styles.emailInput}
+								placeholder="email@email.com"
 								placeholderTextColor={colors.text.tertiary}
-								secureTextEntry
-								autoComplete="new-password"
-								textContentType="newPassword"
-								accessibilityLabel="Nova senha"
+								value={email}
+								editable={false}
+								autoCapitalize="none"
+								keyboardType="email-address"
+								accessibilityLabel="E-mail para recuperar a senha"
 							/>
 						</View>
-						<View style={styles.fieldGroup}>
-							<Text style={styles.fieldLabel}>Confirmar senha</Text>
-							<TextInput
-								style={styles.input}
-								value={confirmation}
-								onChangeText={setConfirmation}
-								placeholder="Digite a senha novamente"
-								placeholderTextColor={colors.text.tertiary}
-								secureTextEntry
-								autoComplete="new-password"
-								textContentType="newPassword"
-								accessibilityLabel="Confirme sua nova senha"
-							/>
-						</View>
-						<Button
-							label="Redefinir senha"
-							disabled={!canSubmit}
-							onPress={() => router.replace('/PasswordReset/Success')}
-						/>
+						<Button label="Enviar código" size="LG" isLoading style={styles.submit} />
+						<Pressable
+							onPress={() => router.replace('/Login')}
+							accessibilityRole="button"
+							accessibilityLabel="Voltar para o login"
+							style={styles.loginLink}
+						>
+							<Text style={styles.loginLinkText}>Voltar para o login</Text>
+						</Pressable>
 					</View>
 				</ScrollView>
 			</View>
@@ -99,9 +79,7 @@ const styles = StyleSheet.create({
 		paddingTop: spacing[24],
 		paddingBottom: spacing[40],
 	},
-	heading: { alignItems: 'center', gap: spacing[8], marginTop: spacing[16], marginBottom: spacing[24] },
-	back: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing[8] },
-	backText: { ...typography.labelM, color: palette.primary[600] },
+	heading: { alignItems: 'center', gap: spacing[12], marginBottom: spacing[32] },
 	title: { ...typography.h2, color: colors.text.primary, textAlign: 'center' },
 	description: {
 		...typography.bodyS,
@@ -112,7 +90,7 @@ const styles = StyleSheet.create({
 	form: { gap: spacing[16] },
 	fieldGroup: { gap: spacing[8] },
 	fieldLabel: { ...typography.labelM, color: colors.text.secondary },
-	input: {
+	emailInput: {
 		height: 56,
 		paddingHorizontal: spacing[16],
 		borderWidth: 1,
@@ -122,4 +100,13 @@ const styles = StyleSheet.create({
 		color: colors.text.primary,
 		...typography.bodyM,
 	},
+	submit: { alignSelf: 'stretch' },
+	loginLink: {
+		minHeight: 44,
+		alignItems: 'center',
+		justifyContent: 'center',
+		alignSelf: 'center',
+		paddingHorizontal: spacing[12],
+	},
+	loginLinkText: { ...typography.labelM, color: palette.primary[600] },
 });

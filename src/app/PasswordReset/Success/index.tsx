@@ -5,11 +5,19 @@ import { Image } from 'expo-image';
 
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
+import { useToast } from '@/components/Toast';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 export default function PasswordResetSuccess() {
+	const { showInfoToast } = useToast();
+
+	function goToLogin() {
+		showInfoToast('Senha redefinida com sucesso. Entre com sua nova senha.');
+		router.replace('/Login');
+	}
+
 	return (
 		<View style={styles.screen}>
 			<StatusBar style="light" />
@@ -25,7 +33,7 @@ export default function PasswordResetSuccess() {
 						<Text style={styles.title}>Senha redefinida com sucesso</Text>
 						<Text style={styles.description}>Agora você já pode entrar com sua nova senha.</Text>
 					</View>
-					<Button label="Ir para o login" onPress={() => router.replace('/Login')} />
+					<Button label="Ir para o login" onPress={goToLogin} />
 				</ScrollView>
 			</View>
 		</View>
