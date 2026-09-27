@@ -261,6 +261,9 @@ export function TextField({
   maximumDate,
   maxLength,
   accessibilityLabel,
+  trailingIcon: trailingIconOverride,
+  onTrailingIconPress,
+  onTrailingIconPressAccessibilityLabel = 'Mais opções',
   style,
 }: TextFieldProps) {
   const config = TYPES[type];
@@ -273,7 +276,7 @@ export function TextField({
   // Campo de horário mostra relógio, não calendário. O Figma só desenhou o
   // Type=Date de data, então o ícone do modo `time` vem daqui.
   const trailingIcon: IconName | undefined =
-    isDateField && dateMode === 'time' ? 'clock' : config.trailingIcon;
+    trailingIconOverride ?? (isDateField && dateMode === 'time' ? 'clock' : config.trailingIcon);
   // No web o campo de data volta a aceitar digitação, porque lá não existe
   // picker nativo para abrir.
   const editable = config.editable || (isDateField && !HAS_NATIVE_DATE_PICKER);
@@ -448,11 +451,27 @@ export function TextField({
         <Icon name={stateIcon.name} size={ICON_SIZE} color={stateIcon.color} />
       ) : (
         trailingIcon && (
-          <Icon
-            name={trailingIcon}
-            size={ICON_SIZE}
-            color={resolveIconColor(state, 'trailing')}
-          />
+          onTrailingIconPress ? (
+            <Pressable
+              onPress={onTrailingIconPress}
+              disabled={disabled}
+              hitSlop={spacing[12]}
+              accessibilityRole="button"
+              accessibilityLabel={onTrailingIconPressAccessibilityLabel}
+            >
+              <Icon
+                name={trailingIcon}
+                size={ICON_SIZE}
+                color={resolveIconColor(state, 'trailing')}
+              />
+            </Pressable>
+          ) : (
+            <Icon
+              name={trailingIcon}
+              size={ICON_SIZE}
+              color={resolveIconColor(state, 'trailing')}
+            />
+          )
         )
       )}
     </View>

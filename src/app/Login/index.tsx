@@ -131,6 +131,7 @@ export default function Login() {
               Não possui uma conta?{' '}
               <Text
                 style={styles.registerLink}
+                onPress={() => router.push('/Register')}
                 accessibilityRole="link"
                 accessibilityLabel="Cadastre-se"
               >
