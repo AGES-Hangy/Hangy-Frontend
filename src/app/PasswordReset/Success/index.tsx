@@ -41,9 +41,9 @@ export default function PasswordResetSuccess() {
 }
 
 const styles = StyleSheet.create({
-	screen: { flex: 1, backgroundColor: colors.action.primary },
+	screen: { flex: 1, backgroundColor: palette.primary[600] },
 	brandArea: { height: '26.5%', alignItems: 'center', justifyContent: 'center' },
-	logo: { width: 224, height: 76 },
+	logo: { width: 220, height: 85 },
 	panel: { flex: 1, backgroundColor: palette.primary[50], borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden' },
 	panelContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing[24], paddingTop: spacing[24], paddingBottom: spacing[40], gap: spacing[32] },
 	confirmation: { alignItems: 'center', gap: spacing[16] },

@@ -64,116 +64,125 @@ export default function Login() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.screen}>
       <StatusBar style="light" />
-      <Image source={require('../../../assets/images/logo.svg')} style={styles.logo} contentFit="contain" />
+      <View style={styles.brandArea}>
+        <Image source={require('../../../assets/images/logo.svg')} style={styles.logo} contentFit="contain" />
+      </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Entrar</Text>
-        {error && isRetryableError && (
-          <View style={styles.formErrorBox} accessibilityRole="alert" accessibilityLiveRegion="polite">
-            <Text style={styles.formError}>{error}</Text>
+      <View style={styles.panel}>
+        <KeyboardAvoidingView
+          style={styles.panelFlex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView contentContainerStyle={styles.panelContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.title}>Entrar</Text>
+            {error && isRetryableError && (
+              <View style={styles.formErrorBox} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                <Text style={styles.formError}>{error}</Text>
+                <Pressable
+                  onPress={handleSubmit}
+                  disabled={isLoading || !isValid}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tentar entrar novamente"
+                  hitSlop={spacing[8]}
+                >
+                  <Text style={[styles.retryLink, (!isValid || isLoading) && styles.disabledLink]}>
+                    Tentar de novo
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+            <TextField
+              label="E-mail"
+              placeholder="seuemail@exemplo.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={(value) => { setEmail(value); clearFieldError('email'); }}
+              onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+              error={emailError}
+              disabled={isLoading}
+              accessibilityLabel="E-mail"
+            />
+            <TextField
+              type="Password"
+              label="Senha"
+              placeholder="Digite sua senha"
+              value={password}
+              onChangeText={(value) => { setPassword(value); clearFieldError('password'); }}
+              onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+              error={passwordError}
+              disabled={isLoading}
+              accessibilityLabel="Senha"
+            />
             <Pressable
-              onPress={handleSubmit}
-              disabled={isLoading || !isValid}
+              onPress={() => router.push('/PasswordReset')}
+              disabled={isLoading}
+              accessibilityState={{ disabled: isLoading }}
               accessibilityRole="button"
-              accessibilityLabel="Tentar entrar novamente"
-              hitSlop={spacing[8]}
+              accessibilityLabel="Esqueceu a senha?"
+              style={styles.forgotLink}
+              hitSlop={spacing[12]}
             >
-              <Text style={[styles.retryLink, (!isValid || isLoading) && styles.disabledLink]}>
-                Tentar de novo
-              </Text>
+              <Text style={[styles.forgotLinkText, isLoading && styles.disabledLink]}>Esqueceu a senha?</Text>
             </Pressable>
-          </View>
-        )}
-        <TextField
-          label="E-mail"
-          placeholder="seuemail@exemplo.com"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={(value) => { setEmail(value); clearFieldError('email'); }}
-          onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-          error={emailError}
-          disabled={isLoading}
-          accessibilityLabel="E-mail"
-        />
-        <TextField
-          type="Password"
-          label="Senha"
-          placeholder="Digite sua senha"
-          value={password}
-          onChangeText={(value) => { setPassword(value); clearFieldError('password'); }}
-          onBlur={() => setTouched((current) => ({ ...current, password: true }))}
-          error={passwordError}
-          disabled={isLoading}
-          accessibilityLabel="Senha"
-        />
-        <Pressable
-          onPress={() => router.push('/PasswordReset')}
-          disabled={isLoading}
-          accessibilityState={{ disabled: isLoading }}
-          accessibilityRole="button"
-          accessibilityLabel="Esqueci minha senha"
-          hitSlop={spacing[8]}
-        >
-          <Text style={[styles.link, isLoading && styles.disabledLink]}>Esqueci minha senha</Text>
-        </Pressable>
-        <Button
-          label="Entrar"
-          variant="Primary"
-          size="LG"
-          isLoading={isLoading}
-          disabled={!isValid}
-          onPress={handleSubmit}
-          accessibilityLabel="Entrar"
-          style={styles.submit}
-        />
-        <Text style={styles.registerPrompt}>Não possui uma conta?</Text>
-        <Pressable
-          disabled
-          accessibilityState={{ disabled: true }}
-          accessibilityRole="button"
-          accessibilityLabel="Cadastro indisponível nesta versão"
-          hitSlop={spacing[8]}
-        >
-          <Text style={[styles.link, styles.disabledLink]}>Cadastro em breve</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <Text style={styles.registerPrompt}>
+              Não possui uma conta?{' '}
+              <Text
+                style={styles.registerLink}
+                accessibilityRole="link"
+                accessibilityLabel="Cadastre-se"
+              >
+                Cadastre-se
+              </Text>
+            </Text>
+            <Button
+              label="ENTRAR"
+              variant="Primary"
+              size="LG"
+              isLoading={isLoading}
+              disabled={!isValid}
+              onPress={handleSubmit}
+              accessibilityLabel="Entrar"
+              style={styles.submit}
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
     backgroundColor: palette.primary[600],
-    paddingHorizontal: spacing[16],
-    paddingTop: spacing[64],
+  },
+  brandArea: {
+    height: '26.5%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
     width: 220,
-    height: 100,
-    marginBottom: spacing[16],
+    height: 85,
   },
-  scroll: {
-    width: '100%',
-    maxWidth: 393,
+  panel: {
+    flex: 1,
+    backgroundColor: palette.primary[50],
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    overflow: 'hidden',
   },
-  form: {
-    width: '100%',
-    maxWidth: 393,
-    alignSelf: 'center',
-    backgroundColor: colors.bg.subtle,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    padding: spacing[16],
+  panelFlex: {
+    flex: 1,
+  },
+  panelContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing[16],
     paddingTop: spacing[20],
+    paddingBottom: spacing[40],
     gap: spacing[12],
   },
   title: {
@@ -202,19 +211,25 @@ const styles = StyleSheet.create({
   disabledLink: {
     color: colors.text.disabled,
   },
-  link: {
-    ...typography.bodyS,
-    color: colors.text.brand,
-    textAlign: 'center',
+  forgotLink: {
+    alignSelf: 'flex-start',
+  },
+  forgotLinkText: {
+    ...typography.labelM,
+    color: palette.primary[600],
   },
   registerPrompt: {
-    ...typography.bodyS,
-    color: colors.text.secondary,
+    ...typography.bodyM,
+    color: palette.primary[600],
     textAlign: 'center',
-    marginTop: spacing[8],
+    marginTop: spacing[16],
+  },
+  registerLink: {
+    ...typography.bodyM,
+    color: palette.primary[600],
   },
   submit: {
     alignSelf: 'center',
-    minWidth: 172,
+    minWidth: 199,
   },
 });
