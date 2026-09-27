@@ -12,6 +12,8 @@ type NotificationItemBaseProps = {
    * accessibilityRole — o leitor de tela anuncia só o texto.
    */
   onPress?: () => void;
+  /** Ação explícita para limpar o estado não lido sem abrir o destino. */
+  onMarkRead?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 

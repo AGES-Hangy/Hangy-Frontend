@@ -8,6 +8,7 @@ import { Avatar } from '@/components/Avatar';
 import { AvatarGroup } from '@/components/AvatarGroup';
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
+import { IconButton } from '@/components/IconButton';
 import type { NotificationItemProps } from '@/components/NotificationItem/types';
 import { colors, palette } from '@/constants/colors';
 import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
@@ -20,7 +21,11 @@ const ACTION_LABELS = {
   Connection: { accept: 'Confirmar', reject: 'Recusar' },
 } as const;
 
-function Thumb({ uri, size }: { uri?: string | null; size: number }) {
+function Thumb({ uri, size, fallbackIcon = 'image' }: {
+  uri?: string | null;
+  size: number;
+  fallbackIcon?: 'image' | 'user';
+}) {
   const [failed, setFailed] = useState(false);
 
   return (
@@ -33,7 +38,11 @@ function Thumb({ uri, size }: { uri?: string | null; size: number }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <Icon name="image" size={metrics.fallbackIconSize} color={palette.primary[400]} />
+        <Icon
+          name={fallbackIcon}
+          size={metrics.fallbackIconSize}
+          color={fallbackIcon === 'user' ? colors.text.brand : palette.primary[400]}
+        />
       )}
     </View>
   );
@@ -76,12 +85,19 @@ function renderLeading(props: NotificationItemProps) {
       if (props.avatarUri !== undefined) {
         return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
       }
-      // key por uri: sem ela o estado de falha persiste e a imagem seguinte já nasce no fallback.
-      return <Thumb key={props.imageUri ?? ''} uri={props.imageUri} size={metrics.thumbSize} />;
+      // A posição distingue imagens irmãs; a URI reinicia o fallback quando a imagem muda.
+      return <Thumb key={`leading-thumb:${props.imageUri ?? ''}`} uri={props.imageUri} size={metrics.thumbSize} />;
     case 'Connection':
       return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
     case 'Activity':
-      return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
+      return (
+        <Thumb
+          key={`leading-avatar:${props.avatarUri ?? ''}`}
+          uri={props.avatarUri}
+          size={metrics.thumbSize}
+          fallbackIcon="user"
+        />
+      );
     case 'ConnectionGroup':
       return <AvatarGroup avatars={props.avatars} />;
   }
@@ -92,7 +108,7 @@ function renderTrailing(props: NotificationItemProps) {
     case 'Activity':
       return (
         <Thumb
-          key={props.trailingImageUri ?? ''}
+          key={`trailing-thumb:${props.trailingImageUri ?? ''}`}
           uri={props.trailingImageUri}
           size={metrics.trailingThumbSize}
         />
@@ -105,13 +121,22 @@ function renderTrailing(props: NotificationItemProps) {
 }
 
 export function NotificationItem(props: NotificationItemProps) {
-  const { title, subtitle, read = false, onPress, style } = props;
+  const { title, subtitle, read = false, onPress, onMarkRead, style } = props;
 
   const hasActions =
     (props.type === 'Request' || props.type === 'Connection') &&
     (props.onAccept !== undefined || props.onReject !== undefined);
 
   const accessibilityLabel = read ? `${title}. ${subtitle}` : `Não lida. ${title}. ${subtitle}`;
+  const markReadButton = onMarkRead ? (
+    <IconButton
+      icon={<Icon name="check" size={metrics.fallbackIconSize} color={colors.action.primary} />}
+      variant="Ghost"
+      size="MD"
+      onPress={onMarkRead}
+      accessibilityLabel={`Marcar como lida — ${title}`}
+    />
+  ) : null;
 
   const text = (
     <>
@@ -158,6 +183,33 @@ export function NotificationItem(props: NotificationItemProps) {
             )}
           </View>
         </View>
+        {markReadButton}
+      </View>
+    );
+  }
+
+  const plainContent = (
+    <>
+      {!read && <View style={styles.dot} />}
+      {renderLeading(props)}
+      <View style={styles.body}>{text}</View>
+      {renderTrailing(props)}
+    </>
+  );
+
+  if (onMarkRead) {
+    return (
+      <View style={[styles.item, styles.itemPlain, !read && styles.itemUnread, style]}>
+        <Pressable
+          onPress={onPress}
+          disabled={!onPress}
+          accessibilityRole={onPress ? 'button' : undefined}
+          accessibilityLabel={accessibilityLabel}
+          style={({ pressed }) => [styles.itemMain, pressed && onPress && { opacity: pressedOpacity }]}
+        >
+          {plainContent}
+        </Pressable>
+        {markReadButton}
       </View>
     );
   }
@@ -168,10 +220,7 @@ export function NotificationItem(props: NotificationItemProps) {
       accessibilityLabel={accessibilityLabel}
       style={[styles.item, styles.itemPlain, !read && styles.itemUnread, style]}
     >
-      {!read && <View style={styles.dot} />}
-      {renderLeading(props)}
-      <View style={styles.body}>{text}</View>
-      {renderTrailing(props)}
+      {plainContent}
     </Tappable>
   );
 }
@@ -220,6 +269,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[8],
+  },
+  itemMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
   },
   title: {
     ...typography.labelM,

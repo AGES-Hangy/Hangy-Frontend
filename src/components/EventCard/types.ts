@@ -25,6 +25,9 @@ export interface EventCardProps {
   state?: EventState;
   isNew?: boolean;
   onPress?: () => void;
+  /** Ações locais/da tela para cards de solicitação. */
+  onAcceptRequest?: () => void;
+  onRejectRequest?: () => void;
   /** Sino de notificações em `Featured` e `Mini`. Sem isto o sino fica decorativo. */
   onNotifyPress?: () => void;
 }

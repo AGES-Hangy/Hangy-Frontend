@@ -1,4 +1,4 @@
-export type EmptyStateContext = 'Home' | 'Map' | 'Search' | 'Photos' | 'MyEvents';
+export type EmptyStateContext = 'Home' | 'Map' | 'Search' | 'Photos' | 'MyEvents' | 'Notifications';
 
 export interface EmptyStateProps {
   context: EmptyStateContext;
@@ -7,6 +7,8 @@ export interface EmptyStateProps {
   onCtaPress?: () => void;
   ctaAtBottom?: boolean;
   ctaDisabled?: boolean;
+  /** Ocupa a área disponível para centralizar o estado vazio na tela. */
+  fill?: boolean;
   /**
    * Sobrescreve o título do `context`. Existe para os casos em que a mensagem
    * vem do servidor e não de um estado fixo do app — evento cancelado, evento

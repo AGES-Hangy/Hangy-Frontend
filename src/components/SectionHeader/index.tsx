@@ -9,6 +9,7 @@ export function SectionHeader({
   title,
   variant = 'title',
   action = false,
+  showActionIcon = true,
   actionDisabled = false,
   actionLabel = 'Ver todos',
   onActionPress,
@@ -38,7 +39,9 @@ export function SectionHeader({
           <Text style={[styles.actionLabel, actionDisabled && styles.actionLabelDisabled]} numberOfLines={1}>
             {actionLabel}
           </Text>
-          <Icon name="chevron-right" size={18} color={actionDisabled ? colors.text.disabled : palette.primary[600]} />
+          {showActionIcon && (
+            <Icon name="chevron-right" size={18} color={actionDisabled ? colors.text.disabled : palette.primary[600]} />
+          )}
         </Pressable>
       )}
     </View>

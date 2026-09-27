@@ -58,12 +58,17 @@ export function EventCard({
 	state = 'Default',
 	isNew = false,
 	onPress,
+	onAcceptRequest,
+	onRejectRequest,
 	onNotifyPress,
 }: EventCardProps) {
 	const dateTime = formatEventDateTime(event.date);
 	const accessibleLabel = [event.title, dateTime, event.location, getPrivacyBadgeLabel(event.privacy)]
 		.filter(Boolean)
 		.join(', ');
+	if (variant === 'Request') {
+		return <RequestCard event={event} isNew={isNew} onAccept={onAcceptRequest} onReject={onRejectRequest} />;
+	}
 	if (variant === 'Mini') {
 		return <MiniCard event={event} onPress={onPress} onNotifyPress={onNotifyPress} accessibleLabel={accessibleLabel} />;
 	}
@@ -88,7 +93,6 @@ export function EventCard({
 			{variant === 'Featured' && <FeaturedCard event={event} onNotifyPress={onNotifyPress} />}
 			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
-			{variant === 'Request' && <RequestCard event={event} isNew={isNew} />}
 		</Pressable>
 	);
 }
@@ -299,7 +303,17 @@ function MiniCard({
 	);
 }
 
-function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
+function RequestCard({
+	event,
+	isNew,
+	onAccept,
+	onReject,
+}: {
+	event: Event;
+	isNew: boolean;
+	onAccept?: () => void;
+	onReject?: () => void;
+}) {
 	const requesterName = event.requesterName ?? 'Usuário';
 	const dateTime = formatEventDateTime(event.date);
 
@@ -331,7 +345,7 @@ function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
 
 				<View style={styles.requestActions}>
 					<Pressable
-						onPress={() => undefined}
+						onPress={onAccept}
 						accessibilityRole="button"
 						accessibilityLabel="Aceitar solicitação"
 						style={styles.acceptButton}
@@ -339,7 +353,7 @@ function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
 						<Icon name="check" size={18} color={colors.text.inverse} absoluteStrokeWidth />
 					</Pressable>
 					<Pressable
-						onPress={() => undefined}
+						onPress={onReject}
 						accessibilityRole="button"
 						accessibilityLabel="Recusar solicitação"
 						style={styles.rejectButton}
