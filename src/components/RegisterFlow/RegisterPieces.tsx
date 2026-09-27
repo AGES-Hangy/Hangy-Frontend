@@ -6,7 +6,7 @@ import { ProfileTabs } from '@/components/ProfileTabs';
 import { colors, palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
-import { useTerms } from '@/hooks/useTerms';
+import type { Terms } from '@/hooks/useTerms';
 
 type AccountType = 'pf' | 'pj';
 
@@ -52,6 +52,19 @@ export function LoginLink() {
 }
 
 /**
+ * `useTerms` sobe até `Register` (dono do submit, que precisa de
+ * `terms.version` pro `accepted_terms_version` do payload) e desce como prop
+ * pra esta etapa — assim a árvore inteira compartilha a mesma busca, em vez
+ * de cada `TermsCheckbox` buscar a sua.
+ */
+export type TermsBundle = {
+  terms: Terms | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+};
+
+/**
  * Checkbox de aceite dos termos — não existe em nenhum frame de etapa 2 do
  * Figma, mas o critério de aceite escrito é explícito ("botão só habilita com
  * termos aceitos"), então fica registrado aqui como decisão desta
@@ -61,11 +74,13 @@ export function LoginLink() {
 export function TermsCheckbox({
   checked,
   onChange,
+  termsBundle,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
+  termsBundle: TermsBundle;
 }) {
-  const { terms, isLoading, error, refetch } = useTerms();
+  const { terms, isLoading, error, refetch } = termsBundle;
 
   return (
     <View style={styles.termsGroup}>

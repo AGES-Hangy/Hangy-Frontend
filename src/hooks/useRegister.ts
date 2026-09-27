@@ -14,6 +14,8 @@ export type PersonalRegisterPayload = {
   date_of_birth: string;
   state: string;
   city: string;
+  /** Data (`Terms.version`) dos termos que o checkbox de aceite mostrava no momento do envio. */
+  accepted_terms_version: string;
 };
 
 export type BusinessRegisterPayload = {
@@ -28,6 +30,8 @@ export type BusinessRegisterPayload = {
   latitude?: number;
   longitude?: number;
   instagram: string;
+  /** Data (`Terms.version`) dos termos que o checkbox de aceite mostrava no momento do envio. */
+  accepted_terms_version: string;
 };
 
 export type RegisterPayload = PersonalRegisterPayload | BusinessRegisterPayload;
@@ -68,6 +72,8 @@ export function useRegister() {
   ): Promise<RegisterSuccess | RegisterHttpError | null> {
     setIsLoading(true);
     setError(null);
+
+    console.log(payload);
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoints.register()}`, {

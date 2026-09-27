@@ -6,7 +6,7 @@ import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
-import { StepTitle, TermsCheckbox } from '@/components/RegisterFlow/RegisterPieces';
+import { StepTitle, TermsCheckbox, type TermsBundle } from '@/components/RegisterFlow/RegisterPieces';
 import type { PersonalFormState } from '@/components/RegisterFlow/types';
 import { isAtLeast18 } from '@/utils/age';
 import { maskPhone } from '@/utils/documentValidation';
@@ -18,9 +18,10 @@ type Props = {
   onChange: (patch: Partial<PersonalFormState>) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
+  termsBundle: TermsBundle;
 };
 
-export function PersonalStepTwo({ form, onChange, onSubmit, isSubmitting }: Props) {
+export function PersonalStepTwo({ form, onChange, onSubmit, isSubmitting, termsBundle }: Props) {
   const [touched, setTouched] = useState<{ dateOfBirth?: boolean }>({});
   const { states } = useBrazilianStates();
   const { cities } = useBrazilianCities(form.stateUf || null);
@@ -100,7 +101,11 @@ export function PersonalStepTwo({ form, onChange, onSubmit, isSubmitting }: Prop
         error={form.errors.city}
       />
 
-      <TermsCheckbox checked={form.termsAccepted} onChange={(value) => onChange({ termsAccepted: value })} />
+      <TermsCheckbox
+        checked={form.termsAccepted}
+        onChange={(value) => onChange({ termsAccepted: value })}
+        termsBundle={termsBundle}
+      />
 
       {form.generalError && <Text style={styles.generalError}>{form.generalError}</Text>}
 

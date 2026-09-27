@@ -5,7 +5,7 @@ import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
-import { StepTitle, TermsCheckbox } from '@/components/RegisterFlow/RegisterPieces';
+import { StepTitle, TermsCheckbox, type TermsBundle } from '@/components/RegisterFlow/RegisterPieces';
 import { AddressAutocompleteField } from '@/components/RegisterFlow/AddressAutocompleteField';
 import type { BusinessFormState } from '@/components/RegisterFlow/types';
 import { maskInstagramHandle, maskPhone } from '@/utils/documentValidation';
@@ -15,9 +15,10 @@ type Props = {
   onChange: (patch: Partial<BusinessFormState>) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
+  termsBundle: TermsBundle;
 };
 
-export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting }: Props) {
+export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting, termsBundle }: Props) {
   const isValid =
     form.businessName.trim().length > 0 &&
     form.phone.trim().length > 0 &&
@@ -66,7 +67,11 @@ export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting }: Prop
         error={form.errors.instagram}
       />
 
-      <TermsCheckbox checked={form.termsAccepted} onChange={(value) => onChange({ termsAccepted: value })} />
+      <TermsCheckbox
+        checked={form.termsAccepted}
+        onChange={(value) => onChange({ termsAccepted: value })}
+        termsBundle={termsBundle}
+      />
 
       {form.generalError && <Text style={styles.generalError}>{form.generalError}</Text>}
 

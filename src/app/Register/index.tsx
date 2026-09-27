@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useToast } from '@/components/Toast';
 import { useRegister } from '@/hooks/useRegister';
 import { useTags } from '@/hooks/useTags';
+import { useTerms } from '@/hooks/useTerms';
 import { useUserTags } from '@/hooks/useUserTags';
 import { isAtLeast18 } from '@/utils/age';
 import { onlyDigits } from '@/utils/documentValidation';
@@ -68,6 +69,10 @@ export default function Register() {
   const { tags, isLoading: isLoadingTags, error: tagsError, refetch: refetchTags } = useTags();
   const { saveTags, isLoading: isSavingTags } = useUserTags();
   const { showWarningToast } = useToast();
+  // Uma busca só, compartilhada pelas duas abas — ver `TermsBundle` em
+  // `RegisterPieces.tsx`. `Register` é quem envia o cadastro, então é quem
+  // precisa de `terms.version` pro `accepted_terms_version` do payload.
+  const termsBundle = useTerms();
 
   function updatePf(patch: Partial<PersonalFormState>) {
     setPf((current) => ({ ...current, ...patch }));
@@ -86,6 +91,15 @@ export default function Register() {
       return;
     }
 
+    // O checkbox só habilita com `terms` carregado, mas se a busca falhar
+    // bem no meio (refetch) entre marcar e enviar, não dá pra montar o
+    // payload sem a versão aceita — mesma regra de "sem termos não há
+    // aceite válido" do resto do fluxo.
+    if (!termsBundle.terms) {
+      updatePf({ generalError: 'Não foi possível carregar os termos. Tente de novo.' });
+      return;
+    }
+
     const result = await register({
       user_type: 'PERSONAL',
       email: pf.email.trim(),
@@ -96,6 +110,7 @@ export default function Register() {
       date_of_birth: pf.dateOfBirth ? toIsoDate(pf.dateOfBirth) : '',
       state: pf.stateUf,
       city: pf.city.trim(),
+      accepted_terms_version: termsBundle.terms.version,
     });
 
     if (result === null) {
@@ -118,6 +133,11 @@ export default function Register() {
   }
 
   async function handleSubmitBusiness() {
+    if (!termsBundle.terms) {
+      updatePj({ generalError: 'Não foi possível carregar os termos. Tente de novo.' });
+      return;
+    }
+
     const result = await register({
       user_type: 'BUSINESS',
       email: pj.email.trim(),
@@ -130,6 +150,7 @@ export default function Register() {
         ? { latitude: pj.addressLatitude, longitude: pj.addressLongitude }
         : null),
       instagram: pj.instagram.trim(),
+      accepted_terms_version: termsBundle.terms.version,
     });
 
     if (result === null) {
@@ -225,6 +246,7 @@ export default function Register() {
             onChange={updatePf}
             onSubmit={handleSubmitPersonal}
             isSubmitting={isRegistering}
+            termsBundle={termsBundle}
           />
         )
       ) : pj.step === 1 ? (
@@ -240,6 +262,7 @@ export default function Register() {
           onChange={updatePj}
           onSubmit={handleSubmitBusiness}
           isSubmitting={isRegistering}
+          termsBundle={termsBundle}
         />
       )}
     </RegisterScaffold>
