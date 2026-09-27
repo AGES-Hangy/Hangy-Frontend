@@ -89,6 +89,20 @@ export const layout = {
     chevronSize: 20,
     imageTransitionDuration: 150,
   },
+  notificationItem: {
+    /**
+     * Request e Connection. O frame especifica 104 com botões de 32; o
+     * componente usa `Button` SM (36) por causa do alvo de toque de 44.
+     */
+    minHeightActions: 112,
+    minHeightPlain: 80,
+    thumbSize: 48,
+    /** Capa do evento à direita do `Activity`, maior que a thumb da esquerda. */
+    trailingThumbSize: 56,
+    unreadDotSize: 8,
+    chevronSize: 20,
+    fallbackIconSize: 20,
+  },
 } as const;
 
 // Sombras — offset/blur em px (CSS) convertidos para shadow* do React Native;
