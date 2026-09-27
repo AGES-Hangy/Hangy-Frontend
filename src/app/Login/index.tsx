@@ -113,13 +113,14 @@ export default function Login() {
           accessibilityLabel="Senha"
         />
         <Pressable
-          disabled
-          accessibilityState={{ disabled: true }}
+          onPress={() => router.push('/PasswordReset')}
+          disabled={isLoading}
+          accessibilityState={{ disabled: isLoading }}
           accessibilityRole="button"
-          accessibilityLabel="Recuperação de senha indisponível nesta versão"
+          accessibilityLabel="Esqueci minha senha"
           hitSlop={spacing[8]}
         >
-          <Text style={[styles.link, styles.disabledLink]}>Recuperação de senha em breve</Text>
+          <Text style={[styles.link, isLoading && styles.disabledLink]}>Esqueci minha senha</Text>
         </Pressable>
         <Button
           label="Entrar"
