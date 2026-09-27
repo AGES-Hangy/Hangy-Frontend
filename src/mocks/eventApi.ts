@@ -14,6 +14,10 @@ import type {
  * subiram. O formato é cópia do contrato acordado, então quando o backend
  * chegar é só desligar a flag — nada nas telas nem nos hooks muda.
  *
+ * Também cobre `GET /terms/current` (task 212 [BE], também não subiu) pelo
+ * mesmo motivo — não é um endpoint de evento, mas é só mais um backend que
+ * falta, e criar um segundo arquivo/dispatcher pra um caso só seria over-engineering.
+ *
  * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
  * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
  *
@@ -265,6 +269,18 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const method = (init.method ?? 'GET').toUpperCase();
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
+
+  // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
+  // também ainda não subiu — o cadastro (task 056) precisa disto pra dar de
+  // testar a etapa de aceite dos termos sem backend.
+  if (partes[0] === 'terms' && partes[1] === 'current' && method === 'GET') {
+    return {
+      version: '2026-08-01',
+      published_at: '2026-08-01T00:00:00Z',
+      url: 'https://hangy.app/termos/2026-08-01',
+      summary: 'Termos de uso e política de privacidade do Hangy.',
+    } as T;
+  }
 
   if (partes[0] === 'events' && partes.length === 2 && method === 'GET') {
     erroDoCenario(eventId);
