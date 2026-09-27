@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
+import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
@@ -16,9 +19,12 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useInviteAccept, type InviteAcceptError } from '@/hooks/useInviteAccept';
+import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
 import { formatDateTime } from '@/utils/datetime';
+import { getToken } from '@/utils/auth';
 
 /**
  * Detalhe do evento — frame `Evento - visão do organizador` do Figma.
@@ -39,7 +45,7 @@ const SCRIM_OPACITY = 0.82;
  * Ação principal do rodapé. Vem pronta de `viewer.available_action` — a tela
  * não deduz nada de `privacy` + `participation_status`, só consulta a tabela.
  */
-const MAIN_ACTION: Record<
+const MAIN_ACTION: Record
   ViewerAction,
   { label: string; variant: 'Primary' | 'Danger'; icon?: 'share' | 'settings' } | null
 > = {
@@ -53,14 +59,87 @@ const MAIN_ACTION: Record<
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const { token: inviteToken } = useLocalSearchParams<{ token?: string }>();
+  const [resolvedEventId, setResolvedEventId] = useState<string | undefined>(id);
+  const [inviteStage, setInviteStage] = useState<'idle' | 'accepting' | 'error'>('idle');
+  const [inviteError, setInviteError] = useState<{ title: string; message: string } | null>(null);
+  const { accept } = useInviteAccept();
+
   const insets = useSafeAreaInsets();
   const { addToast } = useToast();
-  const { event, isLoading, error, reload } = useEvent(id);
-  const { share, isLoading: isSharing } = useEventShare(id);
+  const { event, isLoading, error, reload } = useEvent(resolvedEventId);
+  const { share, isLoading: isSharing } = useEventShare(resolvedEventId);
+  const { join, cancel, isSubmitting } = useParticipation(event?.event_id ?? resolvedEventId ?? '');
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
   // Sem barra superior: os botões desta tela ficam por cima da capa, e uma
   // TopAppBar em cima disso viraria uma segunda linha de ações.
   useTopAppBar(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+
+    let cancelled = false;
+
+    async function resolveInvite() {
+      const sessionToken = await getToken();
+
+      if (!sessionToken) {
+        await AsyncStorage.setItem('@hangy:pendingInviteToken', inviteToken as string);
+        router.replace('/Login');
+        return;
+      }
+
+      setInviteStage('accepting');
+      try {
+        const result = await accept(inviteToken as string);
+        if (cancelled) return;
+        setResolvedEventId(result.event_id);
+        setInviteStage('idle');
+      } catch (err) {
+        if (cancelled) return;
+        const apiError = err as InviteAcceptError;
+        if (apiError.status === 410) {
+          setInviteError({ title: 'Este convite expirou', message: 'Peça um novo link pra quem te convidou.' });
+        } else if (apiError.status === 403) {
+          addToast({ type: 'error', message: 'Este link de convite não é válido' });
+          router.replace('/Home');
+          return;
+        } else {
+          setInviteError({ title: 'Não foi possível confirmar', message: 'Tente abrir o link de novo.' });
+        }
+        setInviteStage('error');
+      }
+    }
+
+    resolveInvite();
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteToken]);
+
+  if (inviteToken && inviteStage === 'accepting') {
+    return (
+      <View style={styles.errorScreen}>
+        <EmptyState context="MyEvents" title="Confirmando sua participação..." text="Só um instante." cta={false} />
+      </View>
+    );
+  }
+
+  if (inviteToken && inviteStage === 'error' && inviteError) {
+    return (
+      <View style={styles.errorScreen}>
+        <EmptyState
+          context="MyEvents"
+          title={inviteError.title}
+          text={inviteError.message}
+          cta
+          ctaLabel="Voltar para o início"
+          onCtaPress={() => router.replace('/Home')}
+        />
+      </View>
+    );
+  }
 
   if (isLoading) return <EventDetailSkeleton />;
 
@@ -92,6 +171,40 @@ export default function EventDetail() {
   const showPendingBanner = event.viewer.is_organizer && pendingCount > 0;
   const [descriptionLead, ...descriptionRest] = event.description.split('\n');
 
+  const isPendingCancel = event.viewer.participation_status === 'PENDING';
+  const participationStatusBadge =
+    event.viewer.participation_status === 'CONFIRMED' ||
+    event.viewer.participation_status === 'PENDING' ||
+    event.viewer.participation_status === 'REJECTED'
+      ? event.viewer.participation_status
+      : undefined;
+
+  async function handleJoin() {
+    try {
+      await join();
+      reload();
+    } catch (err) {
+      const apiError = err as ParticipationError;
+      if (apiError.status === 409) {
+        addToast({ type: 'warning', message: 'Este evento está lotado' });
+      } else {
+        addToast({ type: 'error', message: 'Não foi possível concluir. Tente de novo.' });
+      }
+      reload();
+    }
+  }
+
+  async function handleCancelConfirm() {
+    setShowCancelDialog(false);
+    try {
+      await cancel();
+      addToast({ type: 'success', message: 'Participação cancelada.' });
+      reload();
+    } catch {
+      addToast({ type: 'error', message: 'Não foi possível cancelar. Tente de novo.' });
+    }
+  }
+
   function onMainAction() {
     if (event!.viewer.available_action === 'SHARE') {
       share();
@@ -103,10 +216,14 @@ export default function EventDetail() {
       return;
     }
 
-    // Confirmar, solicitar e cancelar presença são a US5.2 e a US5.3: os
-    // endpoints não estão no contrato desta task. O botão já vem da API para
-    // a tela não precisar mudar quando eles chegarem.
-    addToast({ type: 'info', message: 'Ação de presença chega com a US5.2.' });
+    if (event!.viewer.available_action === 'CANCEL') {
+      setShowCancelDialog(true);
+      return;
+    }
+
+    // Confirmar e solicitar presença usam o mesmo endpoint — o backend
+    // decide se vira CONFIRMED ou PENDING a partir do privacy.
+    handleJoin();
   }
 
   return (
@@ -194,15 +311,18 @@ export default function EventDetail() {
                 </Text>
               </View>
 
-              <View style={styles.infoRow}>
-                <Icon name="map-pin" size={20} color={colors.text.primary} absoluteStrokeWidth />
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {event.location_name}
-                </Text>
-              </View>
+              {event.privacy !== 'PRIVATE' && (
+                <View style={styles.infoRow}>
+                  <Icon name="map-pin" size={20} color={colors.text.primary} absoluteStrokeWidth />
+                  <Text style={styles.infoText} numberOfLines={1}>
+                    {event.location_name}
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.infoRow}>
                 <Badge family="Privacy" value={event.privacy} />
+                {participationStatusBadge && <Badge family="Status" value={participationStatusBadge} />}
               </View>
             </View>
           </View>
@@ -276,12 +396,27 @@ export default function EventDetail() {
             label={action.label}
             variant={action.variant}
             icon={action.icon}
-            isLoading={action.icon === 'share' && isSharing}
+            isLoading={(action.icon === 'share' && isSharing) || isSubmitting}
             onPress={onMainAction}
             style={styles.ctaButton}
           />
         </View>
       )}
+
+      <Dialog
+        visible={showCancelDialog}
+        variant="LeaveEvent"
+        title={isPendingCancel ? 'Cancelar solicitação?' : 'Cancelar presença?'}
+        description={
+          isPendingCancel
+            ? 'Sua solicitação será removida da fila do organizador.'
+            : 'Você deixa de aparecer na lista de confirmados. Pode confirmar de novo quando quiser.'
+        }
+        confirmLabel={isPendingCancel ? 'Cancelar solicitação' : 'Cancelar presença'}
+        onConfirm={handleCancelConfirm}
+        onCancel={() => setShowCancelDialog(false)}
+        isLoading={isSubmitting}
+      />
     </View>
   );
 }
