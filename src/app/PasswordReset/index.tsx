@@ -133,13 +133,13 @@ export default function PasswordReset() {
 }
 
 const styles = StyleSheet.create({
-	screen: { flex: 1, backgroundColor: colors.action.primary },
+	screen: { flex: 1, backgroundColor: palette.primary[600] },
 	brandArea: {
 		height: '26.5%',
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
-	logo: { width: 224, height: 76 },
+	logo: { width: 220, height: 85 },
 	panel: {
 		flex: 1,
 		backgroundColor: palette.primary[50],

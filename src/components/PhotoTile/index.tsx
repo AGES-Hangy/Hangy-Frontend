@@ -236,13 +236,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   expandedLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     pointerEvents: 'none',
     alignItems: 'center',
     justifyContent: 'center',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg.inverse,
     opacity: OVERLAY_OPACITY,
   },

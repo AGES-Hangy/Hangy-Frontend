@@ -184,9 +184,9 @@ export default function PasswordResetCode() {
 }
 
 const styles = StyleSheet.create({
-	screen: { flex: 1, backgroundColor: colors.action.primary },
+	screen: { flex: 1, backgroundColor: palette.primary[600] },
 	brandArea: { height: '26.5%', alignItems: 'center', justifyContent: 'center' },
-	logo: { width: 224, height: 76 },
+	logo: { width: 220, height: 85 },
 	panel: { flex: 1, backgroundColor: palette.primary[50], borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden' },
 	panelContent: { flexGrow: 1, paddingHorizontal: spacing[24], paddingTop: spacing[16], paddingBottom: spacing[40] },
 	back: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing[8] },

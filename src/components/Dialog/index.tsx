@@ -143,7 +143,7 @@ export function Dialog({
 const styles = StyleSheet.create({
   overlay: { flex: 1 },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg.inverse,
     opacity: 0.5,
   },
