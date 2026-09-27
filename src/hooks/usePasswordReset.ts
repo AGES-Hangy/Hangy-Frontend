@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import { API_BASE_URL, API_TIMEOUT_MS, endpoints } from '@/constants/api';
 
@@ -8,7 +9,7 @@ export type PasswordResetValidationError = {
 };
 
 export type PasswordResetFailure = {
-  kind: 'http' | 'network' | 'timeout';
+  kind: 'http' | 'network' | 'timeout' | 'cancelled';
   status: number | null;
   detail: string | null;
   retryAfterSeconds: number | null;
@@ -26,6 +27,11 @@ type VerifyResponse = {
 
 let resetToken: string | null = null;
 let resetTokenExpiresAt = 0;
+const RATE_LIMIT_FALLBACK_SECONDS = 180;
+const CANCELLED: ApiResult<never> = {
+  ok: false,
+  failure: { kind: 'cancelled', status: null, detail: null, retryAfterSeconds: null, validationErrors: [] },
+};
 
 export function clearPasswordResetToken() {
   resetToken = null;
@@ -81,12 +87,40 @@ function parseFailure(response: Response, body: unknown): PasswordResetFailure {
 export function usePasswordReset() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<PasswordResetFailure | null>(null);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  const retryUntil = useRef(0);
+  const rateLimitFailure = useRef<PasswordResetFailure | null>(null);
+  const activeRequest = useRef<AbortController | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    setIsLoading(false);
+    return () => {
+      // Blur also runs when a screen stays mounted underneath the next step.
+      const request = activeRequest.current;
+      activeRequest.current = null;
+      request?.abort();
+    };
+  }, []));
+
+  useEffect(() => {
+    if (retrySeconds === 0) return;
+    const timer = setInterval(() => {
+      setRetrySeconds(Math.max(0, Math.ceil((retryUntil.current - Date.now()) / 1000)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [retrySeconds]);
 
   async function post<T>(path: string, body: object): Promise<ApiResult<T>> {
+    if (Date.now() < retryUntil.current && rateLimitFailure.current) {
+      return { ok: false, failure: rateLimitFailure.current };
+    }
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const isCurrent = () => activeRequest.current === controller;
     setIsLoading(true);
     setError(null);
 
-    const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
     try {
@@ -99,6 +133,13 @@ export function usePasswordReset() {
 
       if (!response.ok) {
         const failure = parseFailure(response, await readErrorBody(response));
+        if (!isCurrent()) return CANCELLED;
+        if (failure.status === 429) {
+          const seconds = failure.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS;
+          retryUntil.current = Date.now() + seconds * 1000;
+          rateLimitFailure.current = failure;
+          setRetrySeconds(seconds);
+        }
         setError(failure);
         return { ok: false, failure };
       }
@@ -106,8 +147,10 @@ export function usePasswordReset() {
       const data = response.status === 202 || response.status === 204
         ? undefined as T
         : await response.json() as T;
+      if (!isCurrent()) return CANCELLED;
       return { ok: true, data };
     } catch (caught) {
+      if (!isCurrent()) return CANCELLED;
       const isTimeout = caught instanceof Error && caught.name === 'AbortError';
       const failure: PasswordResetFailure = {
         kind: isTimeout ? 'timeout' : 'network',
@@ -120,7 +163,10 @@ export function usePasswordReset() {
       return { ok: false, failure };
     } finally {
       clearTimeout(timeout);
-      setIsLoading(false);
+      if (isCurrent()) {
+        activeRequest.current = null;
+        setIsLoading(false);
+      }
     }
   }
 
@@ -174,5 +220,5 @@ export function usePasswordReset() {
     setError(null);
   }
 
-  return { requestCode, verifyCode, resetPassword, clearError, isLoading, error };
+  return { requestCode, verifyCode, resetPassword, clearError, isLoading, error, retrySeconds };
 }

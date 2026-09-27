@@ -12,7 +12,6 @@ import { useToast } from '@/components/Toast';
 import { clearPasswordResetToken, usePasswordReset } from '@/hooks/usePasswordReset';
 
 const RESEND_DELAY_SECONDS = 30;
-const RATE_LIMIT_FALLBACK_SECONDS = 180;
 
 function maskEmail(email: string) {
 	const [name, domain] = email.split('@');
@@ -28,18 +27,21 @@ export default function PasswordResetCode() {
 	const [secondsLeft, setSecondsLeft] = useState(RESEND_DELAY_SECONDS);
 	const [isResending, setIsResending] = useState(false);
 	const [resendError, setResendError] = useState<string | null>(null);
-	const { verifyCode, requestCode, isLoading, error, clearError } = usePasswordReset();
+	const { verifyCode, requestCode, isLoading, error, clearError, retrySeconds } = usePasswordReset();
 	const { showErrorToast, showWarningToast } = useToast();
 	const invalidCode = error?.status === 400 && error.detail === 'Invalid or expired code';
 	const validationError = error?.validationErrors.find((item) => item.field === 'code');
 	const codeError = invalidCode ? 'Código inválido ou expirado.' : validationError?.message;
-	const confirmError = error?.kind === 'network'
-		? 'Sem conexão com a internet.'
-		: error?.kind === 'timeout'
-			? 'A conexão demorou demais. Tente novamente.'
-			: error?.status && error.status >= 500
-				? 'Não foi possível carregar. Tente de novo.'
-				: null;
+	const resendSeconds = Math.max(secondsLeft, retrySeconds);
+	const confirmError = error?.status === 429
+		? 'Muitas tentativas. Espere alguns minutos.'
+		: error?.kind === 'network'
+			? 'Sem conexão com a internet.'
+			: error?.kind === 'timeout'
+				? 'A conexão demorou demais. Tente novamente.'
+				: error?.status && error.status >= 500
+					? 'Não foi possível carregar. Tente de novo.'
+					: null;
 
 	useEffect(() => {
 		if (secondsLeft === 0) return;
@@ -48,7 +50,7 @@ export default function PasswordResetCode() {
 	}, [secondsLeft]);
 
 	async function confirmCode() {
-		if (code.length !== 6 || isLoading) return;
+		if (code.length !== 6 || isLoading || retrySeconds > 0) return;
 		const result = await verifyCode(email, code);
 		if (result.ok) {
 			router.push('/PasswordReset/NewPassword');
@@ -58,7 +60,9 @@ export default function PasswordResetCode() {
 			setCode('');
 			requestAnimationFrame(() => codeInputRef.current?.focus());
 		}
-		if (result.failure.kind === 'timeout') {
+		if (result.failure.status === 429) {
+			showWarningToast('Muitas tentativas. Espere alguns minutos.');
+		} else if (result.failure.kind === 'timeout') {
 			showErrorToast('A conexão demorou demais. Tente novamente.');
 		}
 	}
@@ -69,18 +73,18 @@ export default function PasswordResetCode() {
 	}
 
 	async function resendCode() {
-		if (secondsLeft > 0 || isLoading || !email) return;
+		if (resendSeconds > 0 || isLoading || !email) return;
 		setIsResending(true);
 		setResendError(null);
 		const result = await requestCode(email);
 		setIsResending(false);
+		if (!result.ok && result.failure.kind === 'cancelled') return;
 		if (result.ok) {
 			setCode('');
 			setSecondsLeft(RESEND_DELAY_SECONDS);
 			return;
 		}
 		if (result.failure.status === 429) {
-			setSecondsLeft(result.failure.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS);
 			showWarningToast('Muitas tentativas. Espere alguns minutos.');
 		} else if (result.failure.kind === 'timeout') {
 			setResendError('A conexão demorou demais. Tente novamente.');
@@ -139,6 +143,8 @@ export default function PasswordResetCode() {
 							<View style={styles.requestError} accessibilityRole="alert">
 								<Text style={styles.errorText}>{resendError ?? confirmError}</Text>
 								<Pressable
+									disabled={isLoading || retrySeconds > 0}
+									accessibilityState={{ disabled: isLoading || retrySeconds > 0 }}
 									onPress={resendError ? resendCode : confirmCode}
 									accessibilityRole="button"
 									accessibilityLabel="Tentar novamente"
@@ -149,24 +155,24 @@ export default function PasswordResetCode() {
 							</View>
 						) : null}
 						<Button
-							label="Confirmar código"
-							disabled={code.length !== 6 || isLoading}
+							label={retrySeconds > 0 ? `Aguarde ${retrySeconds}s` : 'Confirmar código'}
+							disabled={code.length !== 6 || isLoading || retrySeconds > 0}
 							isLoading={isLoading && !isResending}
 							onPress={confirmCode}
 						/>
 						<Pressable
 							onPress={resendCode}
-							disabled={secondsLeft > 0 || isLoading}
+							disabled={resendSeconds > 0 || isLoading}
 							accessibilityRole="button"
-							accessibilityLabel={isResending ? 'Reenviando código' : secondsLeft > 0 ? `Reenviar código em ${secondsLeft} segundos` : 'Reenviar código'}
-							accessibilityState={{ disabled: secondsLeft > 0 || isLoading, busy: isResending }}
+							accessibilityLabel={isResending ? 'Reenviando código' : resendSeconds > 0 ? `Reenviar código em ${resendSeconds} segundos` : 'Reenviar código'}
+							accessibilityState={{ disabled: resendSeconds > 0 || isLoading, busy: isResending }}
 							style={styles.resend}
 						>
 							{isResending ? (
 								<ActivityIndicator size="small" color={palette.primary[600]} />
 							) : (
-								<Text style={[styles.resendText, secondsLeft > 0 && styles.resendDisabled]}>
-									{secondsLeft > 0 ? `Reenviar código em ${secondsLeft}s` : 'Reenviar código'}
+								<Text style={[styles.resendText, resendSeconds > 0 && styles.resendDisabled]}>
+									{resendSeconds > 0 ? `Reenviar código em ${resendSeconds}s` : 'Reenviar código'}
 								</Text>
 							)}
 						</Pressable>

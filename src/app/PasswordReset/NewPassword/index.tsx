@@ -19,19 +19,21 @@ export default function PasswordResetNewPassword() {
 	const [didBlurPassword, setDidBlurPassword] = useState(false);
 	const [didBlurConfirmation, setDidBlurConfirmation] = useState(false);
 	const [tokenExpired, setTokenExpired] = useState(false);
-	const { resetPassword, isLoading, error, clearError } = usePasswordReset();
-	const { showErrorToast } = useToast();
+	const { resetPassword, isLoading, error, clearError, retrySeconds } = usePasswordReset();
+	const { showErrorToast, showWarningToast } = useToast();
 	const passwordValid = password.length >= 8;
 	const confirmationValid = confirmation === password && confirmation.length > 0;
 	const canSubmit = passwordValid && confirmationValid;
 	const passwordValidationError = error?.validationErrors.find((item) => item.field === 'new_password' || item.field === 'password');
-	const requestErrorMessage = error?.kind === 'network'
-		? 'Sem conexão com a internet.'
-		: error?.kind === 'timeout'
-			? 'A conexão demorou demais. Tente novamente.'
-			: error?.status && error.status >= 500
-				? 'Não foi possível carregar. Tente de novo.'
-				: null;
+	const requestErrorMessage = error?.status === 429
+		? 'Muitas tentativas. Espere alguns minutos.'
+		: error?.kind === 'network'
+			? 'Sem conexão com a internet.'
+			: error?.kind === 'timeout'
+				? 'A conexão demorou demais. Tente novamente.'
+				: error?.status && error.status >= 500
+					? 'Não foi possível carregar. Tente de novo.'
+					: null;
 
 	useFocusEffect(useCallback(() => () => clearPasswordResetToken(), []));
 
@@ -41,7 +43,7 @@ export default function PasswordResetNewPassword() {
 	}
 
 	async function submitPassword() {
-		if (!canSubmit || isLoading) return;
+		if (!canSubmit || isLoading || retrySeconds > 0) return;
 		const result = await resetPassword(password);
 		if (result.ok) {
 			router.replace('/PasswordReset/Success');
@@ -52,6 +54,8 @@ export default function PasswordResetNewPassword() {
 			(result.failure.status === 400 && result.failure.detail === 'Invalid or expired reset token')
 		) {
 			setTokenExpired(true);
+		} else if (result.failure.status === 429) {
+			showWarningToast('Muitas tentativas. Espere alguns minutos.');
 		} else if (result.failure.kind === 'timeout') {
 			showErrorToast('A conexão demorou demais. Tente novamente.');
 		}
@@ -141,12 +145,12 @@ export default function PasswordResetNewPassword() {
 						{requestErrorMessage ? (
 							<View style={styles.requestError} accessibilityRole="alert">
 								<Text style={styles.error}>{requestErrorMessage}</Text>
-								<Pressable onPress={submitPassword} accessibilityRole="button" accessibilityLabel="Tentar novamente" style={styles.retryAction}>
+								<Pressable onPress={submitPassword} disabled={isLoading || retrySeconds > 0} accessibilityState={{ disabled: isLoading || retrySeconds > 0 }} accessibilityRole="button" accessibilityLabel="Tentar novamente" style={styles.retryAction}>
 									<Text style={styles.retryText}>Tentar novamente</Text>
 								</Pressable>
 							</View>
 						) : null}
-						<Button label="Redefinir senha" disabled={!canSubmit || isLoading} isLoading={isLoading} onPress={submitPassword} />
+						<Button label={retrySeconds > 0 ? `Aguarde ${retrySeconds}s` : 'Redefinir senha'} disabled={!canSubmit || isLoading || retrySeconds > 0} isLoading={isLoading} onPress={submitPassword} />
 					</View>
 				</ScrollView>
 			</View>

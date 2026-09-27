@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -12,13 +12,11 @@ import { useToast } from '@/components/Toast';
 import { usePasswordReset } from '@/hooks/usePasswordReset';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RATE_LIMIT_FALLBACK_SECONDS = 180;
 
 export default function PasswordReset() {
 	const [email, setEmail] = useState('');
 	const [didBlur, setDidBlur] = useState(false);
-	const [retrySeconds, setRetrySeconds] = useState(0);
-	const { requestCode, isLoading, error, clearError } = usePasswordReset();
+	const { requestCode, isLoading, error, clearError, retrySeconds } = usePasswordReset();
 	const { showErrorToast, showWarningToast } = useToast();
 	const isEmailValid = EMAIL_PATTERN.test(email.trim());
 	const emailValidationError = error?.validationErrors.find((item) => item.field === 'email');
@@ -32,12 +30,6 @@ export default function PasswordReset() {
 					? 'Não foi possível carregar. Tente de novo.'
 					: null;
 
-	useEffect(() => {
-		if (retrySeconds === 0) return;
-		const timer = setInterval(() => setRetrySeconds((seconds) => Math.max(0, seconds - 1)), 1000);
-		return () => clearInterval(timer);
-	}, [retrySeconds]);
-
 	async function continueToCode() {
 		if (!isEmailValid || isLoading || retrySeconds > 0) return;
 		const result = await requestCode(email.trim());
@@ -47,7 +39,6 @@ export default function PasswordReset() {
 		}
 
 		if (result.failure.status === 429) {
-			setRetrySeconds(result.failure.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS);
 			showWarningToast('Muitas tentativas. Espere alguns minutos.');
 		} else if (result.failure.kind === 'timeout') {
 			showErrorToast('A conexão demorou demais. Tente novamente.');
