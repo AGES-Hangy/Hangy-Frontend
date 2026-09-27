@@ -1,8 +1,12 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 
+import { Button } from '@/components/Button';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { colors } from '@/constants/colors';
+import { spacing } from '@/constants/layout';
+import { removeToken } from '@/utils/auth';
 
 export default function Profile() {
   // Sem `userId` é o perfil próprio; com, é o de outra pessoa ou de um
@@ -10,6 +14,11 @@ export default function Profile() {
   // API de perfil, sai de um hook em `src/hooks/` no lugar disto.
   const { userId, name } = useLocalSearchParams<{ userId?: string; name?: string }>();
   const isOwnProfile = !userId;
+
+  async function handleLogout() {
+    await removeToken();
+    router.replace('/Login');
+  }
 
   useTopAppBar(
     isOwnProfile
@@ -36,6 +45,15 @@ export default function Profile() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>{isOwnProfile ? 'Profile' : name}</Text>
+      {isOwnProfile && (
+        <Button
+          label="Sair"
+          variant="Secondary"
+          onPress={handleLogout}
+          accessibilityLabel="Sair da conta"
+          style={styles.logout}
+        />
+      )}
     </View>
   );
 }
@@ -51,5 +69,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.action.secondary,
+  },
+  logout: {
+    marginTop: spacing[24],
   },
 });
