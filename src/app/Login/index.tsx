@@ -18,7 +18,6 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useLogin } from '@/hooks/useLogin';
-import { removeToken } from '@/utils/auth';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -26,8 +25,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [touched, setTouched] = useState({ email: false, password: false });
-  const { login, isLoading, error, fieldErrors } = useLogin();
-  const { addToast, showErrorToast } = useToast();
+  const { login, isLoading, error, fieldErrors, clearFieldError } = useLogin();
+  const { showErrorToast } = useToast();
 
   const normalizedEmail = email.trim();
   const isEmailValid = EMAIL_REGEX.test(normalizedEmail);
@@ -41,35 +40,26 @@ export default function Login() {
     : undefined);
   const isValid = isEmailValid && password.length > 0;
   const isRetryableError = error === 'Não foi possível carregar. Tente de novo.'
-    || error === 'Sem conexão com a internet'
+    || error === 'Não foi possível conectar ao servidor'
+    || error === 'Não foi possível salvar sua sessão. Tente novamente.'
     || error === 'A conexão demorou demais';
 
   useEffect(() => {
     if (!error) return;
-    if (error === 'A conexão demorou demais') {
-      addToast({
-        type: 'error',
-        message: error,
-        actionLabel: 'Tentar de novo',
-        onAction: () => void handleSubmit(),
-      });
-    } else if (!isRetryableError) {
-      showErrorToast(error);
+    if (!isRetryableError) showErrorToast(error);
+    if (error === 'E-mail ou senha incorretos' || error === 'Esta conta foi excluída') {
+      setPassword('');
     }
-    if (error === 'E-mail ou senha incorretos') setPassword('');
-    if (error === 'Esta conta foi excluída') {
-      void removeToken();
-      router.replace('/Onboarding');
-    }
-  }, [addToast, error, isRetryableError, showErrorToast]);
+  }, [error, isRetryableError, showErrorToast]);
 
   async function handleSubmit() {
     setTouched({ email: true, password: true });
-    if (!isValid) return;
+    if (!isValid || isLoading) return;
 
     const result = await login(normalizedEmail, password);
     if (result) {
-      router.replace(result.userType === 'BUSINESS' ? '/HomeComercial' : '/Feed');
+      // A Home é a rota autenticada disponível para ambos os tipos de conta.
+      router.replace('/Home');
     }
   }
 
@@ -81,10 +71,10 @@ export default function Login() {
       <StatusBar style="light" />
       <Image source={require('../../../assets/images/logo.svg')} style={styles.logo} contentFit="contain" />
 
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Entrar</Text>
         {error && isRetryableError && (
-          <View style={styles.formErrorBox}>
+          <View style={styles.formErrorBox} accessibilityRole="alert" accessibilityLiveRegion="polite">
             <Text style={styles.formError}>{error}</Text>
             <Pressable
               onPress={handleSubmit}
@@ -105,7 +95,7 @@ export default function Login() {
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => { setEmail(value); clearFieldError('email'); }}
           onBlur={() => setTouched((current) => ({ ...current, email: true }))}
           error={emailError}
           disabled={isLoading}
@@ -116,19 +106,20 @@ export default function Login() {
           label="Senha"
           placeholder="Digite sua senha"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(value) => { setPassword(value); clearFieldError('password'); }}
           onBlur={() => setTouched((current) => ({ ...current, password: true }))}
           error={passwordError}
           disabled={isLoading}
           accessibilityLabel="Senha"
         />
         <Pressable
-          onPress={() => router.push('/PasswordReset')}
+          disabled
+          accessibilityState={{ disabled: true }}
           accessibilityRole="button"
-          accessibilityLabel="Esqueci minha senha"
+          accessibilityLabel="Recuperação de senha indisponível nesta versão"
           hitSlop={spacing[8]}
         >
-          <Text style={styles.link}>Esqueci minha senha?</Text>
+          <Text style={[styles.link, styles.disabledLink]}>Recuperação de senha em breve</Text>
         </Pressable>
         <Button
           label="Entrar"
@@ -142,12 +133,13 @@ export default function Login() {
         />
         <Text style={styles.registerPrompt}>Não possui uma conta?</Text>
         <Pressable
-          onPress={() => router.push('/Register')}
+          disabled
+          accessibilityState={{ disabled: true }}
           accessibilityRole="button"
-          accessibilityLabel="Criar conta"
+          accessibilityLabel="Cadastro indisponível nesta versão"
           hitSlop={spacing[8]}
         >
-          <Text style={styles.link}>Cadastre-se</Text>
+          <Text style={[styles.link, styles.disabledLink]}>Cadastro em breve</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -167,6 +159,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 100,
     marginBottom: spacing[16],
+  },
+  scroll: {
+    width: '100%',
+    maxWidth: 393,
   },
   form: {
     width: '100%',
@@ -219,6 +215,5 @@ const styles = StyleSheet.create({
   submit: {
     alignSelf: 'center',
     minWidth: 172,
-    backgroundColor: palette.primary[600],
   },
 });
