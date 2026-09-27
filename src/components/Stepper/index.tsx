@@ -1,19 +1,11 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { palette } from '@/constants/colors';
+import { radius, spacing } from '@/constants/layout';
 import type { StepperProps } from './types';
 
-const BAR_HEIGHT = 4;
-const BAR_GAP = 12;
-const BAR_RADIUS = 9999; // raio full
-
-export function Stepper({
-  totalSteps,
-  currentStep,
-  showLabel = true,
-  accessibilityLabel,
-}: StepperProps) {
-  const steps = Array.from({ length: totalSteps }, (_, index) => index + 1);
-  const label = accessibilityLabel ?? `Passo ${currentStep} de ${totalSteps}`;
+export function Stepper({ step, total = 5 }: StepperProps) {
+  const steps = Array.from({ length: total }, (_, index) => index + 1);
+  const label = `Passo ${step} de ${total}`;
 
   return (
     <View
@@ -21,54 +13,39 @@ export function Stepper({
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel={label}
-      accessibilityValue={{ min: 1, max: totalSteps, now: currentStep }}
+      accessibilityValue={{ min: 1, max: total, now: step }}
     >
-      <View style={styles.track} importantForAccessibility="no-hide-descendants">
-        {steps.map((step) => {
-          // concluído e atual compartilham a mesma cor; só o futuro muda
-          const isCompletedOrCurrent = step <= currentStep;
-          return (
-            <View
-              key={step}
-              style={[
-                styles.bar,
-                {
-                  backgroundColor: isCompletedOrCurrent
-                    ? palette.primary[500]
-                    : palette.neutral[200],
-                },
-              ]}
-            />
-          );
-        })}
-      </View>
-
-      {showLabel ? (
-        <Text style={styles.label} allowFontScaling>
-          {label}
-        </Text>
-      ) : null}
+      {steps.map((barStep) => {
+        // concluído e atual compartilham a mesma cor; só o futuro muda
+        const isCompletedOrCurrent = barStep <= step;
+        return (
+          <View
+            key={barStep}
+            importantForAccessibility="no-hide-descendants"
+            style={[
+              styles.bar,
+              {
+                backgroundColor: isCompletedOrCurrent
+                  ? palette.primary[500]
+                  : palette.neutral[200],
+              },
+            ]}
+          />
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-  },
-  track: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: BAR_GAP,
+    gap: spacing[12],
   },
   bar: {
     flex: 1,
-    height: BAR_HEIGHT,
-    borderRadius: BAR_RADIUS,
-  },
-  label: {
-    marginTop: 8,
-    color: palette.primary[500],
-    fontWeight: '600',
+    height: spacing[4],
+    borderRadius: radius.full,
   },
 });
