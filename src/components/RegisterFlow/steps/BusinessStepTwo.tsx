@@ -8,7 +8,7 @@ import { typography } from '@/constants/typography';
 import { StepTitle, TermsCheckbox } from '@/components/RegisterFlow/RegisterPieces';
 import { AddressAutocompleteField } from '@/components/RegisterFlow/AddressAutocompleteField';
 import type { BusinessFormState } from '@/components/RegisterFlow/types';
-import { maskPhone } from '@/utils/documentValidation';
+import { maskInstagramHandle, maskPhone } from '@/utils/documentValidation';
 
 type Props = {
   form: BusinessFormState;
@@ -60,7 +60,9 @@ export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting }: Prop
         label="Instagram"
         placeholder="@instagram"
         value={form.instagram}
-        onChangeText={(text) => onChange({ instagram: text, errors: { ...form.errors, instagram: undefined } })}
+        onChangeText={(text) =>
+          onChange({ instagram: maskInstagramHandle(text), errors: { ...form.errors, instagram: undefined } })
+        }
         error={form.errors.instagram}
       />
 

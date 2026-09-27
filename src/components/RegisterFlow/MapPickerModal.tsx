@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import MapView from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
@@ -41,6 +42,7 @@ type Props = {
  */
 export function MapPickerModal({ visible, onClose, onConfirm }: Props) {
   const mapRef = useRef<MapView>(null);
+  const insets = useSafeAreaInsets();
   const [region, setRegion] = useState(DEFAULT_REGION);
   const [query, setQuery] = useState('');
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -89,7 +91,7 @@ export function MapPickerModal({ visible, onClose, onConfirm }: Props) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <View style={styles.searchBar}>
+        <View style={[styles.searchBar, { paddingTop: insets.top + spacing[16] }]}>
           <TextField
             type="Location"
             label="Buscar endereço"
@@ -122,7 +124,7 @@ export function MapPickerModal({ visible, onClose, onConfirm }: Props) {
           </View>
         </View>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[16] }]}>
           {permissionDenied && (
             <Text style={styles.permissionText}>
               Sem permissão de localização — busque o endereço por texto acima.

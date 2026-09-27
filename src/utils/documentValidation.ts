@@ -40,6 +40,13 @@ export function maskPhone(value: string): string {
     .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
 }
 
+/** Garante um único `@` no início do handle, sem forçar um quando o campo está vazio. */
+export function maskInstagramHandle(value: string): string {
+  const trimmed = value.trimStart();
+  if (trimmed.length === 0) return trimmed;
+  return `@${trimmed.replace(/^@+/, '')}`;
+}
+
 function hasAllSameDigits(digits: string): boolean {
   return digits.split('').every((digit) => digit === digits[0]);
 }
