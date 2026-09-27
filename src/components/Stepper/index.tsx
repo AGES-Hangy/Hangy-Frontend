@@ -13,7 +13,9 @@ export function Stepper({ step, total = 5 }: StepperProps) {
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel={label}
-      accessibilityValue={{ min: 1, max: total, now: step }}
+      aria-valuemin={1}
+      aria-valuemax={total}
+      aria-valuenow={step}
     >
       {steps.map((barStep) => {
         // concluído e atual compartilham a mesma cor; só o futuro muda
