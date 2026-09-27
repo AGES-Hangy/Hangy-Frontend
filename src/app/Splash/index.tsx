@@ -49,7 +49,7 @@ export default function Splash() {
         height="100%"
         viewBox={`0 0 ${FRAME_WIDTH} ${FRAME_HEIGHT}`}
         preserveAspectRatio="xMidYMid slice"
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       >
         <Defs>
           {/* Glow lavanda, canto superior esquerdo — primary/300 a primary/600 */}

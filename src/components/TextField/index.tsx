@@ -648,7 +648,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   pickerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg.inverse,
     opacity: BACKDROP_OPACITY,
   },

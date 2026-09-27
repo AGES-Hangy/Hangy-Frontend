@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[24],
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg.base,
     opacity: 0.6,
   },

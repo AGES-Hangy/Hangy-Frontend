@@ -1,5 +1,5 @@
-import { Tabs, router } from 'expo-router';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { router } from 'expo-router';
+import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 
 import { AuthGuard } from '@/utils/AuthGuard';
 import { BottomNav } from '@/components/BottomNav';
