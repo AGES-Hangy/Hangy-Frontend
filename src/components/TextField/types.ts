@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { BlurEvent, FocusEvent, StyleProp, ViewStyle } from 'react-native';
+import type { BlurEvent, FocusEvent, KeyboardTypeOptions, StyleProp, ViewStyle } from 'react-native';
 
 /** Eixo `Type` do Figma — muda comportamento e affordance do campo. */
 export type TextFieldType =
@@ -48,6 +48,8 @@ export type TextFieldProps = {
   onFocus?: (event: FocusEvent) => void;
   onBlur?: (event: BlurEvent) => void;
   placeholder?: string;
+  keyboardType?: KeyboardTypeOptions;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   /** Texto de apoio abaixo do campo (Body S). */
   helper?: string;
   /** Mensagem de erro — força o estado `Error`. */
