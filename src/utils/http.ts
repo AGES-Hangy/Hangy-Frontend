@@ -64,13 +64,26 @@ async function readDetail(response: Response): Promise<string | null> {
   }
 }
 
+interface ApiFetchOptions {
+  /**
+   * Lança o 401 sem passar pelo tratamento global: não apaga a sessão, não
+   * mostra o toast de sessão expirada e não volta para o Login. Use só quando
+   * o 401 é esperado e a sessão já está sendo encerrada, como no logout.
+   */
+  skipUnauthorizedHandler?: boolean;
+}
+
 /**
  * Cliente HTTP do app. Cuida do token, do timeout, do 401 global e de
  * transformar qualquer falha num `ApiError` — as telas nunca veem `Response`.
  *
  * Com `USE_API_MOCKS` ligado, desvia para `resolveMock` antes de tocar a rede.
  */
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  { skipUnauthorizedHandler = false }: ApiFetchOptions = {},
+): Promise<T> {
   if (USE_API_MOCKS) {
     return resolveMock<T>(path, init);
   }
@@ -101,7 +114,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 
   if (response.status === 401) {
-    await handleUnauthorized();
+    if (!skipUnauthorizedHandler) await handleUnauthorized();
     throw new ApiError('http', 401, await readDetail(response));
   }
 
