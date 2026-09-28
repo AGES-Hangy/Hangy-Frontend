@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { BlurEvent, FocusEvent, KeyboardTypeOptions, StyleProp, ViewStyle } from 'react-native';
 
+import type { IconName } from '@/components/Icon';
+
 /** Eixo `Type` do Figma — muda comportamento e affordance do campo. */
 export type TextFieldType =
   | 'Text'
@@ -97,6 +99,22 @@ export type TextFieldProps = {
 
   /** Limite de caracteres. Em `TextArea` também liga o contador do Figma. */
   maxLength?: number;
+
+  /**
+   * Sobrescreve o ícone à direita padrão do `type` (ex.: trocar o `chevron`
+   * de `Location` por outro ícone). Sem esta prop, o ícone continua vindo só
+   * do `type`, como hoje.
+   */
+  trailingIcon?: IconName;
+  /**
+   * Dá um toque só na área do ícone à direita, sem depender de o campo ser
+   * editável — usado por telas que abrem algo à parte (ex.: um seletor num
+   * mapa) a partir de um campo que também aceita digitação livre. Sem esta
+   * prop, o ícone continua só decorativo.
+   */
+  onTrailingIconPress?: () => void;
+  /** Rótulo de acessibilidade do toque acima. Padrão: `"Mais opções"`. */
+  onTrailingIconPressAccessibilityLabel?: string;
 
   /** Padrão: o próprio `label`. */
   accessibilityLabel?: string;

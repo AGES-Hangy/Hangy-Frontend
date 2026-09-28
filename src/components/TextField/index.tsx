@@ -261,19 +261,23 @@ export function TextField({
   maximumDate,
   maxLength,
   accessibilityLabel,
+  trailingIcon: trailingIconOverride,
+  onTrailingIconPress,
+  onTrailingIconPressAccessibilityLabel = 'Mais opções',
   style,
 }: TextFieldProps) {
   const config = TYPES[type];
   const [focused, setFocused] = useState(false);
   const [isSecureHidden, setIsSecureHidden] = useState(true);
   const [isIosPickerOpen, setIsIosPickerOpen] = useState(false);
+  const [iosPickerDraft, setIosPickerDraft] = useState<Date>(() => dateValue ?? new Date());
   const [webDateDraft, setWebDateDraft] = useState<string | null>(null);
 
   const isDateField = type === 'Date';
   // Campo de horário mostra relógio, não calendário. O Figma só desenhou o
   // Type=Date de data, então o ícone do modo `time` vem daqui.
   const trailingIcon: IconName | undefined =
-    isDateField && dateMode === 'time' ? 'clock' : config.trailingIcon;
+    trailingIconOverride ?? (isDateField && dateMode === 'time' ? 'clock' : config.trailingIcon);
   // No web o campo de data volta a aceitar digitação, porque lá não existe
   // picker nativo para abrir.
   const editable = config.editable || (isDateField && !HAS_NATIVE_DATE_PICKER);
@@ -331,6 +335,10 @@ export function TextField({
       return;
     }
 
+    // O spinner só chama `onChange` quando o usuário efetivamente gira uma
+    // roda — se ele abrir e tocar direto em "Concluir" (aceitando o valor
+    // padrão já exibido), sem isto o campo ficava sem valor nenhum.
+    setIosPickerDraft(dateValue ?? new Date());
     setIsIosPickerOpen(true);
   };
 
@@ -448,21 +456,50 @@ export function TextField({
         <Icon name={stateIcon.name} size={ICON_SIZE} color={stateIcon.color} />
       ) : (
         trailingIcon && (
-          <Icon
-            name={trailingIcon}
-            size={ICON_SIZE}
-            color={resolveIconColor(state, 'trailing')}
-          />
+          onTrailingIconPress ? (
+            <Pressable
+              onPress={onTrailingIconPress}
+              disabled={disabled}
+              hitSlop={spacing[12]}
+              accessibilityRole="button"
+              accessibilityLabel={onTrailingIconPressAccessibilityLabel}
+            >
+              <Icon
+                name={trailingIcon}
+                size={ICON_SIZE}
+                color={resolveIconColor(state, 'trailing')}
+              />
+            </Pressable>
+          ) : (
+            <Icon
+              name={trailingIcon}
+              size={ICON_SIZE}
+              color={resolveIconColor(state, 'trailing')}
+            />
+          )
         )
       )}
     </View>
   );
 
   return (
-    // Com a lista aberta o campo inteiro sobe de camada: no React Native o
-    // zIndex do dropdown só vale entre irmãos, entao sem isto os campos
-    // seguintes do formulario sao pintados por cima dela.
-    <View style={[styles.container, isDropdownOpen && styles.containerAbove, style]}>
+    // Campos com dropdown sempre reservam ALGUMA camada (`containerLayered`),
+    // não só quando `isDropdownOpen`: no iOS, aplicar `zIndex`/`elevation`
+    // pela primeira vez no momento do foco "desachata" essa View (ela passa
+    // a existir de verdade na árvore nativa, deixando de ser otimizada por
+    // view-flattening), e essa transição recria os descendentes — incluindo
+    // o TextInput que acabou de ganhar foco — derrubando o foco no mesmo
+    // instante em que o dropdown abriria. Com a camada de base sempre
+    // presente, só o NÍVEL sobe (`containerAbove`) quando o dropdown abre de
+    // fato, o que não força esse remount.
+    <View
+      style={[
+        styles.container,
+        config.hasDropdown && styles.containerLayered,
+        isDropdownOpen && styles.containerAbove,
+        style,
+      ]}
+    >
       {label && (
         <View style={styles.labelRow}>
           <Text style={[typography.labelM, { color: visual.labelColor }]}>
@@ -506,13 +543,19 @@ export function TextField({
           <View style={styles.pickerOverlay}>
             <Pressable
               style={styles.pickerBackdrop}
-              onPress={() => setIsIosPickerOpen(false)}
+              onPress={() => {
+                commitDate(iosPickerDraft);
+                setIsIosPickerOpen(false);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Fechar seletor de data"
             />
             <View style={styles.pickerSheet}>
               <Pressable
-                onPress={() => setIsIosPickerOpen(false)}
+                onPress={() => {
+                  commitDate(iosPickerDraft);
+                  setIsIosPickerOpen(false);
+                }}
                 hitSlop={spacing[12]}
                 accessibilityRole="button"
                 accessibilityLabel="Concluir"
@@ -521,15 +564,18 @@ export function TextField({
               </Pressable>
 
               <DateTimePicker
-                value={dateValue ?? new Date()}
+                value={iosPickerDraft}
                 mode={dateMode}
                 display="spinner"
                 minimumDate={minimumDate}
                 maximumDate={maximumDate}
-                // No iOS o picker emite a cada rolagem: o valor vai sendo
-                // confirmado enquanto o usuário gira, e a folha fecha no
-                // "Concluir" ou no toque fora.
-                onChange={(_event, date) => commitDate(date)}
+                // O spinner só emite ao rolar. Guardamos o valor em
+                // `iosPickerDraft` pra "Concluir"/tocar fora sempre terem o
+                // que confirmar, mesmo que o usuário aceite o padrão exibido
+                // sem mexer na roda.
+                onChange={(_event, date) => {
+                  if (date) setIosPickerDraft(date);
+                }}
               />
             </View>
           </View>
@@ -542,6 +588,8 @@ export function TextField({
             {options?.map((option) => (
               <Pressable
                 key={option.value}
+                // No Web, preserve o foco até o clique confirmar a opção.
+                onPointerDown={Platform.OS === 'web' ? (event) => event.preventDefault() : undefined}
                 onPress={() => handleSelectOption(option)}
                 accessibilityRole="button"
                 accessibilityLabel={option.label}
@@ -579,6 +627,15 @@ const styles = StyleSheet.create({
   hint: {
     ...typography.bodyS,
     color: colors.text.secondary,
+  },
+  // Camada de base dos campos com dropdown (Location/Tags/Select), sempre
+  // aplicada (não só quando abertos): ver o comentário no JSX que monta
+  // `container`. `containerAbove` soma +1 por cima disto só enquanto o
+  // dropdown está de fato aberto, pra ele vencer o campo seguinte (que só
+  // tem a camada de base).
+  containerLayered: {
+    zIndex: 1,
+    elevation: 1,
   },
   containerAbove: {
     zIndex: 2,
@@ -634,6 +691,11 @@ const styles = StyleSheet.create({
     ...elevation[2],
   },
   dropdownScroll: {
+    // Acompanha a altura do conteúdo (poucas opções = caixa menor) até este
+    // teto, de onde rola por dentro. Antes isto ficava com altura fixa pra
+    // não mudar o tamanho medido do ScrollView pai a cada tecla digitada,
+    // mas a causa real do foco caindo era outra (`containerLayered`, acima);
+    // resolvida ela, a caixa pode voltar a encolher pro conteúdo.
     maxHeight: DROPDOWN_MAX_HEIGHT,
   },
   option: {
