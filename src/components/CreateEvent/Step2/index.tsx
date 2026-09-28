@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
 import { Icon } from '@/components/Icon';
 import { ParticipantLimit } from '@/components/ParticipantLimit';
 import { ProfileTabs } from '@/components/ProfileTabs';
@@ -13,6 +14,7 @@ import { TextField } from '@/components/TextField';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import type { AddressSuggestion } from '@/hooks/useAddressSearch';
 
 import type { CreateEventFormData, Privacy } from '@/components/CreateEvent/types';
 
@@ -38,6 +40,7 @@ export type Step2Props = {
   onChangeDate: (v: Date | null) => void;
   onChangeTime: (v: Date | null) => void;
   onChangeLocation: (v: string) => void;
+  onSelectLocation: (suggestion: AddressSuggestion) => void;
   onChangeParticipantLimit: (v: number) => void;
   onChangeUnlimited: (v: boolean) => void;
   onChangePrivacy: (v: Privacy) => void;
@@ -72,6 +75,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
     onChangeDate,
     onChangeTime,
     onChangeLocation,
+    onSelectLocation,
     onChangeParticipantLimit,
     onChangeUnlimited,
     onChangePrivacy,
@@ -89,7 +93,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 
   const isDateMissing = !data.date;
   const isTimeMissing = !data.time;
-  const isLocationMissing = data.location.trim().length === 0;
+  const isLocationMissing = data.location.trim().length === 0 || data.locationCoordinates === null;
   const isInviteeMissing = data.privacy === 'INVITE_ONLY' && data.inviteeIds.length === 0;
   const isDateInPast = data.date !== null && !isFutureDate(data.date, data.time);
 
@@ -196,13 +200,13 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 
       <View ref={locationRef}>
         <FieldLabel label="Local" required />
-        <TextField
-          type="Location"
+        <AddressAutocompleteField
           value={data.location}
           onChangeText={onChangeLocation}
+          onSelect={onSelectLocation}
           placeholder="Digite o local do evento"
           maxLength={120}
-          error={showLocationError ? 'Informe o local do evento' : undefined}
+          error={showLocationError ? 'Selecione um local da lista ou do mapa' : undefined}
           reserveMessageSpace
           accessibilityLabel="Local do evento, obrigatório"
           disabled={isPublishing}

@@ -74,6 +74,16 @@ export default function Register() {
   // precisa de `terms.version` pro `accepted_terms_version` do payload.
   const termsBundle = useTerms();
 
+  // Numeração única (1-4) usada pelo Stepper, cobrindo as duas etapas do
+  // formulário (pf/pj) mais as duas etapas de tags.
+  const registerStep = phase === 'tagsMacro'
+    ? 3
+    : phase === 'tagsMicro'
+      ? 4
+      : accountType === 'pf'
+        ? pf.step
+        : pj.step;
+
   function updatePf(patch: Partial<PersonalFormState>) {
     setPf((current) => ({ ...current, ...patch }));
   }
@@ -215,7 +225,7 @@ export default function Register() {
 
   if (phase === 'tagsMacro') {
     return (
-      <RegisterScaffold variant="compact">
+      <RegisterScaffold variant="compact" step={registerStep}>
         <TagsMacroStep
           tags={tags}
           isLoading={isLoadingTags}
@@ -231,7 +241,7 @@ export default function Register() {
 
   if (phase === 'tagsMicro') {
     return (
-      <RegisterScaffold variant="compact">
+      <RegisterScaffold variant="compact" step={registerStep}>
         <TagsMicroStep
           tags={tags}
           selectedMacroIds={selectedMacroIds}
@@ -247,7 +257,7 @@ export default function Register() {
   }
 
   return (
-    <RegisterScaffold variant="form">
+    <RegisterScaffold variant="form" step={registerStep}>
       {accountType === 'pf' ? (
         pf.step === 1 ? (
           <PersonalStepOne

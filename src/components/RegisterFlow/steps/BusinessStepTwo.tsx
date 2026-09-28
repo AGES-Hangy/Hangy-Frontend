@@ -6,7 +6,7 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { StepTitle, TermsCheckbox, type TermsBundle } from '@/components/RegisterFlow/RegisterPieces';
-import { AddressAutocompleteField } from '@/components/RegisterFlow/AddressAutocompleteField';
+import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
 import type { BusinessFormState } from '@/components/RegisterFlow/types';
 import { maskPhone } from '@/utils/documentValidation';
 
@@ -48,6 +48,7 @@ export function BusinessStepTwo({ form, onChange, onBack, onSubmit, isSubmitting
         maxLength={15}
       />
       <AddressAutocompleteField
+        label="Endereço"
         value={form.address}
         onChangeText={(address) => onChange({
           address,

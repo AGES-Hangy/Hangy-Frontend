@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
 		paddingBottom: spacing[40],
 	},
 	heading: { alignItems: 'center', gap: spacing[12], marginBottom: spacing[32] },
-	title: { ...typography.h2, color: colors.text.primary, textAlign: 'center' },
+	title: { ...typography.h1, color: colors.text.brand, textAlign: 'center' },
 	description: {
 		...typography.bodyS,
 		color: colors.text.secondary,
