@@ -45,7 +45,7 @@ const SCRIM_OPACITY = 0.82;
  * Ação principal do rodapé. Vem pronta de `viewer.available_action` — a tela
  * não deduz nada de `privacy` + `participation_status`, só consulta a tabela.
  */
-const MAIN_ACTION: Record
+const MAIN_ACTION: Record<
   ViewerAction,
   { label: string; variant: 'Primary' | 'Danger'; icon?: 'share' | 'settings' } | null
 > = {
@@ -221,8 +221,6 @@ export default function EventDetail() {
       return;
     }
 
-    // Confirmar e solicitar presença usam o mesmo endpoint — o backend
-    // decide se vira CONFIRMED ou PENDING a partir do privacy.
     handleJoin();
   }
 
