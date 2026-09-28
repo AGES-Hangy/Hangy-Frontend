@@ -17,6 +17,7 @@ type Props = {
   selectedMacroIds: string[];
   onToggleMacro: (id: string) => void;
   onContinue: () => void;
+  onRetry: () => void;
 };
 
 /**
@@ -25,8 +26,9 @@ type Props = {
  * único como a tabela de estados da task descreve em prosa; sigo o frame,
  * que é mais concreto (ver divergência registrada no plano/PR).
  */
-export function TagsMacroStep({ tags, isLoading, error, selectedMacroIds, onToggleMacro, onContinue }: Props) {
-  const canContinue = selectedMacroIds.length >= MINIMUM_MACRO_TAGS;
+export function TagsMacroStep({ tags, isLoading, error, selectedMacroIds, onToggleMacro, onContinue, onRetry }: Props) {
+  const availableSelection = selectedMacroIds.filter((id) => tags.some((tag) => tag.id === id));
+  const canContinue = !isLoading && !error && availableSelection.length >= MINIMUM_MACRO_TAGS;
 
   return (
     <View style={styles.container}>
@@ -35,7 +37,12 @@ export function TagsMacroStep({ tags, isLoading, error, selectedMacroIds, onTogg
         Escolha ao menos {MINIMUM_MACRO_TAGS} áreas. O feed da Home é montado a partir delas.
       </Text>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && (
+        <>
+          <Text style={styles.error}>{error}</Text>
+          <Button label="Tentar novamente" variant="Secondary" onPress={onRetry} disabled={isLoading} />
+        </>
+      )}
 
       <View style={styles.chips}>
         {tags.map((tag) => (

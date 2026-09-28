@@ -30,7 +30,6 @@ export type BusinessFormState = {
   address: string;
   addressLatitude: number | null;
   addressLongitude: number | null;
-  instagram: string;
   termsAccepted: boolean;
   errors: RegisterFieldErrors;
   generalError: string | null;
@@ -64,7 +63,6 @@ export const EMPTY_BUSINESS_FORM: BusinessFormState = {
   address: '',
   addressLatitude: null,
   addressLongitude: null,
-  instagram: '',
   termsAccepted: false,
   errors: {},
   generalError: null,

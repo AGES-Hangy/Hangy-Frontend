@@ -8,22 +8,24 @@ import { typography } from '@/constants/typography';
 import { StepTitle, TermsCheckbox, type TermsBundle } from '@/components/RegisterFlow/RegisterPieces';
 import { AddressAutocompleteField } from '@/components/RegisterFlow/AddressAutocompleteField';
 import type { BusinessFormState } from '@/components/RegisterFlow/types';
-import { maskInstagramHandle, maskPhone } from '@/utils/documentValidation';
+import { maskPhone } from '@/utils/documentValidation';
 
 type Props = {
   form: BusinessFormState;
   onChange: (patch: Partial<BusinessFormState>) => void;
+  onBack: () => void;
   onSubmit: () => void;
   isSubmitting: boolean;
   termsBundle: TermsBundle;
 };
 
-export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting, termsBundle }: Props) {
+export function BusinessStepTwo({ form, onChange, onBack, onSubmit, isSubmitting, termsBundle }: Props) {
   const isValid =
     form.businessName.trim().length > 0 &&
     form.phone.trim().length > 0 &&
     form.address.trim().length > 0 &&
-    form.instagram.trim().length > 0 &&
+    form.addressLatitude !== null &&
+    form.addressLongitude !== null &&
     form.termsAccepted;
 
   return (
@@ -47,6 +49,12 @@ export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting, termsB
       />
       <AddressAutocompleteField
         value={form.address}
+        onChangeText={(address) => onChange({
+          address,
+          addressLatitude: null,
+          addressLongitude: null,
+          errors: { ...form.errors, address: undefined },
+        })}
         onSelect={(suggestion) =>
           onChange({
             address: suggestion.label,
@@ -57,15 +65,6 @@ export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting, termsB
         }
         error={form.errors.address}
       />
-      <TextField
-        label="Instagram"
-        placeholder="@instagram"
-        value={form.instagram}
-        onChangeText={(text) =>
-          onChange({ instagram: maskInstagramHandle(text), errors: { ...form.errors, instagram: undefined } })
-        }
-        error={form.errors.instagram}
-      />
 
       <TermsCheckbox
         checked={form.termsAccepted}
@@ -75,6 +74,7 @@ export function BusinessStepTwo({ form, onChange, onSubmit, isSubmitting, termsB
 
       {form.generalError && <Text style={styles.generalError}>{form.generalError}</Text>}
 
+      <Button label="Voltar" variant="Tertiary" onPress={onBack} disabled={isSubmitting} />
       <Button
         label="Cadastrar"
         onPress={onSubmit}

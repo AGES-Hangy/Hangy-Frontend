@@ -7,6 +7,7 @@ import { MapPickerModal } from '@/components/RegisterFlow/MapPickerModal';
 type Props = {
   value: string;
   onSelect: (suggestion: AddressSuggestion) => void;
+  onChangeText: (text: string) => void;
   error?: string;
 };
 
@@ -15,7 +16,7 @@ type Props = {
  * (Nominatim, debounced) enquanto digita, e o ícone à direita abre o
  * `MapPickerModal` pra selecionar com um pino no mapa.
  */
-export function AddressAutocompleteField({ value, onSelect, error }: Props) {
+export function AddressAutocompleteField({ value, onSelect, onChangeText, error }: Props) {
   const [text, setText] = useState(value);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const { results, search } = useAddressSearch();
@@ -38,6 +39,7 @@ export function AddressAutocompleteField({ value, onSelect, error }: Props) {
         value={text}
         onChangeText={(nextText) => {
           setText(nextText);
+          onChangeText(nextText);
           search(nextText);
         }}
         options={results.map((result, index) => ({ value: String(index), label: result.label }))}

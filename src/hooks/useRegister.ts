@@ -26,10 +26,7 @@ export type BusinessRegisterPayload = {
   cnpj: string;
   phone: string;
   address: string;
-  /** Só quando o endereço veio do autocomplete/mapa — o "400 Invalid coordinates" da task supõe que o backend recebe isto. */
-  latitude?: number;
-  longitude?: number;
-  instagram: string;
+  location: { latitude: number; longitude: number };
   /** Data (`Terms.version`) dos termos que o checkbox de aceite mostrava no momento do envio. */
   accepted_terms_version: string;
 };
@@ -72,8 +69,6 @@ export function useRegister() {
   ): Promise<RegisterSuccess | RegisterHttpError | null> {
     setIsLoading(true);
     setError(null);
-
-    console.log(payload);
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoints.register()}`, {

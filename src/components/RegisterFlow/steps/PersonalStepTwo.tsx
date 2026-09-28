@@ -16,12 +16,13 @@ import { normalizeForSearch } from '@/utils/text';
 type Props = {
   form: PersonalFormState;
   onChange: (patch: Partial<PersonalFormState>) => void;
+  onBack: () => void;
   onSubmit: () => void;
   isSubmitting: boolean;
   termsBundle: TermsBundle;
 };
 
-export function PersonalStepTwo({ form, onChange, onSubmit, isSubmitting, termsBundle }: Props) {
+export function PersonalStepTwo({ form, onChange, onBack, onSubmit, isSubmitting, termsBundle }: Props) {
   const [touched, setTouched] = useState<{ dateOfBirth?: boolean }>({});
   const { states } = useBrazilianStates();
   const { cities } = useBrazilianCities(form.stateUf || null);
@@ -109,6 +110,7 @@ export function PersonalStepTwo({ form, onChange, onSubmit, isSubmitting, termsB
 
       {form.generalError && <Text style={styles.generalError}>{form.generalError}</Text>}
 
+      <Button label="Voltar" variant="Tertiary" onPress={onBack} disabled={isSubmitting} />
       <Button
         label="Cadastrar"
         onPress={onSubmit}

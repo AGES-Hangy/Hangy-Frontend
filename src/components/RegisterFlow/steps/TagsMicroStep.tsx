@@ -13,6 +13,7 @@ type Props = {
   selectedMacroIds: string[];
   selectedMicroIds: string[];
   onToggleMicro: (id: string) => void;
+  onBack: () => void;
   onSubmit: () => void;
   isSubmitting: boolean;
   inlineError: string | null;
@@ -23,6 +24,7 @@ export function TagsMicroStep({
   selectedMacroIds,
   selectedMicroIds,
   onToggleMicro,
+  onBack,
   onSubmit,
   isSubmitting,
   inlineError,
@@ -46,6 +48,7 @@ export function TagsMicroStep({
                 categoryType="micro"
                 isSelected={selectedMicroIds.includes(leaf.id)}
                 onPress={() => onToggleMicro(leaf.id)}
+                disabled={isSubmitting}
               />
             ))}
           </View>
@@ -54,6 +57,7 @@ export function TagsMicroStep({
 
       {inlineError && <Text style={styles.error}>{inlineError}</Text>}
 
+      <Button label="Voltar" variant="Tertiary" onPress={onBack} disabled={isSubmitting} />
       <Button
         label="Concluir cadastro"
         onPress={onSubmit}

@@ -588,6 +588,8 @@ export function TextField({
             {options?.map((option) => (
               <Pressable
                 key={option.value}
+                // No Web, preserve o foco até o clique confirmar a opção.
+                onPointerDown={Platform.OS === 'web' ? (event) => event.preventDefault() : undefined}
                 onPress={() => handleSelectOption(option)}
                 accessibilityRole="button"
                 accessibilityLabel={option.label}

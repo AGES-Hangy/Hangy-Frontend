@@ -138,6 +138,11 @@ export default function Register() {
       return;
     }
 
+    if (pj.addressLatitude === null || pj.addressLongitude === null) {
+      updatePj({ errors: { ...pj.errors, address: 'Selecione um endereço da lista ou do mapa.' } });
+      return;
+    }
+
     const result = await register({
       user_type: 'BUSINESS',
       email: pj.email.trim(),
@@ -146,10 +151,7 @@ export default function Register() {
       cnpj: onlyDigits(pj.cnpj),
       phone: onlyDigits(pj.phone),
       address: pj.address.trim(),
-      ...(pj.addressLatitude !== null && pj.addressLongitude !== null
-        ? { latitude: pj.addressLatitude, longitude: pj.addressLongitude }
-        : null),
-      instagram: pj.instagram.trim(),
+      location: { latitude: pj.addressLatitude, longitude: pj.addressLongitude },
       accepted_terms_version: termsBundle.terms.version,
     });
 
@@ -165,10 +167,14 @@ export default function Register() {
       return;
     }
 
-    router.replace('/HomeComercial');
+    router.replace('/Home');
   }
 
   function toggleMacro(id: string) {
+    if (selectedMacroIds.includes(id)) {
+      const removedIds = new Set(tags.find((tag) => tag.id === id)?.children.map((tag) => tag.id));
+      setSelectedMicroIds((current) => current.filter((microId) => !removedIds.has(microId)));
+    }
     setSelectedMacroIds((current) =>
       current.includes(id) ? current.filter((macroId) => macroId !== id) : [...current, id],
     );
@@ -183,10 +189,18 @@ export default function Register() {
 
   async function handleSubmitTags() {
     setTagsInlineError(null);
-    const outcome = await saveTags(selectedMicroIds);
+    const availableIds = new Set(tags.filter((tag) => selectedMacroIds.includes(tag.id))
+      .flatMap((tag) => tag.children.map((leaf) => leaf.id)));
+    const validIds = selectedMicroIds.filter((id) => availableIds.has(id));
+    setSelectedMicroIds(validIds);
+    if (validIds.length === 0) {
+      setTagsInlineError('Escolha pelo menos um interesse disponível.');
+      return;
+    }
+    const outcome = await saveTags(validIds);
 
     if (outcome === null) {
-      router.replace('/Feed');
+      router.replace('/Home');
       return;
     }
 
@@ -206,6 +220,7 @@ export default function Register() {
           tags={tags}
           isLoading={isLoadingTags}
           error={tagsError}
+          onRetry={() => void refetchTags()}
           selectedMacroIds={selectedMacroIds}
           onToggleMacro={toggleMacro}
           onContinue={() => setPhase('tagsMicro')}
@@ -222,6 +237,7 @@ export default function Register() {
           selectedMacroIds={selectedMacroIds}
           selectedMicroIds={selectedMicroIds}
           onToggleMicro={toggleMicro}
+          onBack={() => setPhase('tagsMacro')}
           onSubmit={handleSubmitTags}
           isSubmitting={isSavingTags}
           inlineError={tagsInlineError}
@@ -244,6 +260,7 @@ export default function Register() {
           <PersonalStepTwo
             form={pf}
             onChange={updatePf}
+            onBack={() => updatePf({ step: 1 })}
             onSubmit={handleSubmitPersonal}
             isSubmitting={isRegistering}
             termsBundle={termsBundle}
@@ -260,6 +277,7 @@ export default function Register() {
         <BusinessStepTwo
           form={pj}
           onChange={updatePj}
+          onBack={() => updatePj({ step: 1 })}
           onSubmit={handleSubmitBusiness}
           isSubmitting={isRegistering}
           termsBundle={termsBundle}

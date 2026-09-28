@@ -32,7 +32,7 @@ export function PersonalStepOne({ form, onChange, onSwitchToBusiness, onNext }: 
   const isValid =
     isValidEmail(form.email) &&
     isValidCpf(form.cpf) &&
-    form.password.length > 0 &&
+    form.password.length >= 8 && form.password.length <= 128 &&
     form.confirmPassword === form.password;
 
   return (
@@ -60,7 +60,9 @@ export function PersonalStepOne({ form, onChange, onSwitchToBusiness, onNext }: 
         type="Password"
         label="Senha"
         value={form.password}
-        onChangeText={(text) => onChange({ password: text })}
+        onChangeText={(text) => onChange({ password: text, errors: { ...form.errors, password: undefined } })}
+        error={form.errors.password}
+        helper="Use entre 8 e 128 caracteres."
       />
       <TextField
         type="Password"
