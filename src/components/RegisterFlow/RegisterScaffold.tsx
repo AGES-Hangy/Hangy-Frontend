@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 're
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 
+import { Stepper } from '@/components/Stepper';
 import { palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 
@@ -11,19 +12,24 @@ import { radius, spacing } from '@/constants/layout';
  * cartão arredondado) — o que muda entre elas é só o conteúdo (título,
  * campos, tags) e a altura do cabeçalho, que aqui vira `variant`:
  * `form` (etapas 1-2, cabeçalho maior) e `compact` (etapas de tags).
+ * A altura do cabeçalho do `form` é a mesma (em %) do Login e do
+ * PasswordReset, pra manter o painel branco na mesma altura ao trocar
+ * de tela.
  */
-const HEADER_HEIGHT = { form: 210, compact: 130 } as const;
+const HEADER_HEIGHT = { form: '26.5%', compact: 130 } as const;
 const LOGO_SIZE = {
-  form: { width: 180, height: 70 },
+  form: { width: 220, height: 85 },
   compact: { width: 140, height: 54 },
 } as const;
+const TOTAL_STEPS = 4;
 
 type Props = {
   variant?: 'form' | 'compact';
+  step: number;
   children: ReactNode;
 };
 
-export function RegisterScaffold({ variant = 'form', children }: Props) {
+export function RegisterScaffold({ variant = 'form', step, children }: Props) {
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -36,6 +42,9 @@ export function RegisterScaffold({ variant = 'form', children }: Props) {
         />
       </View>
       <View style={styles.card}>
+        <View style={styles.stepperWrapper}>
+          <Stepper step={step} total={TOTAL_STEPS} />
+        </View>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -69,6 +78,10 @@ const styles = StyleSheet.create({
     backgroundColor: palette.primary[50],
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
+  },
+  stepperWrapper: {
+    paddingHorizontal: spacing[16],
+    paddingTop: spacing[16],
   },
   scrollContent: {
     padding: spacing[16],

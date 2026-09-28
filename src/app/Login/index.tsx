@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     gap: spacing[12],
   },
   title: {
-    ...typography.h2,
+    ...typography.h1,
     color: colors.text.brand,
     textAlign: 'center',
     marginBottom: spacing[8],

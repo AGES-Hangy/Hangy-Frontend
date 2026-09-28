@@ -30,10 +30,9 @@ type Props = {
 };
 
 /**
- * Aberto pelo ícone do campo Endereço (aba Empresa). Pino fixo no centro — é
- * o mapa que se move por baixo — pra não depender de marker arrastável.
- * `LocationPicker` genérico (US3.1/US7.5) ainda não existe; isto fica local
- * ao cadastro por ora.
+ * Aberto pelo ícone à direita do `AddressAutocompleteField` (cadastro de
+ * empresa e local do evento). Pino fixo no centro — é o mapa que se move por
+ * baixo — pra não depender de marker arrastável.
  *
  * Só esta versão (`.tsx`, iOS/Android) importa `react-native-maps` — o
  * pacote quebra o bundle inteiro na web (importa internals nativos do RN que

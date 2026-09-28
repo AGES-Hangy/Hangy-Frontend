@@ -2,21 +2,40 @@ import { useEffect, useState } from 'react';
 
 import { TextField } from '@/components/TextField';
 import { useAddressSearch, type AddressSuggestion } from '@/hooks/useAddressSearch';
-import { MapPickerModal } from '@/components/RegisterFlow/MapPickerModal';
+import { MapPickerModal } from './MapPickerModal';
 
 type Props = {
   value: string;
   onSelect: (suggestion: AddressSuggestion) => void;
   onChangeText: (text: string) => void;
   error?: string;
+  /** Sem valor, o campo não desenha label — usado quando a tela já tem um `FieldLabel` externo. */
+  label?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  maxLength?: number;
+  reserveMessageSpace?: boolean;
+  accessibilityLabel?: string;
 };
 
 /**
- * Campo Endereço da aba Empresa: `TextField type="Location"` com autocomplete
- * (Nominatim, debounced) enquanto digita, e o ícone à direita abre o
- * `MapPickerModal` pra selecionar com um pino no mapa.
+ * Campo de endereço reutilizado no cadastro (aba Empresa) e no local do
+ * evento: `TextField type="Location"` com autocomplete (Nominatim, debounced)
+ * enquanto digita, e o ícone à direita abre o `MapPickerModal` pra selecionar
+ * com um pino no mapa.
  */
-export function AddressAutocompleteField({ value, onSelect, onChangeText, error }: Props) {
+export function AddressAutocompleteField({
+  value,
+  onSelect,
+  onChangeText,
+  error,
+  label,
+  placeholder = 'Selecione seu endereço',
+  disabled,
+  maxLength,
+  reserveMessageSpace,
+  accessibilityLabel,
+}: Props) {
   const [text, setText] = useState(value);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const { results, search } = useAddressSearch();
@@ -34,8 +53,8 @@ export function AddressAutocompleteField({ value, onSelect, onChangeText, error 
     <>
       <TextField
         type="Location"
-        label="Endereço"
-        placeholder="Selecione seu endereço"
+        label={label}
+        placeholder={placeholder}
         value={text}
         onChangeText={(nextText) => {
           setText(nextText);
@@ -48,6 +67,10 @@ export function AddressAutocompleteField({ value, onSelect, onChangeText, error 
         onTrailingIconPress={() => setIsMapOpen(true)}
         onTrailingIconPressAccessibilityLabel="Selecionar localização no mapa"
         error={error}
+        disabled={disabled}
+        maxLength={maxLength}
+        reserveMessageSpace={reserveMessageSpace}
+        accessibilityLabel={accessibilityLabel}
       />
       <MapPickerModal
         visible={isMapOpen}

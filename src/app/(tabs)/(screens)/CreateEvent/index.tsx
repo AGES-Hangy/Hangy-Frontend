@@ -123,7 +123,7 @@ export default function CreateEvent() {
     }
 
     if (!form.locationCoordinates) {
-      showLocalError('Não é possível publicar sem confirmar o local. A seleção de locais ainda não está disponível.');
+      showLocalError('Selecione um local da lista ou do mapa antes de publicar.');
       return;
     }
 
@@ -206,7 +206,12 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               onChangeDate={(v) => setForm((f) => ({ ...f, date: v }))}
               onChangeTime={(v) => setForm((f) => ({ ...f, time: v }))}
-              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: { latitude: 0, longitude: 0 } }))}
+              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: null }))}
+              onSelectLocation={(suggestion) => setForm((f) => ({
+                ...f,
+                location: suggestion.label,
+                locationCoordinates: { latitude: suggestion.latitude, longitude: suggestion.longitude },
+              }))}
               onChangeParticipantLimit={(v) => setForm((f) => ({ ...f, participantLimit: v }))}
               onChangeUnlimited={(v) => setForm((f) => ({ ...f, unlimited: v }))}
               onChangePrivacy={(v: Privacy) => setForm((f) => ({ ...f, privacy: v }))}
