@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 import type { PushPermission, PushPermissionStatus } from '@/hooks/usePushPermission.types';
+import { ensureNotificationChannel } from '@/utils/notificationChannel';
 
 type PermissionState = Omit<PushPermission, 'request'>;
-
-const ANDROID_CHANNEL_ID = 'default';
 
 function toPermission(
   permission: Notifications.NotificationPermissionsStatus,
@@ -46,13 +45,7 @@ export function usePushPermission(): PushPermission {
   }, []);
 
   const request = useCallback(async () => {
-    if (Platform.OS === 'android') {
-      // No Android 13+ o diálogo de permissão só aparece depois que existe um canal.
-      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-        name: 'Notificações',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
-    }
+    await ensureNotificationChannel();
 
     const next = toPermission(await Notifications.requestPermissionsAsync());
     setPermission(next);

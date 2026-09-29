@@ -42,6 +42,12 @@
           "backgroundColor": "#653B6B"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#653B6B"
+        }
+      ],
       "expo-image",
       "expo-status-bar"
     ]
