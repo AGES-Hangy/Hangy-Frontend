@@ -31,8 +31,6 @@ const toManageEvent: RouteBuilder = ({ event_id }) =>
 const toProfile: RouteBuilder = ({ user_id }) =>
   nonEmpty(user_id) ? { pathname: '/Profile', params: { userId: user_id } } : null;
 
-const toNotifications: RouteBuilder = () => NOTIFICATIONS;
-
 const ROUTE_BY_TYPE: Record<NotificationType, RouteBuilder> = {
   EVENT_PARTICIPATION_REQUEST: toManageEvent,
   EVENT_PARTICIPANT_JOINED: toManageEvent,
@@ -42,10 +40,9 @@ const ROUTE_BY_TYPE: Record<NotificationType, RouteBuilder> = {
   EVENT_UPDATED: toEventDetail,
   EVENT_CANCELLED: toEventDetail,
   EVENT_STARTING_SOON: toEventDetail,
-  // Quem foi removido pode não ter mais acesso ao detalhe do evento.
-  EVENT_PARTICIPANT_REMOVED: toNotifications,
-  // Aceitar e recusar a conexão só existem na central, não no perfil.
-  CONNECTION_REQUEST: toNotifications,
+  // Iguais ao destino de cada tipo na central (constants/notificationRoutes).
+  EVENT_PARTICIPANT_REMOVED: toEventDetail,
+  CONNECTION_REQUEST: toProfile,
   CONNECTION_ACCEPTED: toProfile,
 };
 

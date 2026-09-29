@@ -42,8 +42,20 @@
           "backgroundColor": "#653B6B"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#653B6B"
+        }
+      ],
       "expo-image",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f278d959-6c74-40aa-8ae5-c6fb5113fecd"
+      }
+    },
+    "owner": "gbn0s-team"
   }
 }

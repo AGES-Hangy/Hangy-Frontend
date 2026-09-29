@@ -9,6 +9,7 @@ import { NotificationsProvider } from '@/hooks/useNotifications';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
 import { NotificationResponseBridge } from '@/utils/NotificationResponseBridge';
 import { ForegroundNotificationBridge } from '@/utils/ForegroundNotificationBridge';
+import { PushRegistrationBridge } from '@/utils/PushRegistrationBridge';
 
 /** Rota de cada aba do Figma. As duas tabelas são inversas uma da outra. */
 const ROUTE_BY_TAB: Record<BottomNavTab, string> = {
@@ -60,11 +61,12 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
 export default function TabsLayout() {
   return (
     <AuthGuard>
-      {/* Dentro do AuthGuard porque antes dele o replace da Splash desfaria a
-          navegação do toque com o app fechado. */}
-      <NotificationResponseBridge />
-      <ForegroundNotificationBridge />
       <NotificationsProvider>
+        {/* Dentro do AuthGuard porque antes dele o replace da Splash desfaria a
+            navegação do toque com o app fechado. */}
+        <NotificationResponseBridge />
+        <ForegroundNotificationBridge />
+        <PushRegistrationBridge />
         <TopAppBarProvider>
           <Tabs
             backBehavior="history"
