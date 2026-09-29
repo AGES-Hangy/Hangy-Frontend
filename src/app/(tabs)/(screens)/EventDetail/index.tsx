@@ -51,7 +51,7 @@ const MAIN_ACTION: Record<
 > = {
   CONFIRM: { label: 'Confirmar presença', variant: 'Primary' },
   REQUEST: { label: 'Solicitar participação', variant: 'Primary' },
-  CANCEL: { label: 'Cancelar presença', variant: 'Danger' },
+  CANCEL_PRESENCE: { label: 'Cancelar presença', variant: 'Danger' },
   SHARE: { label: 'Compartilhar link', variant: 'Primary', icon: 'share' },
   MANAGE: { label: 'Gerenciar evento', variant: 'Primary', icon: 'settings' },
   NONE: null,
@@ -64,6 +64,17 @@ export default function EventDetail() {
   const [inviteStage, setInviteStage] = useState<'idle' | 'accepting' | 'error'>('idle');
   const [inviteError, setInviteError] = useState<{ title: string; message: string } | null>(null);
   const { accept } = useInviteAccept();
+
+  // O Expo Router reaproveita esta mesma instância ao navegar de um card de
+  // evento pra outro (mesma rota, `id` diferente na URL), então precisa
+  // sincronizar aqui — senão o hook abaixo fica preso no primeiro evento
+  // aberto. O fluxo de convite (efeito acima) resolve o id sozinho a partir
+  // do token, então não sobrescrevemos enquanto ele estiver em curso.
+  useEffect(() => {
+    if (!inviteToken) {
+      setResolvedEventId(id);
+    }
+  }, [id, inviteToken]);
 
   const insets = useSafeAreaInsets();
   const { addToast } = useToast();
@@ -172,6 +183,13 @@ export default function EventDetail() {
   const [descriptionLead, ...descriptionRest] = event.description.split('\n');
 
   const isPendingCancel = event.viewer.participation_status === 'PENDING';
+  // Mesma ação da API (CANCEL_PRESENCE) serve pra cancelar presença
+  // confirmada ou solicitação pendente — só o rótulo muda, igual no Dialog
+  // abaixo.
+  const actionLabel =
+    action && event.viewer.available_action === 'CANCEL_PRESENCE' && isPendingCancel
+      ? 'Cancelar solicitação'
+      : action?.label;
   const participationStatusBadge =
     event.viewer.participation_status === 'CONFIRMED' ||
     event.viewer.participation_status === 'PENDING' ||
@@ -216,7 +234,7 @@ export default function EventDetail() {
       return;
     }
 
-    if (event!.viewer.available_action === 'CANCEL') {
+    if (event!.viewer.available_action === 'CANCEL_PRESENCE') {
       setShowCancelDialog(true);
       return;
     }
@@ -391,7 +409,7 @@ export default function EventDetail() {
       {action && (
         <View style={[styles.cta, { paddingBottom: insets.bottom + spacing[20] }]}>
           <Button
-            label={action.label}
+            label={actionLabel ?? action.label}
             variant={action.variant}
             icon={action.icon}
             isLoading={(action.icon === 'share' && isSharing) || isSubmitting}
