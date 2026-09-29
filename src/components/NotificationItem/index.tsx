@@ -2,25 +2,37 @@ import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { AvatarGroup } from '@/components/AvatarGroup';
-import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
+import { IconButton } from '@/components/IconButton';
 import type { NotificationItemProps } from '@/components/NotificationItem/types';
 import { colors, palette } from '@/constants/colors';
 import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 const metrics = layout.notificationItem;
+/**
+ * No Figma a borda de 1px fica por dentro e o padding de 16 conta a partir da
+ * borda externa. No React Native o padding começa depois da borda, então
+ * desconta-se a borda para o conteúdo cair nas mesmas medidas do frame.
+ */
+const BORDER_WIDTH = 1;
+const ITEM_PADDING = spacing[16] - BORDER_WIDTH;
+const NOTIFICATION_ACTION_HIT_SLOP = Math.max(0, (44 - metrics.notificationActionHeight) / 2);
 
 const ACTION_LABELS = {
   Request: { accept: 'Aprovar', reject: 'Recusar' },
   Connection: { accept: 'Confirmar', reject: 'Recusar' },
 } as const;
 
-function Thumb({ uri, size }: { uri?: string | null; size: number }) {
+function Thumb({ uri, size, fallbackIcon = 'image' }: {
+  uri?: string | null;
+  size: number;
+  fallbackIcon?: 'image' | 'user';
+}) {
   const [failed, setFailed] = useState(false);
 
   return (
@@ -33,7 +45,11 @@ function Thumb({ uri, size }: { uri?: string | null; size: number }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <Icon name="image" size={metrics.fallbackIconSize} color={palette.primary[400]} />
+        <Icon
+          name={fallbackIcon}
+          size={metrics.fallbackIconSize}
+          color={fallbackIcon === 'user' ? colors.text.brand : palette.primary[400]}
+        />
       )}
     </View>
   );
@@ -74,16 +90,23 @@ function renderLeading(props: NotificationItemProps) {
   switch (props.type) {
     case 'Request':
       if (props.avatarUri !== undefined) {
-        return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
+        return <Avatar size="XS" style={styles.fixed} source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
       }
-      // key por uri: sem ela o estado de falha persiste e a imagem seguinte já nasce no fallback.
-      return <Thumb key={props.imageUri ?? ''} uri={props.imageUri} size={metrics.thumbSize} />;
+      // A posição distingue imagens irmãs; a URI reinicia o fallback quando a imagem muda.
+      return <Thumb key={`leading-thumb:${props.imageUri ?? ''}`} uri={props.imageUri} size={metrics.thumbSize} />;
     case 'Connection':
-      return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
+      return <Avatar size="XS" style={styles.fixed} source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
     case 'Activity':
-      return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
+      return (
+        <Thumb
+          key={`leading-avatar:${props.avatarUri ?? ''}`}
+          uri={props.avatarUri}
+          size={metrics.thumbSize}
+          fallbackIcon="user"
+        />
+      );
     case 'ConnectionGroup':
-      return <AvatarGroup avatars={props.avatars} />;
+      return <AvatarGroup avatars={props.avatars} style={styles.fixed} />;
   }
 }
 
@@ -92,26 +115,97 @@ function renderTrailing(props: NotificationItemProps) {
     case 'Activity':
       return (
         <Thumb
-          key={props.trailingImageUri ?? ''}
+          key={`trailing-thumb:${props.trailingImageUri ?? ''}`}
           uri={props.trailingImageUri}
           size={metrics.trailingThumbSize}
         />
       );
     case 'ConnectionGroup':
-      return <Icon name="chevron-right" size={metrics.chevronSize} color={colors.text.tertiary} />;
+      return (
+        <View style={styles.fixed}>
+          <Icon name="chevron-right" size={metrics.chevronSize} color={colors.text.tertiary} />
+        </View>
+      );
     default:
       return null;
   }
 }
 
+function NotificationActionButton({
+  label,
+  accessibilityLabel,
+  variant,
+  onPress,
+  disabled = false,
+  isLoading = false,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  variant: 'primary' | 'secondary';
+  onPress: () => void;
+  disabled?: boolean;
+  isLoading?: boolean;
+}) {
+  const isPrimary = variant === 'primary';
+  const isDisabled = disabled || isLoading;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={{ top: NOTIFICATION_ACTION_HIT_SLOP, bottom: NOTIFICATION_ACTION_HIT_SLOP }}
+      disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: isDisabled, busy: isLoading }}
+      style={({ pressed }) => [
+        styles.notificationActionButton,
+        isPrimary ? styles.notificationPrimaryButton : styles.notificationSecondaryButton,
+        isDisabled && isPrimary && styles.notificationDisabledPrimaryButton,
+        isDisabled && !isPrimary && styles.notificationDisabledSecondaryButton,
+        pressed && !isDisabled && { opacity: pressedOpacity },
+      ]}
+    >
+      <View style={styles.notificationActionContent}>
+        <Text
+          style={[
+            styles.notificationActionLabel,
+            isPrimary ? styles.notificationPrimaryLabel : styles.notificationSecondaryLabel,
+            isDisabled && styles.notificationDisabledLabel,
+            isLoading && styles.notificationLoadingLabel,
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      </View>
+      {isLoading && (
+        <ActivityIndicator
+          size="small"
+          color={isPrimary ? colors.text.inverse : palette.neutral[700]}
+          style={styles.notificationSpinner}
+        />
+      )}
+    </Pressable>
+  );
+}
+
 export function NotificationItem(props: NotificationItemProps) {
-  const { title, subtitle, read = false, onPress, style } = props;
+  const { title, subtitle, read = false, onPress, onMarkRead, style } = props;
 
   const hasActions =
     (props.type === 'Request' || props.type === 'Connection') &&
     (props.onAccept !== undefined || props.onReject !== undefined);
 
   const accessibilityLabel = read ? `${title}. ${subtitle}` : `Não lida. ${title}. ${subtitle}`;
+  const markReadButton = onMarkRead ? (
+    <IconButton
+      icon={<Icon name="check" size={metrics.fallbackIconSize} color={colors.action.primary} />}
+      variant="Ghost"
+      size="MD"
+      onPress={onMarkRead}
+      accessibilityLabel={`Marcar como lida — ${title}`}
+    />
+  ) : null;
 
   const text = (
     <>
@@ -137,27 +231,53 @@ export function NotificationItem(props: NotificationItemProps) {
 
           <View style={styles.actions}>
             {props.onReject && (
-              <Button
+              <NotificationActionButton
                 label={labels.reject}
-                variant="Secondary"
-                size="SM"
-                onPress={props.onReject}
-                disabled={props.isProcessing}
                 accessibilityLabel={`${labels.reject} — ${title}`}
+                variant="secondary"
+                onPress={props.onReject}
+                disabled={props.actionsDisabled || props.isProcessing}
               />
             )}
             {props.onAccept && (
-              <Button
+              <NotificationActionButton
                 label={labels.accept}
-                size="SM"
-                onPress={props.onAccept}
-                isLoading={props.isProcessing}
-                disabled={props.acceptDisabled}
                 accessibilityLabel={`${labels.accept} — ${title}`}
+                variant="primary"
+                onPress={props.onAccept}
+                disabled={props.actionsDisabled || props.acceptDisabled || props.isProcessing}
+                isLoading={props.isProcessing}
               />
             )}
           </View>
         </View>
+        {markReadButton}
+      </View>
+    );
+  }
+
+  const plainContent = (
+    <>
+      {!read && <View style={styles.dot} />}
+      {renderLeading(props)}
+      <View style={styles.body}>{text}</View>
+      {renderTrailing(props)}
+    </>
+  );
+
+  if (onMarkRead) {
+    return (
+      <View style={[styles.item, styles.itemPlain, !read && styles.itemUnread, style]}>
+        <Pressable
+          onPress={onPress}
+          disabled={!onPress}
+          accessibilityRole={onPress ? 'button' : undefined}
+          accessibilityLabel={accessibilityLabel}
+          style={({ pressed }) => [styles.itemMain, pressed && onPress && { opacity: pressedOpacity }]}
+        >
+          {plainContent}
+        </Pressable>
+        {markReadButton}
       </View>
     );
   }
@@ -168,10 +288,7 @@ export function NotificationItem(props: NotificationItemProps) {
       accessibilityLabel={accessibilityLabel}
       style={[styles.item, styles.itemPlain, !read && styles.itemUnread, style]}
     >
-      {!read && <View style={styles.dot} />}
-      {renderLeading(props)}
-      <View style={styles.body}>{text}</View>
-      {renderTrailing(props)}
+      {plainContent}
     </Tappable>
   );
 }
@@ -181,9 +298,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[12],
-    padding: spacing[16],
+    // Ocupa a largura do container e nunca a ultrapassa, qualquer que seja o pai.
+    alignSelf: 'stretch',
+    minWidth: 0,
+    maxWidth: '100%',
+    padding: ITEM_PADDING,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: BORDER_WIDTH,
     borderColor: colors.border.default,
     backgroundColor: colors.surface.card,
   },
@@ -196,24 +317,34 @@ const styles = StyleSheet.create({
   itemUnread: {
     backgroundColor: palette.primary[50],
   },
+  // Leading, trailing e ponto mantêm o tamanho do frame; quem cede espaço é o texto.
+  fixed: {
+    flexShrink: 0,
+  },
   dot: {
+    flexShrink: 0,
     width: metrics.unreadDotSize,
     height: metrics.unreadDotSize,
     borderRadius: radius.full,
     backgroundColor: palette.secondary[500],
   },
   thumb: {
+    flexShrink: 0,
     borderRadius: radius.sm,
     backgroundColor: palette.primary[200],
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  // `minWidth: 0` deixa o texto quebrar em vez de empurrar a linha para fora do card.
   body: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     gap: spacing[4],
   },
   text: {
+    alignSelf: 'stretch',
     gap: spacing[4],
   },
   actions: {
@@ -221,11 +352,63 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing[8],
   },
+  notificationActionButton: {
+    height: metrics.notificationActionHeight,
+    paddingHorizontal: spacing[16],
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationSecondaryButton: {
+    backgroundColor: colors.bg.base,
+    borderWidth: 1.5,
+    borderColor: palette.neutral[300],
+  },
+  notificationPrimaryButton: {
+    backgroundColor: colors.action.primary,
+  },
+  notificationActionLabel: {
+    ...typography.labelS,
+  },
+  notificationSecondaryLabel: {
+    color: palette.neutral[700],
+  },
+  notificationPrimaryLabel: {
+    color: colors.text.inverse,
+  },
+  notificationActionContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationDisabledPrimaryButton: {
+    backgroundColor: palette.neutral[200],
+  },
+  notificationDisabledSecondaryButton: {
+    borderColor: colors.border.strong,
+  },
+  notificationDisabledLabel: {
+    color: colors.text.disabled,
+  },
+  notificationLoadingLabel: {
+    opacity: 0,
+  },
+  notificationSpinner: {
+    position: 'absolute',
+  },
+  itemMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+  },
   title: {
+    flexShrink: 1,
     ...typography.labelM,
     color: colors.text.primary,
   },
   subtitle: {
+    flexShrink: 1,
     ...typography.bodyS,
     color: colors.text.secondary,
   },

@@ -47,6 +47,11 @@ const EMPTY_STATE_CONFIG: Record<EmptyStateContext, EmptyStateConfig> = {
     },
     defaultCtaLabel: 'Criar evento',
   },
+  Notifications: {
+    icon: 'search',
+    title: 'Tudo em dia',
+    text: 'Convites, solicitações de conexão e atividade nos seus eventos aparecem aqui.',
+  },
 };
 
 export function EmptyState({
@@ -56,6 +61,7 @@ export function EmptyState({
   onCtaPress,
   ctaAtBottom = false,
   ctaDisabled = false,
+  fill = false,
   title,
   text: textOverride,
 }: EmptyStateProps) {
@@ -75,7 +81,7 @@ export function EmptyState({
   }
 
   return (
-    <View style={[styles.container, ctaAtBottom && styles.containerCtaAtBottom]} accessible={false}>
+    <View style={[styles.container, fill && styles.containerFill, ctaAtBottom && styles.containerCtaAtBottom]} accessible={false}>
       <View style={[styles.body, ctaAtBottom && styles.centeredContent]}>
         <View style={styles.illustration} accessibilityElementsHidden importantForAccessibility="no">
           <Icon size={40} color={colors.action.primary} strokeWidth={2} />
@@ -113,6 +119,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[24],
     paddingVertical: spacing[32],
     gap: spacing[12],
+  },
+  containerFill: {
+    flex: 1,
   },
   containerCtaAtBottom: {
     flex: 1,

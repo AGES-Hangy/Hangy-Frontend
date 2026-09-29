@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 
 import { TopAppBar } from '@/components/TopAppBar';
 import type { TopAppBarProps } from '@/components/TopAppBar';
+import { useNotifications } from '@/hooks/useNotifications';
 
 /** Barra padrão de todas as telas: a da Home, com logo e sino. */
 const DEFAULT_BAR: TopAppBarProps = { variant: 'Home' };
@@ -43,11 +44,12 @@ export function TopAppBarProvider({ children }: { children: ReactNode }) {
 /** Renderiza a barra da tela em foco. É o `header` do `(tabs)/_layout.tsx`. */
 export function TopAppBarSlot() {
   const context = useContext(TopAppBarContext);
+  const { unreadCount } = useNotifications();
   const bar = context?.bar ?? DEFAULT_BAR;
 
   if (bar === 'hidden') return null;
 
-  return <TopAppBar {...bar} />;
+  return <TopAppBar {...bar} unreadCount={bar.variant === 'Home' ? unreadCount : bar.unreadCount} />;
 }
 
 /**

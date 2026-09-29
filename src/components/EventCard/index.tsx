@@ -50,20 +50,37 @@ function formatEventDateTime(value: string | null) {
 	return time ? `${date} · ${time}` : date;
 }
 
+function formatRequestDateTime(value: string | null) {
+	if (!value) return null;
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return value;
+
+	const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+	const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+	return `${weekdays[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} · ${date.getHours()}h`;
+}
+
 const placeholderImage = require('../../../assets/images/hangy.svg');
+const REQUEST_ACTION_HIT_SLOP = Math.max(0, (44 - layout.eventCard.requestActionHeight) / 2);
 
 export function EventCard({
 	variant,
 	event,
 	state = 'Default',
-	isNew = false,
+	isUnread = false,
 	onPress,
+	actionsDisabled,
+	onAcceptRequest,
+	onRejectRequest,
 	onNotifyPress,
 }: EventCardProps) {
 	const dateTime = formatEventDateTime(event.date);
 	const accessibleLabel = [event.title, dateTime, event.location, getPrivacyBadgeLabel(event.privacy)]
 		.filter(Boolean)
 		.join(', ');
+	if (variant === 'Request') {
+		return <RequestCard event={event} isUnread={isUnread} onPress={onPress} actionsDisabled={actionsDisabled} onAccept={onAcceptRequest} onReject={onRejectRequest} />;
+	}
 	if (variant === 'Mini') {
 		return <MiniCard event={event} onPress={onPress} onNotifyPress={onNotifyPress} accessibleLabel={accessibleLabel} />;
 	}
@@ -88,7 +105,6 @@ export function EventCard({
 			{variant === 'Featured' && <FeaturedCard event={event} onNotifyPress={onNotifyPress} />}
 			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
-			{variant === 'Request' && <RequestCard event={event} isNew={isNew} />}
 		</Pressable>
 	);
 }
@@ -299,52 +315,82 @@ function MiniCard({
 	);
 }
 
-function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
+function RequestCard({
+	event,
+	isUnread,
+	onPress,
+	actionsDisabled,
+	onAccept,
+	onReject,
+}: {
+	event: Event;
+	isUnread: boolean;
+	onPress?: () => void;
+	actionsDisabled?: boolean;
+	onAccept?: () => void;
+	onReject?: () => void;
+}) {
 	const requesterName = event.requesterName ?? 'Usuário';
-	const dateTime = formatEventDateTime(event.date);
+	const dateTime = formatRequestDateTime(event.date);
 
 	return (
 		<View style={[styles.cardElevated, styles.carousel]}>
-			<View style={styles.requestImageWrap}>
-				<EventImage event={event} style={styles.requestImage} placeholderColor={palette.primary[200]} />
-				{isNew && (
-					<View style={styles.newBadge}>
-						<Text style={styles.newBadgeLabel}>Nova</Text>
-					</View>
-				)}
-			</View>
-
-			<View style={styles.carouselContent}>
-				{/* 1 linha: mesma razão do `Featured` — carrossel de altura consistente. */}
-				<Text numberOfLines={1} style={styles.miniTitle}>{event.title}</Text>
-
-				<View style={styles.detailLine}>
-					<Icon name="user" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>
-						{requesterName} solicitou
-					</Text>
+			<Pressable
+				onPress={onPress}
+				disabled={!onPress}
+				accessibilityRole={onPress ? 'button' : undefined}
+				accessibilityLabel={onPress ? `${isUnread ? 'Nova. ' : ''}${event.title}, solicitação de ${requesterName}` : undefined}
+				style={styles.requestMain}
+			>
+				<View style={styles.requestImageWrap}>
+					<EventImage event={event} style={styles.requestImage} placeholderColor={palette.primary[200]} />
+					{isUnread && (
+						<View style={styles.requestNewBadge} aria-hidden>
+							<Text style={styles.requestNewBadgeLabel}>Nova</Text>
+						</View>
+					)}
 				</View>
-				{dateTime && <View style={styles.detailLine}>
-					<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>{dateTime}</Text>
-				</View>}
 
+				<View style={[styles.carouselContent, styles.requestContent]}>
+					{/* O nome do evento quebra em até 2 linhas, como no Figma. */}
+					<Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text>
+
+					<View style={styles.detailLine}>
+						<Icon name="user" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>
+							{requesterName} solicitou
+						</Text>
+					</View>
+					{dateTime && <View style={styles.detailLine}>
+						<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>{dateTime}</Text>
+					</View>}
+				</View>
+			</Pressable>
+
+			<View style={styles.requestActionsWrap}>
 				<View style={styles.requestActions}>
 					<Pressable
-						onPress={() => undefined}
+						onPress={onAccept}
+						hitSlop={{ top: REQUEST_ACTION_HIT_SLOP, bottom: REQUEST_ACTION_HIT_SLOP }}
+						disabled={actionsDisabled}
 						accessibilityRole="button"
 						accessibilityLabel="Aceitar solicitação"
-						style={styles.acceptButton}
+						accessibilityState={{ disabled: actionsDisabled }}
+						style={[styles.acceptButton, actionsDisabled && styles.requestActionDisabled]}
 					>
-						<Icon name="check" size={18} color={colors.text.inverse} absoluteStrokeWidth />
+						<Icon name="check" size={18} color={actionsDisabled ? colors.text.disabled : colors.text.inverse} absoluteStrokeWidth />
 					</Pressable>
 					<Pressable
-						onPress={() => undefined}
+						onPress={onReject}
+						hitSlop={{ top: REQUEST_ACTION_HIT_SLOP, bottom: REQUEST_ACTION_HIT_SLOP }}
+						disabled={actionsDisabled}
 						accessibilityRole="button"
 						accessibilityLabel="Recusar solicitação"
-						style={styles.rejectButton}
+						accessibilityState={{ disabled: actionsDisabled }}
+						style={[styles.rejectButton, actionsDisabled && styles.requestRejectDisabled]}
 					>
-						<Icon name="x" size={16} color={colors.text.secondary} absoluteStrokeWidth />
+						<Icon name="x" size={16} color={actionsDisabled ? colors.text.disabled : colors.text.secondary} absoluteStrokeWidth />
 					</Pressable>
 				</View>
 			</View>
@@ -469,6 +515,8 @@ const styles = StyleSheet.create({
 	miniCard: { minHeight: layout.eventCard.miniHeight },
 	miniMain: { flexGrow: 1 },
 	carouselContent: { padding: spacing[12], gap: spacing[8], alignItems: 'flex-start' },
+	requestMain: { alignSelf: 'stretch' },
+	requestContent: { paddingBottom: 0 },
 	miniContent: { flexGrow: 1, paddingBottom: 0 },
 
 	miniImageWrap: {
@@ -501,20 +549,21 @@ const styles = StyleSheet.create({
 		position: 'relative',
 	},
 	requestImage: { width: '100%', height: '100%' },
-	newBadge: {
+	// Badge/Novo: pílula âmbar sobre a capa. Texto escuro — nunca branco sobre âmbar.
+	requestNewBadge: {
 		position: 'absolute',
 		top: spacing[8],
 		left: spacing[8],
-		backgroundColor: palette.secondary[500],
 		paddingHorizontal: spacing[8],
 		paddingVertical: spacing[4],
 		borderRadius: radius.full,
+		backgroundColor: palette.secondary[500],
 		zIndex: layout.eventCard.overlayZIndex,
 	},
-	// Nunca texto branco sobre âmbar — o Figma trava em palette/neutral/900.
-	newBadgeLabel: { ...typography.labelS, color: palette.neutral[900] },
+	requestNewBadgeLabel: { ...typography.labelS, color: palette.neutral[900] },
 
 	requestActions: { flexDirection: 'row', gap: spacing[8], width: '100%' },
+	requestActionsWrap: { paddingHorizontal: spacing[12], paddingTop: spacing[8], paddingBottom: spacing[12] },
 	acceptButton: {
 		flex: 1,
 		height: layout.eventCard.requestActionHeight,
@@ -523,6 +572,7 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	requestActionDisabled: { backgroundColor: colors.surface.sunken },
 	rejectButton: {
 		width: layout.eventCard.requestRejectWidth,
 		height: layout.eventCard.requestActionHeight,
@@ -533,4 +583,5 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	requestRejectDisabled: { backgroundColor: colors.surface.sunken, borderColor: colors.border.default },
 });

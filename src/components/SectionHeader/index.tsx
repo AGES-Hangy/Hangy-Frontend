@@ -1,14 +1,19 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { colors, palette } from '@/constants/colors';
-import { typography, fontFamily } from '@/constants/typography';
+import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/layout';
 import type { SectionHeaderProps } from './types';
+
+/** Frame do Figma: h44. O alvo de toque da ação também tem 44, então a linha não cresce. */
+const HEIGHT = 44;
+const ACTION_HIT_SLOP = { left: spacing[8], right: spacing[8] };
 
 export function SectionHeader({
   title,
   variant = 'title',
   action = false,
+  showActionIcon = true,
   actionDisabled = false,
   actionLabel = 'Ver todos',
   onActionPress,
@@ -17,7 +22,7 @@ export function SectionHeader({
   return (
     <View style={styles.container}>
       <Text
-        style={variant === 'overline' ? styles.overline : styles.title}
+        style={[styles.titleBase, variant === 'overline' ? styles.overline : styles.title]}
         accessibilityRole="header"
         numberOfLines={1}
       >
@@ -31,14 +36,16 @@ export function SectionHeader({
           accessibilityState={{ disabled: actionDisabled }}
           aria-disabled={actionDisabled}
           style={styles.actionTouchArea}
-          hitSlop={8}
+          hitSlop={ACTION_HIT_SLOP}
           accessibilityRole="link"
           accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
         >
           <Text style={[styles.actionLabel, actionDisabled && styles.actionLabelDisabled]} numberOfLines={1}>
             {actionLabel}
           </Text>
-          <Icon name="chevron-right" size={18} color={actionDisabled ? colors.text.disabled : palette.primary[600]} />
+          {showActionIcon && (
+            <Icon name="chevron-right" size={18} color={actionDisabled ? colors.text.disabled : palette.primary[600]} />
+          )}
         </Pressable>
       )}
     </View>
@@ -50,30 +57,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing[12],
+    minHeight: HEIGHT,
+    gap: spacing[8],
+  },
+  // O título cede espaço à ação em vez de empurrá-la para fora da tela.
+  titleBase: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     ...typography.h3,
-    fontFamily: fontFamily.base,
+    // Estilo Title: padding vertical space/12 do Figma.
+    paddingVertical: spacing[12],
     color: colors.text.primary,
-    flexShrink: 1,
   },
   overline: {
     ...typography.overline,
-    fontFamily: fontFamily.base,
     color: colors.text.tertiary,
-    flexShrink: 1,
   },
   actionTouchArea: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+    flexShrink: 0,
+    // Altura de 44 = alvo de toque; o texto e o chevron ficam rentes à margem de 16.
     minHeight: 44,
-    paddingHorizontal: spacing[8],
   },
   actionLabel: {
     ...typography.labelM,
-    fontFamily: fontFamily.base,
     color: palette.primary[600],
   },
   actionLabelDisabled: { color: colors.text.disabled },

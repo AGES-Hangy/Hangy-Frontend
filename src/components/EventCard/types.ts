@@ -23,8 +23,14 @@ export interface EventCardProps {
   variant: EventVariant;
   event: Event;
   state?: EventState;
-  isNew?: boolean;
+  /** Exibe o estado não lido no card Request. */
+  isUnread?: boolean;
   onPress?: () => void;
+  /** Desabilita as ações de solicitação quando o dispositivo está offline. */
+  actionsDisabled?: boolean;
+  /** Ações locais/da tela para cards de solicitação. */
+  onAcceptRequest?: () => void;
+  onRejectRequest?: () => void;
   /** Sino de notificações em `Featured` e `Mini`. Sem isto o sino fica decorativo. */
   onNotifyPress?: () => void;
 }

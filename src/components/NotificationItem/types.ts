@@ -12,6 +12,8 @@ type NotificationItemBaseProps = {
    * accessibilityRole — o leitor de tela anuncia só o texto.
    */
   onPress?: () => void;
+  /** Ação explícita para limpar o estado não lido sem abrir o destino. */
+  onMarkRead?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -19,6 +21,8 @@ type NotificationItemBaseProps = {
 type NotificationActionProps = {
   onAccept?: () => void;
   onReject?: () => void;
+  /** Desabilita as ações de escrita quando o dispositivo está offline. */
+  actionsDisabled?: boolean;
   /** Requisição em voo: spinner no botão de aceitar, sem congelar a lista. */
   isProcessing?: boolean;
   /** Evento lotado desabilita só o aceitar; recusar continua valendo. */

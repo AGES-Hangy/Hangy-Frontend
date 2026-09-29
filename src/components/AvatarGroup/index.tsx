@@ -49,7 +49,9 @@ export function AvatarGroup({
             <Avatar
               variant={avatar.variant}
               source={avatar.source}
-              diameter={size}
+              // O anel é uma borda do wrapper, então a foto ocupa só a área interna;
+              // com `size` inteiro ela ficava deslocada e cortada pelo anel.
+              diameter={size - RING_WIDTH * 2}
               accessibilityLabel={accessibilityLabel ? undefined : avatar.accessibilityLabel}
               style={StyleSheet.absoluteFill}
             />
