@@ -22,7 +22,7 @@ export type ParticipationStatus =
  * Ação principal do rodapé do detalhe. Vem pronta da API justamente para a
  * tela não precisar deduzir de `privacy` + `participation_status`.
  */
-export type ViewerAction = 'CONFIRM' | 'CANCEL' | 'REQUEST' | 'SHARE' | 'MANAGE' | 'NONE';
+export type ViewerAction = 'CONFIRM' | 'CANCEL_PRESENCE' | 'REQUEST' | 'SHARE' | 'MANAGE' | 'NONE';
 
 export type UserType = 'PERSONAL' | 'BUSINESS';
 
