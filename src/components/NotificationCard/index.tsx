@@ -94,15 +94,15 @@ function activityCopy(notification: Notification) {
     case 'CONNECTION_ACCEPTED':
       return { title: `${sender} aceitou sua conexão`, subtitle: since };
     case 'EVENT_REQUEST_APPROVED':
-      return { title: 'Sua solicitação foi aprovada', subtitle: `${event} · ${since}` };
+      return { title: 'Sua solicitação foi aprovada', subtitle: `em ${event} · ${since}` };
     case 'EVENT_REQUEST_REJECTED':
-      return { title: 'Sua solicitação foi recusada', subtitle: `${event} · ${since}` };
+      return { title: 'Sua solicitação foi recusada', subtitle: `em ${event} · ${since}` };
     case 'EVENT_PARTICIPANT_CANCELLED':
-      return { title: `${sender} cancelou a presença`, subtitle: `${event} · ${since}` };
+      return { title: `${sender} cancelou a presença`, subtitle: `em ${event} · ${since}` };
     case 'EVENT_PARTICIPANT_REMOVED':
-      return { title: 'Você foi removido do evento', subtitle: `${event} · ${since}` };
+      return { title: 'Você foi removido do evento', subtitle: `em ${event} · ${since}` };
     case 'EVENT_PARTICIPANT_JOINED':
-      return { title: `${sender} confirmou presença`, subtitle: `${event} · ${since}` };
+      return { title: `${sender} confirmou presença`, subtitle: `em ${event} · ${since}` };
     case 'EVENT_UPDATED':
       return { title: `${event} foi atualizado`, subtitle: since };
     case 'EVENT_CANCELLED':

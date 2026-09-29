@@ -1,21 +1,29 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { NotificationCard, groupConnectionRequestsByPeriod } from '@/components/NotificationCard';
 import { NotificationLoadError } from '@/components/NotificationLoadError';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { SectionEmptyState } from '@/components/SectionEmptyState';
 import { SectionHeader } from '@/components/SectionHeader';
-import { colors } from '@/constants/colors';
-import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
+import { colors, palette } from '@/constants/colors';
+import { elevation, layout, radius, spacing } from '@/constants/layout';
 import { openNotification } from '@/constants/notificationRoutes';
 import { typography } from '@/constants/typography';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useNotificationLoadFeedback } from '@/hooks/useNotificationLoadFeedback';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTopAppBar } from '@/hooks/useTopAppBar';
+
+/** Botão MD (44) + margem inferior de 16 + 16 de respiro acima dele. */
+const FLOATING_ACTION_CLEARANCE = 44 + spacing[16] + spacing[16];
 
 export default function Notifications() {
+  // O sino não faz sentido na própria tela de notificações: seta de voltar e logo.
+  useTopAppBar({ variant: 'BrandBack' });
   const {
     notifications,
     isLoading,
@@ -90,7 +98,11 @@ export default function Notifications() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, isOffline && styles.contentOffline]}
+        contentContainerStyle={[
+          styles.content,
+          unreadCount > 0 && styles.contentWithFloatingAction,
+          isOffline && styles.contentOffline,
+        ]}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={250}
         onScroll={({ nativeEvent }) => {
@@ -106,27 +118,16 @@ export default function Notifications() {
             onRetry={canRetryError && !isOffline ? () => void retryError() : undefined}
           />
         )}
-        {unreadCount > 0 && (
-          <Pressable
-            onPress={() => void markAllAsRead()}
-            disabled={isOffline}
-            accessibilityRole="button"
-            accessibilityLabel="Marcar todas as notificações como lidas"
-            accessibilityState={{ disabled: isOffline }}
-            style={({ pressed }) => [styles.markAllButton, isOffline && styles.markAllDisabled, pressed && !isOffline && styles.markAllPressed]}
-          >
-            <Text style={[styles.markAllLabel, isOffline && styles.markAllLabelDisabled]}>Marcar todas como lidas</Text>
-          </Pressable>
-        )}
-
-        {requests.length > 0 && (
-          <View style={styles.section}>
+        <View style={styles.section}>
+          <View style={styles.inset}>
             <SectionHeader
               title="SOLICITAÇÕES DE PARTICIPAÇÃO"
               variant="overline"
-              action
+              action={requests.length > 0}
               onActionPress={() => router.push('/Notifications/ParticipationRequests')}
             />
+          </View>
+          {requests.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
               {requests.map((request) => (
                 <NotificationCard
@@ -140,43 +141,77 @@ export default function Notifications() {
                 />
               ))}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <View style={styles.inset}>
+              <SectionEmptyState
+                icon="users"
+                title="Nenhuma solicitação"
+                text="Quando alguém pedir para participar de um evento seu, aparece aqui."
+              />
+            </View>
+          )}
+        </View>
 
-        {connectionGroups.length > 0 && (
-          <View style={styles.section}>
+        <View style={styles.section}>
+          <View style={styles.inset}>
             <SectionHeader title="SOLICITAÇÕES DE CONEXÃO" variant="overline" />
-            <View style={styles.connectionGroups}>
-              {connectionGroups.map((group) => (
-                <NotificationCard
-                  key={group.period}
-                  notifications={group.notifications}
-                  onPress={() => router.push({
-                    pathname: '/Notifications/ConnectionRequests',
-                    params: { period: group.period },
-                  })}
-                />
-              ))}
-            </View>
           </View>
-        )}
+          <View style={[styles.inset, styles.list]}>
+            {connectionGroups.length > 0 ? connectionGroups.map((group) => (
+              <NotificationCard
+                key={group.period}
+                notifications={group.notifications}
+                onPress={() => router.push({
+                  pathname: '/Notifications/ConnectionRequests',
+                  params: { period: group.period },
+                })}
+              />
+            )) : (
+              <SectionEmptyState
+                icon="user"
+                title="Nenhum pedido de conexão"
+                text="Os pedidos de outras pessoas para se conectar com você aparecem aqui."
+              />
+            )}
+          </View>
+        </View>
 
-        {activities.length > 0 && (
-          <View style={styles.section}>
+        <View style={styles.section}>
+          <View style={styles.inset}>
             <SectionHeader title="SEUS EVENTOS" variant="overline" />
-            <View style={styles.activityList}>
-              {activities.map((notification) => (
-                <NotificationCard
-                  key={notification.notification_id}
-                  notification={notification}
-                  onPress={() => openNotification(notification, markAsRead, (href) => router.push(href), isOffline)}
-                />
-              ))}
-            </View>
           </View>
-        )}
+          <View style={[styles.inset, styles.list]}>
+            {activities.length > 0 ? activities.map((notification) => (
+              <NotificationCard
+                key={notification.notification_id}
+                notification={notification}
+                onPress={() => openNotification(notification, markAsRead, (href) => router.push(href), isOffline)}
+              />
+            )) : (
+              <SectionEmptyState
+                icon="calendar"
+                title="Nenhuma novidade"
+                text="Confirmações e avisos dos seus eventos aparecem aqui."
+              />
+            )}
+          </View>
+        </View>
         {isLoadingMore && <ActivityIndicator color={colors.action.primary} accessibilityLabel="Carregando mais notificações" />}
       </ScrollView>
+      {unreadCount > 0 && (
+        // `box-none`: a faixa que centraliza o botão não intercepta toques na lista.
+        <View style={styles.floatingAction} pointerEvents="box-none">
+          <View style={[styles.floatingButton, isOffline && styles.floatingButtonDisabled]}>
+            <Button
+              label="Marcar todas como lidas"
+              icon="check"
+              size="MD"
+              disabled={isOffline}
+              onPress={() => void markAllAsRead()}
+            />
+          </View>
+        </View>
+      )}
       {isOffline && <OfflineBanner />}
     </View>
   );
@@ -192,7 +227,9 @@ function NotificationsSkeleton({ offline }: { offline: boolean }) {
       accessibilityLabel="Carregando notificações"
     >
       <View style={styles.section}>
-        <View style={styles.skeletonHeading} />
+        <View style={[styles.inset, styles.skeletonHeadingRow]}>
+          <View style={styles.skeletonHeading} />
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
           {[0, 1].map((item) => (
             <View key={item} style={styles.skeletonRequestCard}>
@@ -211,17 +248,21 @@ function NotificationsSkeleton({ offline }: { offline: boolean }) {
       </View>
       {(['connections', 'events'] as const).map((section) => (
         <View key={section} style={styles.section}>
-          <View style={styles.skeletonHeading} />
-          {[0, 1].map((item) => (
-            <View key={`${section}-${item}`} style={styles.skeletonNotificationRow}>
-              <View style={styles.skeletonAvatar} />
-              <View style={styles.skeletonTextLines}>
-                <View style={[styles.skeletonLine, styles.skeletonLineMedium]} />
-                <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
+          <View style={[styles.inset, styles.skeletonHeadingRow]}>
+            <View style={styles.skeletonHeading} />
+          </View>
+          <View style={[styles.inset, styles.list]}>
+            {[0, 1].map((item) => (
+              <View key={`${section}-${item}`} style={styles.skeletonNotificationRow}>
+                <View style={styles.skeletonAvatar} />
+                <View style={styles.skeletonTextLines}>
+                  <View style={[styles.skeletonLine, styles.skeletonLineMedium]} />
+                  <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
+                </View>
+                <View style={styles.skeletonThumbnail} />
               </View>
-              <View style={styles.skeletonThumbnail} />
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
       ))}
     </ScrollView>
@@ -237,52 +278,62 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingTop: spacing[8],
+    paddingTop: spacing[12],
     paddingBottom: spacing[24],
-    gap: spacing[16],
+    gap: spacing[24],
   },
   contentOffline: {
     paddingTop: spacing[64],
   },
   skeletonContent: {
-    paddingTop: spacing[8],
+    paddingTop: spacing[12],
     paddingBottom: spacing[24],
-    gap: spacing[16],
+    gap: spacing[24],
   },
   skeletonContentOffline: {
     paddingTop: spacing[64],
   },
-  markAllButton: {
-    alignSelf: 'flex-end',
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: spacing[16],
+  // Reserva o espaço do botão flutuante para o fim da lista não ficar escondido atrás dele.
+  contentWithFloatingAction: {
+    paddingBottom: FLOATING_ACTION_CLEARANCE,
   },
-  markAllPressed: {
-    opacity: pressedOpacity,
+  floatingAction: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: spacing[16],
+    alignItems: 'center',
   },
-  markAllLabel: {
-    ...typography.labelM,
-    color: colors.text.brand,
+  // A sombra e o fundo ficam num wrapper: o Button não expõe elevação, e no
+  // Android a sombra só aparece sobre uma view com fundo.
+  floatingButton: {
+    borderRadius: radius.full,
+    backgroundColor: colors.action.primary,
+    ...elevation[3],
   },
-  markAllDisabled: {
-    opacity: pressedOpacity,
-  },
-  markAllLabelDisabled: {
-    color: colors.text.disabled,
+  floatingButtonDisabled: {
+    backgroundColor: palette.neutral[200],
+    ...elevation[1],
   },
   section: {
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-  },
-  carousel: {
     gap: spacing[12],
   },
-  connectionGroups: {
-    gap: spacing[8],
+  inset: {
+    paddingHorizontal: spacing[16],
   },
-  activityList: {
-    gap: spacing[8],
+  list: {
+    gap: spacing[12],
+  },
+  // O carrossel ocupa a largura toda para os cards rolarem até a borda da tela;
+  // o padding só afasta o primeiro e o último.
+  carousel: {
+    gap: spacing[12],
+    paddingHorizontal: spacing[16],
+  },
+  // Mesma altura do SectionHeader (44), para o skeleton não saltar ao carregar.
+  skeletonHeadingRow: {
+    height: 44,
+    justifyContent: 'center',
   },
   skeletonHeading: {
     width: '60%',

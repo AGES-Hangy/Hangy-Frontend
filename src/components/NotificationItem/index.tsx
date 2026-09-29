@@ -14,6 +14,13 @@ import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 const metrics = layout.notificationItem;
+/**
+ * No Figma a borda de 1px fica por dentro e o padding de 16 conta a partir da
+ * borda externa. No React Native o padding começa depois da borda, então
+ * desconta-se a borda para o conteúdo cair nas mesmas medidas do frame.
+ */
+const BORDER_WIDTH = 1;
+const ITEM_PADDING = spacing[16] - BORDER_WIDTH;
 const NOTIFICATION_ACTION_HIT_SLOP = Math.max(0, (44 - metrics.notificationActionHeight) / 2);
 
 const ACTION_LABELS = {
@@ -83,12 +90,12 @@ function renderLeading(props: NotificationItemProps) {
   switch (props.type) {
     case 'Request':
       if (props.avatarUri !== undefined) {
-        return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
+        return <Avatar size="XS" style={styles.fixed} source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
       }
       // A posição distingue imagens irmãs; a URI reinicia o fallback quando a imagem muda.
       return <Thumb key={`leading-thumb:${props.imageUri ?? ''}`} uri={props.imageUri} size={metrics.thumbSize} />;
     case 'Connection':
-      return <Avatar size="XS" source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
+      return <Avatar size="XS" style={styles.fixed} source={props.avatarUri ? { uri: props.avatarUri } : undefined} />;
     case 'Activity':
       return (
         <Thumb
@@ -99,7 +106,7 @@ function renderLeading(props: NotificationItemProps) {
         />
       );
     case 'ConnectionGroup':
-      return <AvatarGroup avatars={props.avatars} />;
+      return <AvatarGroup avatars={props.avatars} style={styles.fixed} />;
   }
 }
 
@@ -114,7 +121,11 @@ function renderTrailing(props: NotificationItemProps) {
         />
       );
     case 'ConnectionGroup':
-      return <Icon name="chevron-right" size={metrics.chevronSize} color={colors.text.tertiary} />;
+      return (
+        <View style={styles.fixed}>
+          <Icon name="chevron-right" size={metrics.chevronSize} color={colors.text.tertiary} />
+        </View>
+      );
     default:
       return null;
   }
@@ -287,9 +298,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[12],
-    padding: spacing[16],
+    // Ocupa a largura do container e nunca a ultrapassa, qualquer que seja o pai.
+    alignSelf: 'stretch',
+    minWidth: 0,
+    maxWidth: '100%',
+    padding: ITEM_PADDING,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: BORDER_WIDTH,
     borderColor: colors.border.default,
     backgroundColor: colors.surface.card,
   },
@@ -302,24 +317,34 @@ const styles = StyleSheet.create({
   itemUnread: {
     backgroundColor: palette.primary[50],
   },
+  // Leading, trailing e ponto mantêm o tamanho do frame; quem cede espaço é o texto.
+  fixed: {
+    flexShrink: 0,
+  },
   dot: {
+    flexShrink: 0,
     width: metrics.unreadDotSize,
     height: metrics.unreadDotSize,
     borderRadius: radius.full,
     backgroundColor: palette.secondary[500],
   },
   thumb: {
+    flexShrink: 0,
     borderRadius: radius.sm,
     backgroundColor: palette.primary[200],
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  // `minWidth: 0` deixa o texto quebrar em vez de empurrar a linha para fora do card.
   body: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     gap: spacing[4],
   },
   text: {
+    alignSelf: 'stretch',
     gap: spacing[4],
   },
   actions: {
@@ -372,15 +397,18 @@ const styles = StyleSheet.create({
   },
   itemMain: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[12],
   },
   title: {
+    flexShrink: 1,
     ...typography.labelM,
     color: colors.text.primary,
   },
   subtitle: {
+    flexShrink: 1,
     ...typography.bodyS,
     color: colors.text.secondary,
   },

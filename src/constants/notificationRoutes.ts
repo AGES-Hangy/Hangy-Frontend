@@ -3,42 +3,48 @@ import type { Href } from 'expo-router';
 import type { Notification, NotificationType } from '@/types/notification';
 
 type NotificationRouteConfig = {
-  pathname: '/UserProfile' | '/EventParticipants' | '/EventDetail';
+  /** Tela que já existe para receber o toque; nenhum tipo fica sem destino. */
+  pathname: '/Profile' | '/ManageEvent' | '/EventDetail';
+  /** De onde vem o id do destino: quem enviou a notificação ou o evento. */
   idSource: 'sender' | 'event';
-  screenImplemented: boolean;
 };
 
-/** Destinos previstos para cada tipo, conforme o fluxo de notificações. */
+/**
+ * Destino de cada tipo. Quem organiza o evento cai na gestão dele
+ * (`ManageEvent`); quem é o alvo do aviso cai no detalhe; pedidos e aceites de
+ * conexão abrem o perfil de quem enviou.
+ */
 export const NOTIFICATION_ROUTE_BY_TYPE: Record<NotificationType, NotificationRouteConfig> = {
-  CONNECTION_REQUEST: { pathname: '/UserProfile', idSource: 'sender', screenImplemented: false },
-  CONNECTION_ACCEPTED: { pathname: '/UserProfile', idSource: 'sender', screenImplemented: false },
-  EVENT_PARTICIPATION_REQUEST: { pathname: '/EventParticipants', idSource: 'event', screenImplemented: false },
-  EVENT_REQUEST_APPROVED: { pathname: '/EventDetail', idSource: 'event', screenImplemented: true },
-  EVENT_REQUEST_REJECTED: { pathname: '/EventDetail', idSource: 'event', screenImplemented: true },
-  EVENT_PARTICIPANT_CANCELLED: { pathname: '/EventParticipants', idSource: 'event', screenImplemented: false },
-  EVENT_PARTICIPANT_REMOVED: { pathname: '/EventParticipants', idSource: 'event', screenImplemented: false },
-  EVENT_PARTICIPANT_JOINED: { pathname: '/EventParticipants', idSource: 'event', screenImplemented: false },
-  EVENT_UPDATED: { pathname: '/EventDetail', idSource: 'event', screenImplemented: true },
-  EVENT_CANCELLED: { pathname: '/EventDetail', idSource: 'event', screenImplemented: true },
-  EVENT_STARTING_SOON: { pathname: '/EventDetail', idSource: 'event', screenImplemented: true },
+  CONNECTION_REQUEST: { pathname: '/Profile', idSource: 'sender' },
+  CONNECTION_ACCEPTED: { pathname: '/Profile', idSource: 'sender' },
+  EVENT_PARTICIPATION_REQUEST: { pathname: '/ManageEvent', idSource: 'event' },
+  EVENT_REQUEST_APPROVED: { pathname: '/EventDetail', idSource: 'event' },
+  EVENT_REQUEST_REJECTED: { pathname: '/EventDetail', idSource: 'event' },
+  EVENT_PARTICIPANT_CANCELLED: { pathname: '/ManageEvent', idSource: 'event' },
+  EVENT_PARTICIPANT_REMOVED: { pathname: '/EventDetail', idSource: 'event' },
+  EVENT_PARTICIPANT_JOINED: { pathname: '/ManageEvent', idSource: 'event' },
+  EVENT_UPDATED: { pathname: '/EventDetail', idSource: 'event' },
+  EVENT_CANCELLED: { pathname: '/EventDetail', idSource: 'event' },
+  EVENT_STARTING_SOON: { pathname: '/EventDetail', idSource: 'event' },
 };
 
-export function getNotificationDestination(notification: Notification) {
+export function getNotificationDestination(notification: Notification): Href | null {
   const config = NOTIFICATION_ROUTE_BY_TYPE[notification.type as NotificationType];
   if (!config) return null;
 
-  const id = config.idSource === 'sender'
-    ? notification.payload.sender?.id
-    : notification.payload.event_id;
-  if (!id) return null;
+  if (config.pathname === '/Profile') {
+    const sender = notification.payload.sender;
+    if (!sender?.id) return null;
+    // `Profile` recebe o nome por parâmetro enquanto não existe a API de perfil.
+    return { pathname: '/Profile', params: { userId: sender.id, name: sender.name } } as Href;
+  }
 
-  return {
-    href: { pathname: config.pathname, params: { id } } as Href,
-    screenImplemented: config.screenImplemented,
-  };
+  const id = notification.payload.event_id;
+  if (!id) return null;
+  return { pathname: config.pathname, params: { id } } as Href;
 }
 
-/** Marca primeiro de forma otimista; destinos de telas futuras ficam preparados no mapa. */
+/** Marca como lida de forma otimista e abre o destino do tipo. */
 export function openNotification(
   notification: Notification,
   markAsRead: (notificationId: string) => Promise<void>,
@@ -48,5 +54,5 @@ export function openNotification(
   if (!isOffline) void markAsRead(notification.notification_id);
 
   const destination = getNotificationDestination(notification);
-  if (destination?.screenImplemented) navigate(destination.href);
+  if (destination) navigate(destination);
 }

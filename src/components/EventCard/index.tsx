@@ -334,22 +334,26 @@ function RequestCard({
 	const dateTime = formatRequestDateTime(event.date);
 
 	return (
-		<View style={[styles.cardElevated, styles.carousel, isUnread && styles.requestUnreadCard]}>
+		<View style={[styles.cardElevated, styles.carousel]}>
 			<Pressable
 				onPress={onPress}
 				disabled={!onPress}
 				accessibilityRole={onPress ? 'button' : undefined}
-				accessibilityLabel={onPress ? `${event.title}, solicitação de ${requesterName}` : undefined}
+				accessibilityLabel={onPress ? `${isUnread ? 'Nova. ' : ''}${event.title}, solicitação de ${requesterName}` : undefined}
 				style={styles.requestMain}
 			>
 				<View style={styles.requestImageWrap}>
 					<EventImage event={event} style={styles.requestImage} placeholderColor={palette.primary[200]} />
-					{isUnread && <View style={styles.requestUnreadDot} />}
+					{isUnread && (
+						<View style={styles.requestNewBadge} aria-hidden>
+							<Text style={styles.requestNewBadgeLabel}>Nova</Text>
+						</View>
+					)}
 				</View>
 
 				<View style={[styles.carouselContent, styles.requestContent]}>
-					{/* 1 linha: mesma razão do `Featured` — carrossel de altura consistente. */}
-					<Text numberOfLines={1} style={styles.miniTitle}>{event.title}</Text>
+					{/* O nome do evento quebra em até 2 linhas, como no Figma. */}
+					<Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text>
 
 					<View style={styles.detailLine}>
 						<Icon name="user" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
@@ -545,17 +549,18 @@ const styles = StyleSheet.create({
 		position: 'relative',
 	},
 	requestImage: { width: '100%', height: '100%' },
-	requestUnreadCard: { backgroundColor: palette.primary[50] },
-	requestUnreadDot: {
+	// Badge/Novo: pílula âmbar sobre a capa. Texto escuro — nunca branco sobre âmbar.
+	requestNewBadge: {
 		position: 'absolute',
 		top: spacing[8],
 		left: spacing[8],
-		width: layout.notificationItem.unreadDotSize,
-		height: layout.notificationItem.unreadDotSize,
+		paddingHorizontal: spacing[8],
+		paddingVertical: spacing[4],
 		borderRadius: radius.full,
 		backgroundColor: palette.secondary[500],
 		zIndex: layout.eventCard.overlayZIndex,
 	},
+	requestNewBadgeLabel: { ...typography.labelS, color: palette.neutral[900] },
 
 	requestActions: { flexDirection: 'row', gap: spacing[8], width: '100%' },
 	requestActionsWrap: { paddingHorizontal: spacing[12], paddingTop: spacing[8], paddingBottom: spacing[12] },

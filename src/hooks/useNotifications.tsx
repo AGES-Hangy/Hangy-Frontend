@@ -208,17 +208,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setProcessingIds((current) => new Set(current).add(id));
     setNotifications((current) => current.filter((item) => item.notification_id !== id));
     if (!notification.read) setUnreadCount((current) => Math.max(0, current - 1));
-    let markedAsRead = notification.read;
+
+    // Só para diagnóstico: diz em qual chamada a resposta falhou.
+    let step: 'lookup' | 'update' = 'lookup';
 
     try {
-      if (!notification.read) {
-        await apiFetch<void>(endpoints.notificationRead(id), { method: 'PATCH' });
-        markedAsRead = true;
-      }
+      // A notificação não traz o participant_id: acha-se o pendente pelo remetente.
       const page = await apiFetch<ParticipantsPage>(endpoints.eventParticipants(eventId, 'PENDING'));
       const participant: EventParticipantItem | undefined = page.items.find((item) => item.user.id === senderId);
       if (!participant) throw new ApiError('http', 404, 'Participant not found');
 
+      step = 'update';
       await apiFetch(endpoints.eventParticipant(eventId, participant.participant_id), {
         method: 'PATCH',
         body: JSON.stringify({ status }),
@@ -227,21 +227,40 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         type: 'success',
         message: status === 'CONFIRMED' ? 'Solicitação aprovada.' : 'Solicitação recusada.',
       });
+
+      // A decisão já valeu: marcar como lida vem depois e nunca a bloqueia.
+      if (!notification.read) {
+        void apiFetch<void>(endpoints.notificationRead(id), { method: 'PATCH' }).catch((caught) => {
+          console.info('[notifications] não foi possível marcar como lida após responder:', caught);
+        });
+      }
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) return;
+      console.warn('[notifications] falha ao responder solicitação de participação:', {
+        step,
+        notificationId: id,
+        eventId,
+        senderId,
+        status: caught instanceof ApiError ? caught.status : null,
+        detail: caught instanceof ApiError ? caught.detail : String(caught),
+      });
+
       if (caught instanceof ApiError && caught.status === 404) {
-        void loadNotifications();
-      } else if (caught instanceof ApiError && caught.status === 403 && !markedAsRead) {
-        console.info('[notifications] notificação não pertence ao usuário:', id);
+        // Já respondida, cancelada ou de um evento que sumiu: a lista local está velha.
+        // Antes isto só recarregava, em silêncio, e o card voltava sem explicação.
+        addToast({
+          type: 'warning',
+          message: 'Essa solicitação não está mais disponível. Atualizamos a lista.',
+        });
         void loadNotifications();
       } else {
-        const restoredNotification = { ...notification, read: markedAsRead };
+        const restoredNotification = { ...notification };
         setNotifications((current) => current.some((item) => item.notification_id === id)
           ? current
           : [...current, restoredNotification].sort((a, b) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
           ));
-        if (!notification.read && !markedAsRead) setUnreadCount((current) => current + 1);
+        if (!notification.read) setUnreadCount((current) => current + 1);
         const failure = describeActionError(caught);
         addToast({ type: failure.tone, message: failure.message || 'Não foi possível concluir a solicitação.' });
       }

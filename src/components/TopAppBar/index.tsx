@@ -97,7 +97,8 @@ export function TopAppBar({
   const isBrand = BRAND_VARIANTS.includes(variant);
   const isBordered = variant !== 'Home';
   const tint = isBrand ? colors.text.inverse : colors.text.primary;
-  const goBack = onBack ?? (() => router.back());
+  // Sem histórico (link direto, recarga na web) o voltar cairia no vazio: vai para a Home.
+  const goBack = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/Home')));
 
   const showsLogo = variant === 'Home' || variant === 'BrandBack';
   const isModal = variant === 'Modal';
@@ -201,6 +202,7 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
   },
   logo: {
@@ -210,6 +212,7 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h4,
     flex: 1,
+    minWidth: 0,
     textAlign: 'center',
     color: colors.text.primary,
   },
