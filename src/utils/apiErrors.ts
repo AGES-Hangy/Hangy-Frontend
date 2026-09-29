@@ -174,7 +174,7 @@ export function describeActionError(error: unknown): ActionError {
  * O mock devolve um erro com o mesmo formato do `ApiError`, mas de outra
  * classe — `instanceof` não pega. Este teste estrutural cobre os dois.
  */
-function isApiErrorLike(
+export function isApiErrorLike(
   error: unknown,
 ): error is { kind: string; status: number | null; detail: string | null } {
   return (

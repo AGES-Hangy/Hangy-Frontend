@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { removeToken } from '@/utils/auth';
@@ -15,7 +17,14 @@ export default function Profile() {
   const { userId, name } = useLocalSearchParams<{ userId?: string; name?: string }>();
   const isOwnProfile = !userId;
 
+  const { unregisterDevice } = useUnregisterDevice();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   async function handleLogout() {
+    setIsLoggingOut(true);
+    // Antes de removeToken porque o DELETE precisa do Bearer. Logout
+    // voluntário não deve exibir sessão expirada se a API responder 401.
+    await unregisterDevice({ isLoggingOut: true });
     await removeToken();
     router.replace('/Login');
   }
@@ -50,6 +59,7 @@ export default function Profile() {
           label="Sair"
           variant="Secondary"
           onPress={handleLogout}
+          isLoading={isLoggingOut}
           accessibilityLabel="Sair da conta"
           style={styles.logout}
         />
