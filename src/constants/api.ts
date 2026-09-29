@@ -40,6 +40,18 @@ export const endpoints = {
   },
   eventCancel: (eventId: string) => `/events/${eventId}/cancel`,
   eventShare: (eventId: string) => `/events/${eventId}/share`,
+  notifications: (options?: { limit?: number; cursor?: string | null; unreadOnly?: boolean }) => {
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    if (options?.unreadOnly) params.set('unread_only', 'true');
+    const query = params.toString();
+    return `/notifications${query ? `?${query}` : ''}`;
+  },
+  notificationRead: (notificationId: string) =>
+    `/notifications/${encodeURIComponent(notificationId)}/read`,
+  notificationsReadAll: () => '/notifications/read-all',
+  notificationsUnreadCount: () => '/notifications/unread-count',
   eventParticipant: (eventId: string, participantId: string) =>
     `/events/${eventId}/participants/${participantId}`,
   myCreatedEvents: () => '/users/me/events/created',

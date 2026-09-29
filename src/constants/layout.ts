@@ -90,11 +90,10 @@ export const layout = {
     imageTransitionDuration: 150,
   },
   notificationItem: {
-    /**
-     * Request e Connection. O frame especifica 104 com botões de 32; o
-     * componente usa `Button` SM (36) por causa do alvo de toque de 44.
-     */
-    minHeightActions: 112,
+    /** Altura dos botões de ação nos frames 703:12202 e 703:12214; hitSlop completa 44. */
+    notificationActionHeight: 32,
+    /** Altura mínima dos cards de solicitação nos frames 703:12202 e 703:12214. */
+    minHeightActions: 104,
     minHeightPlain: 80,
     thumbSize: 48,
     /** Capa do evento à direita do `Activity`, maior que a thumb da esquerda. */

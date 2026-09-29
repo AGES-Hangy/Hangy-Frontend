@@ -1,84 +1,99 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 
-import { NotificationItem } from '@/components/NotificationItem';
+import { NotificationCard } from '@/components/NotificationCard';
+import { EmptyState } from '@/components/EmptyState';
+import { NotificationLoadError } from '@/components/NotificationLoadError';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { SectionHeader } from '@/components/SectionHeader';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
+import { openNotification } from '@/constants/notificationRoutes';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useNotificationLoadFeedback } from '@/hooks/useNotificationLoadFeedback';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
-import type { MockNotification } from '@/mocks/notifications';
-import { useNotificationMock } from '@/providers/NotificationMockProvider';
-
-function formatEventDate(value: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  const formattedDate = new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date);
-  const formattedTime = new Intl.DateTimeFormat('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
-
-  return `${formattedDate} · ${formattedTime}`;
-}
+import { useNotifications } from '@/hooks/useNotifications';
 
 export default function ParticipationRequests() {
   useTopAppBar({ variant: 'BrandBack' });
-  const { notifications, markAsRead, markManyAsRead, dismiss } = useNotificationMock();
-  const requests = notifications.filter(
-    (notification): notification is Extract<MockNotification, { type: 'Request' }> => notification.type === 'Request',
-  );
-  const unreadIds = requests.filter((request) => !request.read).map((request) => request.id);
-  const unreadIdsKey = unreadIds.join(',');
+  const {
+    notifications,
+    loadNotifications,
+    loadMore,
+    markAsRead,
+    respondToParticipationRequest,
+    processingIds,
+    error,
+    errorKind,
+    errorScope,
+    canRetryError,
+    isLoading,
+  } = useNotifications();
+  const { isOffline: networkOffline } = useNetworkStatus();
+  const isOffline = networkOffline || errorKind === 'offline';
+  const retryError = errorScope === 'pagination' ? loadMore : loadNotifications;
+  const previousNetworkOffline = useRef(networkOffline);
+  const requests = notifications.filter((notification) => notification.type === 'EVENT_PARTICIPATION_REQUEST');
+
+  useFocusEffect(useCallback(() => {
+    void loadNotifications();
+  }, [loadNotifications]));
+
+  useNotificationLoadFeedback({ error, errorKind, errorScope, retry: retryError });
 
   useEffect(() => {
-    if (unreadIdsKey) markManyAsRead(unreadIdsKey.split(','));
-  }, [unreadIdsKey, markManyAsRead]);
+    const wasOffline = previousNetworkOffline.current;
+    previousNetworkOffline.current = networkOffline;
+    if (wasOffline && !networkOffline && errorKind === 'offline') {
+      void loadNotifications();
+    }
+  }, [errorKind, loadNotifications, networkOffline]);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <SectionHeader title="Solicitações de participação" variant="overline" />
-      <View style={styles.list}>
-        {requests.map((request) => (
-          <NotificationItem
-            key={request.id}
-            type="Request"
-            title={`${request.event.requesterName ?? 'Alguém'} quer participar do seu evento`}
-            subtitle={[request.event.title, formatEventDate(request.event.date)].filter(Boolean).join(' · ')}
-            imageUri={request.event.imageUrl}
-            read={request.read}
-            onMarkRead={!request.read ? () => markAsRead(request.id) : undefined}
-            onAccept={() => dismiss(request.id)}
-            onReject={() => dismiss(request.id)}
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.content, isOffline && styles.contentOffline]}
+        showsVerticalScrollIndicator={false}
+      >
+        <SectionHeader title="SOLICITAÇÕES DE PARTICIPAÇÃO" variant="overline" />
+        {error && requests.length > 0 && (
+          <NotificationLoadError
+            compact
+            message={error}
+            onRetry={canRetryError && !isOffline ? () => void retryError() : undefined}
           />
-        ))}
-      </View>
-    </ScrollView>
+        )}
+        <View style={styles.list}>
+          {requests.map((request) => (
+            <NotificationCard
+              key={request.notification_id}
+              notification={request}
+              presentation="list"
+              actionsDisabled={isOffline}
+              onAccept={() => void respondToParticipationRequest(request.notification_id, 'CONFIRMED')}
+              onReject={() => void respondToParticipationRequest(request.notification_id, 'REJECTED')}
+              isProcessing={processingIds.has(request.notification_id)}
+              onPress={() => openNotification(request, markAsRead, (href) => router.push(href), isOffline)}
+            />
+          ))}
+        </View>
+        {!isLoading && requests.length === 0 && error && (
+          <NotificationLoadError
+            message={error}
+            onRetry={canRetryError && !isOffline ? () => void retryError() : undefined}
+          />
+        )}
+        {!isLoading && requests.length === 0 && !error && <EmptyState context="Notifications" />}
+      </ScrollView>
+      {isOffline && <OfflineBanner />}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg.base,
-  },
-  content: {
-    paddingHorizontal: spacing[16],
-    paddingTop: spacing[16],
-    paddingBottom: spacing[24],
-    gap: spacing[12],
-  },
-  list: {
-    gap: spacing[12],
-  },
+  container: { flex: 1, backgroundColor: colors.bg.base },
+  content: { flexGrow: 1, paddingHorizontal: spacing[16], paddingTop: spacing[16], paddingBottom: spacing[24], gap: spacing[12] },
+  contentOffline: { paddingTop: spacing[64] },
+  list: { gap: spacing[12] },
 });

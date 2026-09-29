@@ -2,11 +2,10 @@ import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { AvatarGroup } from '@/components/AvatarGroup';
-import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import type { NotificationItemProps } from '@/components/NotificationItem/types';
@@ -15,6 +14,7 @@ import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 const metrics = layout.notificationItem;
+const NOTIFICATION_ACTION_HIT_SLOP = Math.max(0, (44 - metrics.notificationActionHeight) / 2);
 
 const ACTION_LABELS = {
   Request: { accept: 'Aprovar', reject: 'Recusar' },
@@ -120,6 +120,64 @@ function renderTrailing(props: NotificationItemProps) {
   }
 }
 
+function NotificationActionButton({
+  label,
+  accessibilityLabel,
+  variant,
+  onPress,
+  disabled = false,
+  isLoading = false,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  variant: 'primary' | 'secondary';
+  onPress: () => void;
+  disabled?: boolean;
+  isLoading?: boolean;
+}) {
+  const isPrimary = variant === 'primary';
+  const isDisabled = disabled || isLoading;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={{ top: NOTIFICATION_ACTION_HIT_SLOP, bottom: NOTIFICATION_ACTION_HIT_SLOP }}
+      disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: isDisabled, busy: isLoading }}
+      style={({ pressed }) => [
+        styles.notificationActionButton,
+        isPrimary ? styles.notificationPrimaryButton : styles.notificationSecondaryButton,
+        isDisabled && isPrimary && styles.notificationDisabledPrimaryButton,
+        isDisabled && !isPrimary && styles.notificationDisabledSecondaryButton,
+        pressed && !isDisabled && { opacity: pressedOpacity },
+      ]}
+    >
+      <View style={styles.notificationActionContent}>
+        <Text
+          style={[
+            styles.notificationActionLabel,
+            isPrimary ? styles.notificationPrimaryLabel : styles.notificationSecondaryLabel,
+            isDisabled && styles.notificationDisabledLabel,
+            isLoading && styles.notificationLoadingLabel,
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      </View>
+      {isLoading && (
+        <ActivityIndicator
+          size="small"
+          color={isPrimary ? colors.text.inverse : palette.neutral[700]}
+          style={styles.notificationSpinner}
+        />
+      )}
+    </Pressable>
+  );
+}
+
 export function NotificationItem(props: NotificationItemProps) {
   const { title, subtitle, read = false, onPress, onMarkRead, style } = props;
 
@@ -162,23 +220,22 @@ export function NotificationItem(props: NotificationItemProps) {
 
           <View style={styles.actions}>
             {props.onReject && (
-              <Button
+              <NotificationActionButton
                 label={labels.reject}
-                variant="Secondary"
-                size="SM"
-                onPress={props.onReject}
-                disabled={props.isProcessing}
                 accessibilityLabel={`${labels.reject} — ${title}`}
+                variant="secondary"
+                onPress={props.onReject}
+                disabled={props.actionsDisabled || props.isProcessing}
               />
             )}
             {props.onAccept && (
-              <Button
+              <NotificationActionButton
                 label={labels.accept}
-                size="SM"
-                onPress={props.onAccept}
-                isLoading={props.isProcessing}
-                disabled={props.acceptDisabled}
                 accessibilityLabel={`${labels.accept} — ${title}`}
+                variant="primary"
+                onPress={props.onAccept}
+                disabled={props.actionsDisabled || props.acceptDisabled || props.isProcessing}
+                isLoading={props.isProcessing}
               />
             )}
           </View>
@@ -269,6 +326,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[8],
+  },
+  notificationActionButton: {
+    height: metrics.notificationActionHeight,
+    paddingHorizontal: spacing[16],
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationSecondaryButton: {
+    backgroundColor: colors.bg.base,
+    borderWidth: 1.5,
+    borderColor: palette.neutral[300],
+  },
+  notificationPrimaryButton: {
+    backgroundColor: colors.action.primary,
+  },
+  notificationActionLabel: {
+    ...typography.labelS,
+  },
+  notificationSecondaryLabel: {
+    color: palette.neutral[700],
+  },
+  notificationPrimaryLabel: {
+    color: colors.text.inverse,
+  },
+  notificationActionContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationDisabledPrimaryButton: {
+    backgroundColor: palette.neutral[200],
+  },
+  notificationDisabledSecondaryButton: {
+    borderColor: colors.border.strong,
+  },
+  notificationDisabledLabel: {
+    color: colors.text.disabled,
+  },
+  notificationLoadingLabel: {
+    opacity: 0,
+  },
+  notificationSpinner: {
+    position: 'absolute',
   },
   itemMain: {
     flex: 1,

@@ -5,8 +5,8 @@ import { AuthGuard } from '@/utils/AuthGuard';
 import { BottomNav } from '@/components/BottomNav';
 import type { BottomNavActive, BottomNavTab } from '@/components/BottomNav';
 import { TopAppBarProvider, TopAppBarSlot } from '@/hooks/useTopAppBar';
+import { NotificationsProvider } from '@/hooks/useNotifications';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
-import { NotificationMockProvider } from '@/providers/NotificationMockProvider';
 
 /** Rota de cada aba do Figma. As duas tabelas são inversas uma da outra. */
 const ROUTE_BY_TAB: Record<BottomNavTab, string> = {
@@ -58,7 +58,7 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
 export default function TabsLayout() {
   return (
     <AuthGuard>
-      <NotificationMockProvider>
+      <NotificationsProvider>
         <TopAppBarProvider>
           <Tabs
             backBehavior="history"
@@ -72,7 +72,7 @@ export default function TabsLayout() {
             }}
           />
         </TopAppBarProvider>
-      </NotificationMockProvider>
+      </NotificationsProvider>
     </AuthGuard>
   );
 }
