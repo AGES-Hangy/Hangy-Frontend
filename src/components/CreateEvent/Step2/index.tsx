@@ -48,7 +48,7 @@ export type Step2Props = {
   publishError: string | null;
 };
 
-type MissingField = 'dateRow' | 'location' | 'privacy';
+type MissingField = 'dateRow' | 'location';
 
 const FIELD_SCROLL_MARGIN = spacing[16];
 
@@ -89,12 +89,10 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
   const containerRef = useRef<View>(null);
   const dateRowRef = useRef<View>(null);
   const locationRef = useRef<View>(null);
-  const privacyRef = useRef<View>(null);
 
   const isDateMissing = !data.date;
   const isTimeMissing = !data.time;
   const isLocationMissing = data.location.trim().length === 0 || data.locationCoordinates === null;
-  const isInviteeMissing = data.privacy === 'INVITE_ONLY' && data.inviteeIds.length === 0;
   const isDateInPast = data.date !== null && !isFutureDate(data.date, data.time);
 
   const showDateRowError = submitAttempted && (isDateMissing || isTimeMissing || isDateInPast);
@@ -104,18 +102,17 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
     submit: () => {
       setSubmitAttempted(true);
 
-      if (isDateMissing || isDateInPast || isTimeMissing || isLocationMissing || isInviteeMissing) {
+      if (isDateMissing || isDateInPast || isTimeMissing || isLocationMissing) {
         const firstMissing: MissingField =
           isDateMissing || isDateInPast || isTimeMissing
             ? 'dateRow'
-            : isLocationMissing ? 'location' : 'privacy';
+            : 'location';
 
         const messages: string[] = [];
         if (isDateMissing) messages.push('data');
         else if (isDateInPast) messages.push('data futura');
         if (isTimeMissing) messages.push('horário');
         if (isLocationMissing) messages.push('local');
-        if (isInviteeMissing) messages.push('ao menos um convidado');
 
         requestAnimationFrame(() => {
           const scroll = scrollRef.current;
@@ -127,7 +124,6 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
           const field = {
             dateRow: dateRowRef,
             location: locationRef,
-            privacy: privacyRef,
           }[firstMissing].current;
           if (scroll && contentNode && field) {
             field.measureLayout(contentNode, (_x, y) => {
@@ -221,7 +217,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         disabled={isPublishing}
       />
 
-      <View ref={privacyRef} style={styles.section}>
+      <View style={styles.section}>
         <Text style={[typography.labelM, styles.fieldLabel]}>Visibilidade</Text>
 
         <ProfileTabs

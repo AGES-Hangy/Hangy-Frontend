@@ -25,6 +25,7 @@ import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
 import { formatDateTime } from '@/utils/datetime';
 import { getToken } from '@/utils/auth';
+import { PENDING_INVITE_KEY } from '@/constants/invite';
 
 /**
  * Detalhe do evento — frame `Evento - visão do organizador` do Figma.
@@ -60,21 +61,17 @@ const MAIN_ACTION: Record<
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { token: inviteToken } = useLocalSearchParams<{ token?: string }>();
-  const [resolvedEventId, setResolvedEventId] = useState<string | undefined>(id);
+  const [inviteEventId, setInviteEventId] = useState<string | undefined>(undefined);
+  // Derivado no render, sem passar por efeito: um efeito atrasaria o `id` novo
+  // em um render e o hook de carga chegaria a buscar o evento anterior.
+  const resolvedEventId = inviteToken ? inviteEventId : id;
   const [inviteStage, setInviteStage] = useState<'idle' | 'accepting' | 'error'>('idle');
   const [inviteError, setInviteError] = useState<{ title: string; message: string } | null>(null);
   const { accept } = useInviteAccept();
 
   // O Expo Router reaproveita esta mesma instância ao navegar de um card de
-  // evento pra outro (mesma rota, `id` diferente na URL), então precisa
-  // sincronizar aqui — senão o hook abaixo fica preso no primeiro evento
-  // aberto. O fluxo de convite (efeito acima) resolve o id sozinho a partir
-  // do token, então não sobrescrevemos enquanto ele estiver em curso.
-  useEffect(() => {
-    if (!inviteToken) {
-      setResolvedEventId(id);
-    }
-  }, [id, inviteToken]);
+  // evento pra outro (mesma rota, `id` diferente na URL), por isso o id vem
+  // direto dos params. No fluxo de convite ele é resolvido a partir do token.
 
   const insets = useSafeAreaInsets();
   const { addToast } = useToast();
@@ -96,7 +93,7 @@ export default function EventDetail() {
       const sessionToken = await getToken();
 
       if (!sessionToken) {
-        await AsyncStorage.setItem('@hangy:pendingInviteToken', inviteToken as string);
+        await AsyncStorage.setItem(PENDING_INVITE_KEY, inviteToken as string);
         router.replace('/Login');
         return;
       }
@@ -105,7 +102,7 @@ export default function EventDetail() {
       try {
         const result = await accept(inviteToken as string);
         if (cancelled) return;
-        setResolvedEventId(result.event_id);
+        setInviteEventId(result.event_id);
         setInviteStage('idle');
       } catch (err) {
         if (cancelled) return;

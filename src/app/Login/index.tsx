@@ -11,12 +11,14 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 import { useToast } from '@/components/Toast';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { PENDING_INVITE_KEY } from '@/constants/invite';
 import { useLogin } from '@/hooks/useLogin';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,6 +60,15 @@ export default function Login() {
 
     const result = await login(normalizedEmail, password);
     if (result) {
+      // Quem abriu um link de convite sem sessão foi mandado para cá pelo
+      // EventDetail, que guardou o token; retoma o convite em vez de ir à Home.
+      const pendingInviteToken = await AsyncStorage.getItem(PENDING_INVITE_KEY);
+      if (pendingInviteToken) {
+        await AsyncStorage.removeItem(PENDING_INVITE_KEY);
+        router.replace({ pathname: '/EventDetail', params: { token: pendingInviteToken } });
+        return;
+      }
+
       // A Home é a rota autenticada disponível para ambos os tipos de conta.
       router.replace('/Home');
     }
