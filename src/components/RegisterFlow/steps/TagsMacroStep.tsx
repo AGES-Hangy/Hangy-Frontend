@@ -7,10 +7,28 @@ import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { StepTitle } from '@/components/RegisterFlow/RegisterPieces';
 import type { TagNode } from '@/hooks/useTags';
+import type { AccountType } from '@/components/RegisterFlow/types';
 
-const MINIMUM_MACRO_TAGS = 3;
+/**
+ * Pessoa Física escolhe o que a interessa (o feed é montado a partir disso, daí
+ * o mínimo de 3); a empresa escolhe as áreas dos eventos que vai oferecer, e
+ * pode atuar em uma só.
+ */
+const COPY = {
+  pf: {
+    minimum: 3,
+    title: 'O que te interessa?',
+    subtitle: (minimum: number) => `Escolha ao menos ${minimum} áreas. O feed da Home é montado a partir delas.`,
+  },
+  pj: {
+    minimum: 1,
+    title: 'Que eventos você vai oferecer?',
+    subtitle: () => 'Escolha as áreas dos eventos da sua empresa. Elas ajudam as pessoas a encontrarem você.',
+  },
+} as const;
 
 type Props = {
+  accountType: AccountType;
   tags: TagNode[];
   isLoading: boolean;
   error: string | null;
@@ -26,16 +44,15 @@ type Props = {
  * único como a tabela de estados da task descreve em prosa; sigo o frame,
  * que é mais concreto (ver divergência registrada no plano/PR).
  */
-export function TagsMacroStep({ tags, isLoading, error, selectedMacroIds, onToggleMacro, onContinue, onRetry }: Props) {
+export function TagsMacroStep({ accountType, tags, isLoading, error, selectedMacroIds, onToggleMacro, onContinue, onRetry }: Props) {
+  const { minimum, title, subtitle } = COPY[accountType];
   const availableSelection = selectedMacroIds.filter((id) => tags.some((tag) => tag.id === id));
-  const canContinue = !isLoading && !error && availableSelection.length >= MINIMUM_MACRO_TAGS;
+  const canContinue = !isLoading && !error && availableSelection.length >= minimum;
 
   return (
     <View style={styles.container}>
-      <StepTitle>O que te interessa?</StepTitle>
-      <Text style={styles.subtitle}>
-        Escolha ao menos {MINIMUM_MACRO_TAGS} áreas. O feed da Home é montado a partir delas.
-      </Text>
+      <StepTitle>{title}</StepTitle>
+      <Text style={styles.subtitle}>{subtitle(minimum)}</Text>
 
       {error && (
         <>

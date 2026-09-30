@@ -9,7 +9,7 @@ type SaveTagsResponse = {
 };
 
 /**
- * `PUT /users/me/tags` — etapa 4 do cadastro (só Pessoa Física), já com o
+ * `PUT /users/me/tags` — etapa 4 do cadastro (Pessoa Física e Empresa), já com o
  * usuário autenticado pelo `POST /auth/register` anterior. Usa `apiFetch`
  * (não o `fetch` cru de `useRegister`/`useTags`) porque é uma rota
  * autenticada: herda o 401 global de graça.
