@@ -13,10 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
-import { Icon } from '@/components/Icon';
-import { colors, palette } from '@/constants/colors';
+import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
-import { typography } from '@/constants/typography';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
 
@@ -38,11 +36,9 @@ const EMPTY_FORM: CreateEventFormData = {
   participantLimit: 10,
   unlimited: false,
   privacy: 'PUBLIC',
-  inviteeIds: [],
 };
 
 export default function CreateEvent() {
-  const [publishedTitle, setPublishedTitle] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const insets = useSafeAreaInsets();
@@ -56,14 +52,12 @@ export default function CreateEvent() {
 
   // A tela é uma aba de `Tabs` (ver (tabs)/_layout.tsx) e continua montada ao
   // trocar de aba — sem isto, sair e reabrir manteria o formulário preenchido
-  // ou, pior, cairia direto na tela de "evento publicado" de uma criação
-  // anterior.
+  // ou, pior, cairia direto no passo 2 de uma criação anterior.
   const resetForm = useCallback(() => {
     setForm(EMPTY_FORM);
     setStep(1);
     setSubmitCount(0);
     setLocalError(null);
-    setPublishedTitle(null);
   }, []);
 
   const handleDiscard = useCallback(() => {
@@ -72,20 +66,23 @@ export default function CreateEvent() {
     router.back();
   }, [resetForm]);
 
-  const handleLeavePublished = useCallback(() => {
-    resetForm();
-    router.back();
-  }, [resetForm]);
-
   useTopAppBar({
     variant: 'Modal',
-    title: publishedTitle ? 'Evento publicado' : 'Criar evento',
-    onBack: publishedTitle ? handleLeavePublished : () => setShowDiscardConfirm(true),
+    title: 'Criar evento',
+    onBack: () => setShowDiscardConfirm(true),
   });
 
   const missing = useMemo(() => validateStep1(form), [form.title, form.tagIds]);
 
-  const { publishEvent, isPublishing, publishError } = useCreateEventStep2();
+  const {
+    publishEvent,
+    generateInviteLink,
+    isPublishing: isPublishingEvent,
+    isGeneratingLink,
+    publishError,
+  } = useCreateEventStep2();
+  // Publicar e gerar o link de convite são uma operação só para o usuário.
+  const isPublishing = isPublishingEvent || isGeneratingLink;
 
   const setTitle = (title: string) => setForm((f) => ({ ...f, title }));
   const setDescription = (description: string) => setForm((f) => ({ ...f, description }));
@@ -145,33 +142,21 @@ export default function CreateEvent() {
       max_participants: form.unlimited ? null : form.participantLimit,
       privacy: form.privacy,
     });
-    if (result) setPublishedTitle(result.title);
-  };
+    if (!result) return;
 
-  if (publishedTitle) {
-    return (
-      <View style={styles.successScreen}>
-        <View style={styles.successContent}>
-          <View style={styles.successIcon}>
-            <Icon name="circle-check" size={32} color={palette.success.default} />
-          </View>
-          <Text style={[typography.h2, styles.successTitle]}>Seu evento está no ar</Text>
-          <Text style={[typography.bodyM, styles.successDescription]}>
-            O evento “{publishedTitle}” foi publicado com sucesso.
-          </Text>
-        </View>
-        <View style={[styles.successFooter, { paddingBottom: spacing[16] + insets.bottom }]}>
-          <Button
-            label="Ir para o início"
-            onPress={() => {
-              resetForm();
-              router.replace('/Home');
-            }}
-          />
-        </View>
-      </View>
-    );
-  }
+    // O backend não cria o link junto com o evento, e `GET /events/{id}/share`
+    // responde 404 para um evento por convite que ainda não tem um — é o link
+    // gerado aqui que a tela de publicado lê para compartilhar.
+    if (form.privacy === 'INVITE_ONLY') await generateInviteLink(result.event_id);
+
+    // `replace` troca a entrada de criação no histórico: fechar a tela de
+    // publicado não devolve o usuário ao formulário.
+    router.replace({
+      pathname: '/EventPublished',
+      params: { eventId: result.event_id, privacy: form.privacy },
+    });
+    resetForm();
+  };
 
   return (
     <View style={styles.screen}>
@@ -209,7 +194,7 @@ export default function CreateEvent() {
               onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: null }))}
               onSelectLocation={(suggestion) => setForm((f) => ({
                 ...f,
-                location: suggestion.label,
+                location: suggestion.shortLabel,
                 locationCoordinates: { latitude: suggestion.latitude, longitude: suggestion.longitude },
               }))}
               onChangeParticipantLimit={(v) => setForm((f) => ({ ...f, participantLimit: v }))}
@@ -289,33 +274,5 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 2,
-  },
-  successScreen: {
-    flex: 1,
-    backgroundColor: colors.bg.base,
-  },
-  successContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[24],
-  },
-  successIcon: {
-    backgroundColor: palette.success.bg,
-    borderRadius: 32,
-    padding: spacing[16],
-    marginBottom: spacing[24],
-  },
-  successTitle: {
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  successDescription: {
-    color: colors.text.secondary,
-    textAlign: 'center',
-    marginTop: spacing[8],
-  },
-  successFooter: {
-    padding: spacing[16],
   },
 });

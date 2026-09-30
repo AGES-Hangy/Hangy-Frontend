@@ -40,12 +40,13 @@ export function AddressAutocompleteField({
   const [isMapOpen, setIsMapOpen] = useState(false);
   const { results, search } = useAddressSearch();
 
+  // O texto exibido após escolher uma sugestão vem do pai (`value`): cada tela
+  // decide se mostra o endereço completo ou o nome curto.
   useEffect(() => setText(value), [value]);
 
   function handleSelectResult(label: string) {
     const suggestion = results.find((result) => result.label === label);
     if (!suggestion) return;
-    setText(suggestion.label);
     onSelect(suggestion);
   }
 
@@ -76,7 +77,6 @@ export function AddressAutocompleteField({
         visible={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         onConfirm={(suggestion) => {
-          setText(suggestion.label);
           onSelect(suggestion);
           setIsMapOpen(false);
         }}

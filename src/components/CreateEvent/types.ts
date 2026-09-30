@@ -21,7 +21,6 @@ export type CreateEventFormData = {
   unlimited: boolean;
   privacy: Privacy;
   /** IDs dos usuários convidados — obrigatório quando privacy = INVITE_ONLY. */
-  inviteeIds: string[];
 };
 
 /** Campo obrigatório pendente na etapa 1. */
