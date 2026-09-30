@@ -198,7 +198,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         ) : null}
       </View>
 
-      <View ref={locationRef}>
+      <View ref={locationRef} style={styles.locationField}>
         <FieldLabel label="Local" required />
         <AddressAutocompleteField
           value={data.location}
@@ -248,6 +248,13 @@ const styles = StyleSheet.create({
   },
   required: {
     color: palette.error.default,
+  },
+  // A lista de sugestões do campo é absoluta e o `zIndex` dela só vale dentro
+  // deste wrapper; sem elevá-lo, os blocos seguintes (limite, visibilidade)
+  // pintam por cima das sugestões e não deixam tocar nelas.
+  locationField: {
+    zIndex: 1,
+    elevation: 1,
   },
   dateRow: {
     flexDirection: 'row',

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 /**
  * Autocomplete e reverse geocode do campo Endereço (aba Empresa) via
@@ -8,6 +9,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
 const SEARCH_DEBOUNCE_MS = 500;
 const MIN_QUERY_LENGTH = 4;
+
+/**
+ * A política do Nominatim exige um User-Agent que identifique o app: o padrão
+ * do Android (`okhttp/...`) leva 403, e a busca falhava em silêncio. No Web o
+ * navegador não deixa sobrescrever esse header (ele já manda o Referer).
+ */
+const REQUEST_HEADERS: Record<string, string> = {
+  'Accept-Language': 'pt-BR',
+  ...(Platform.OS === 'web' ? {} : { 'User-Agent': 'Hangy/1.0 (aplicativo Hangy)' }),
+};
 
 export type AddressSuggestion = {
   label: string;
@@ -49,7 +60,7 @@ export function useAddressSearch() {
           limit: '5',
         });
         const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
-          headers: { 'Accept-Language': 'pt-BR' },
+          headers: REQUEST_HEADERS,
         });
         if (!response.ok) throw new Error('http');
 
@@ -78,7 +89,7 @@ export function useAddressSearch() {
         format: 'jsonv2',
       });
       const response = await fetch(`${NOMINATIM_BASE_URL}/reverse?${params.toString()}`, {
-        headers: { 'Accept-Language': 'pt-BR' },
+        headers: REQUEST_HEADERS,
       });
       if (!response.ok) return null;
 

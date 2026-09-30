@@ -14,6 +14,7 @@ import { RegisterScaffold } from '@/components/RegisterFlow/RegisterScaffold';
 import {
   EMPTY_BUSINESS_FORM,
   EMPTY_PERSONAL_FORM,
+  type AccountType,
   type BusinessFormState,
   type PersonalFormState,
   type RegisterFieldErrors,
@@ -25,7 +26,6 @@ import { BusinessStepTwo } from '@/components/RegisterFlow/steps/BusinessStepTwo
 import { TagsMacroStep } from '@/components/RegisterFlow/steps/TagsMacroStep';
 import { TagsMicroStep } from '@/components/RegisterFlow/steps/TagsMicroStep';
 
-type AccountType = 'pf' | 'pj';
 type Phase = 'form' | 'tagsMacro' | 'tagsMicro';
 
 /** Campos que só existem na etapa 1 — um erro do backend neles tem que voltar pra lá. */
@@ -177,7 +177,7 @@ export default function Register() {
       return;
     }
 
-    router.replace('/Home');
+    setPhase('tagsMacro');
   }
 
   function toggleMacro(id: string) {
@@ -204,7 +204,9 @@ export default function Register() {
     const validIds = selectedMicroIds.filter((id) => availableIds.has(id));
     setSelectedMicroIds(validIds);
     if (validIds.length === 0) {
-      setTagsInlineError('Escolha pelo menos um interesse disponível.');
+      setTagsInlineError(
+        accountType === 'pj' ? 'Escolha pelo menos uma tag disponível.' : 'Escolha pelo menos um interesse disponível.',
+      );
       return;
     }
     const outcome = await saveTags(validIds);
@@ -227,6 +229,7 @@ export default function Register() {
     return (
       <RegisterScaffold variant="compact" step={registerStep}>
         <TagsMacroStep
+          accountType={accountType}
           tags={tags}
           isLoading={isLoadingTags}
           error={tagsError}
@@ -243,6 +246,7 @@ export default function Register() {
     return (
       <RegisterScaffold variant="compact" step={registerStep}>
         <TagsMicroStep
+          accountType={accountType}
           tags={tags}
           selectedMacroIds={selectedMacroIds}
           selectedMicroIds={selectedMicroIds}

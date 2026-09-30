@@ -7,8 +7,21 @@ import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { StepTitle } from '@/components/RegisterFlow/RegisterPieces';
 import type { TagNode } from '@/hooks/useTags';
+import type { AccountType } from '@/components/RegisterFlow/types';
+
+const COPY = {
+  pf: {
+    title: 'Agora afine o filtro',
+    subtitle: 'Dentro de cada área, marque o que você curte de verdade.',
+  },
+  pj: {
+    title: 'Agora especifique',
+    subtitle: 'Dentro de cada área, marque os tipos de evento que você vai oferecer.',
+  },
+} as const;
 
 type Props = {
+  accountType: AccountType;
   tags: TagNode[];
   selectedMacroIds: string[];
   selectedMicroIds: string[];
@@ -20,6 +33,7 @@ type Props = {
 };
 
 export function TagsMicroStep({
+  accountType,
   tags,
   selectedMacroIds,
   selectedMicroIds,
@@ -29,13 +43,14 @@ export function TagsMicroStep({
   isSubmitting,
   inlineError,
 }: Props) {
+  const { title, subtitle } = COPY[accountType];
   const selectedMacros = tags.filter((tag) => selectedMacroIds.includes(tag.id));
   const canSubmit = selectedMicroIds.length > 0;
 
   return (
     <View style={styles.container}>
-      <StepTitle>Agora afine o filtro</StepTitle>
-      <Text style={styles.subtitle}>Dentro de cada área, marque o que você curte de verdade.</Text>
+      <StepTitle>{title}</StepTitle>
+      <Text style={styles.subtitle}>{subtitle}</Text>
 
       {selectedMacros.map((macro) => (
         <View key={macro.id} style={styles.group}>

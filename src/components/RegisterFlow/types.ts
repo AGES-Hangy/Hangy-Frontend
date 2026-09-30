@@ -1,5 +1,7 @@
 import type { RegisterFormField } from '@/utils/registerErrors';
 
+export type AccountType = 'pf' | 'pj';
+
 export type RegisterFieldErrors = Partial<Record<RegisterFormField, string>>;
 
 export type PersonalFormState = {
