@@ -5,6 +5,8 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
+import type { UserEventItem, UserProfile } from '@/types/user';
+import { API_TIMEOUT_MS } from '@/constants/api';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
@@ -17,6 +19,9 @@ import type {
  * Também cobre `GET /terms/current` (task 212 [BE], também não subiu) pelo
  * mesmo motivo — não é um endpoint de evento, mas é só mais um backend que
  * falta, e criar um segundo arquivo/dispatcher pra um caso só seria over-engineering.
+ *
+ * Pelo mesmo motivo cobre `GET /users/{id}` e `GET /users/{id}/events` (tasks
+ * 075 e 228 [BE]), usados pelo perfil de outro usuário.
  *
  * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
  * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
@@ -38,6 +43,26 @@ import type {
  * | `forbidden` | `403` nos pendentes: só a seção de confirmados aparece    |
  * | `full`      | `409 Event is full` ao aprovar                           |
  * | `finished`  | `409 Event already finished` ao cancelar                 |
+ *
+ * Nas rotas de usuário, o `user_id` escolhe o cenário (`/UserProfile?id=pending`):
+ *
+ * | `user_id`     | Perfil                                    | Eventos           |
+ * | ------------- | ----------------------------------------- | ----------------- |
+ * | qualquer      | Pessoa sem conexão (Conectar)             | 3 eventos         |
+ * | `pending`     | Pessoa com solicitação enviada            | 3 eventos         |
+ * | `connected`   | Pessoa conectada                          | 3 eventos         |
+ * | `business`    | Estabelecimento sem seguir                | 3 eventos         |
+ * | `following`   | Estabelecimento seguido                   | 3 eventos         |
+ * | `minimal`     | Sem nome, bio, foto e tags                | Lista vazia       |
+ * | `events-boom` | Pessoa sem conexão                        | `500`             |
+ * | `missing`     | `404 User not found`                      | `404`             |
+ * | `boom`        | `500`                                     | `500`             |
+ * | `offline`     | Falha de rede                             | Falha de rede     |
+ * | `slow`        | Timeout, após `API_TIMEOUT_MS`            | Timeout           |
+ *
+ * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
+ * botão de relacionamento desabilitado dependem do estado real da rede
+ * (modo avião).
  */
 
 /** Latência de mentira, para os estados de carregamento aparecerem de verdade. */
@@ -71,6 +96,21 @@ class MockNetworkError extends Error {
 
   constructor() {
     super('network');
+    this.name = 'ApiError';
+  }
+
+  is() {
+    return false;
+  }
+}
+
+class MockTimeoutError extends Error {
+  readonly kind = 'timeout' as const;
+  readonly status = null;
+  readonly detail = null;
+
+  constructor() {
+    super('timeout');
     this.name = 'ApiError';
   }
 
@@ -258,6 +298,80 @@ function compartilhar(eventId: string): EventShare {
   };
 }
 
+const EVENTOS_DO_USUARIO: UserEventItem[] = [
+  {
+    event_id: 'guest',
+    title: 'Futebol na PUC',
+    event_date: '2026-10-30T19:00:00Z',
+    location_name: 'DRY Moments',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-evento/900/600',
+    privacy: 'PUBLIC',
+  },
+  {
+    event_id: 'pelada-parcao',
+    title: 'Pelada no Parcão',
+    event_date: '2026-11-08T13:00:00Z',
+    location_name: 'Parcão',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-parcao/900/600',
+    privacy: 'PUBLIC',
+  },
+  {
+    event_id: 'corrida-orla',
+    title: 'Corrida na Orla',
+    event_date: '2026-11-15T10:00:00Z',
+    location_name: 'Orla do Guaíba',
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+  },
+];
+
+function perfil(userId: string): UserProfile {
+  if (userId === 'minimal') {
+    return {
+      id: userId,
+      user_type: 'PERSONAL',
+      name: null,
+      description: null,
+      photo_url: null,
+      tags: [],
+      connection_status: null,
+      is_following: false,
+      is_blocked: false,
+      connections_count: 0,
+    };
+  }
+
+  const ehEstabelecimento = userId === 'business' || userId === 'following';
+
+  return {
+    id: userId,
+    user_type: ehEstabelecimento ? 'BUSINESS' : 'PERSONAL',
+    name: ehEstabelecimento ? 'DRY Moments' : 'Bruno Lima',
+    description: ehEstabelecimento
+      ? 'Bar e eventos na Cidade Baixa.'
+      : 'Futebol aos sábados e trilha quando dá.',
+    photo_url: 'https://picsum.photos/seed/hangy-perfil/300/300',
+    tags: [
+      { id: 't1', name: 'Esportes' },
+      { id: 't2', name: 'Futebol' },
+    ],
+    connection_status: userId === 'pending' ? 'PENDING' : userId === 'connected' ? 'CONFIRMED' : null,
+    is_following: userId === 'following',
+    is_blocked: false,
+    connections_count: 8,
+  };
+}
+
+async function erroDoUsuario(userId: string) {
+  if (userId === 'missing') throw new MockApiError(404, 'User not found');
+  if (userId === 'boom') throw new MockApiError(500, 'Internal server error');
+  if (userId === 'offline') throw new MockNetworkError();
+  if (userId === 'slow') {
+    await wait(API_TIMEOUT_MS);
+    throw new MockTimeoutError();
+  }
+}
+
 /**
  * Encaminha uma rota para a resposta de mentira correspondente. A assinatura
  * espelha a de `apiFetch` de propósito: quem chama não sabe qual dos dois
@@ -360,6 +474,23 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     return { ...alvo, status: body.status } as T;
+  }
+
+  // `me` é o usuário logado, não um perfil visitado: fica fora destas regras.
+  if (partes[0] === 'users' && partes[1] !== 'me' && method === 'GET') {
+    const userId = partes[1] ?? '';
+
+    if (partes.length === 2) {
+      await erroDoUsuario(userId);
+      return perfil(userId) as T;
+    }
+
+    if (partes.length === 3 && partes[2] === 'events') {
+      await erroDoUsuario(userId);
+      if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
+      const items = userId === 'minimal' ? [] : EVENTOS_DO_USUARIO;
+      return { items, next_cursor: null } as T;
+    }
   }
 
   throw new MockApiError(404, 'Not found');
