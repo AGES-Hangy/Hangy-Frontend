@@ -28,6 +28,13 @@ const USER_HALO_BORDER_WIDTH = 1;
 const USER_DOT_SIZE = 18;
 const USER_DOT_BORDER_WIDTH = 3;
 const MIN_TOUCH_SIZE = 44;
+const ABSOLUTE_FILL = {
+  position: 'absolute' as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
 const PIN_PATH =
   'M30 0C13.43 0 0 13.43 0 30c0 17.12 30 43 30 43s30-25.88 30-43C60 13.43 46.57 0 30 0Z';
 
@@ -164,14 +171,26 @@ function EventPin({
           height={height}
           viewBox={`0 0 ${PIN_WIDTH} ${PIN_HEIGHT}`}
           accessible={false}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, styles.pinSvg]}
         >
           <Path
             d={PIN_PATH}
             fill={palette.neutral[950]}
             opacity={PIN_SHADOWS[state].shadowOpacity}
-            transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height / 2})`}
+            transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height})`}
           />
+          {[3, 2, 1].map((layer) => (
+            <Path
+              key={layer}
+              d={PIN_PATH}
+              fill="none"
+              stroke={palette.neutral[950]}
+              strokeWidth={PIN_SHADOWS[state].shadowRadius * (layer / 2)}
+              strokeLinejoin="round"
+              opacity={PIN_SHADOWS[state].shadowOpacity / (layer * 4)}
+              transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height})`}
+            />
+          ))}
           <Path d={PIN_PATH} fill={PIN_COLORS[state]} />
         </Svg>
 
@@ -309,6 +328,9 @@ export function MapPin(props: MapPinProps) {
 }
 
 const styles = StyleSheet.create({
+  pinSvg: {
+    overflow: 'visible',
+  },
   pinContainer: {
     position: 'relative',
   },
@@ -339,15 +361,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   photoPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     alignItems: 'center',
     justifyContent: 'center',
   },
   photo: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
   },
   photoVeil: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     backgroundColor: colors.bg.base,
     opacity: 0.55,
   },
@@ -373,13 +395,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   userHaloFill: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     borderRadius: radius.full,
     backgroundColor: palette.info.default,
     opacity: 0.2,
   },
   userHaloRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...ABSOLUTE_FILL,
     borderWidth: USER_HALO_BORDER_WIDTH,
     borderColor: palette.info.default,
     borderRadius: radius.full,
