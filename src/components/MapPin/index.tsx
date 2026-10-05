@@ -5,7 +5,7 @@ import { useId, useState } from 'react';
 
 import { Icon } from '@/components/Icon';
 import { colors, palette } from '@/constants/colors';
-import { radius, spacing } from '@/constants/layout';
+import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 
 import type { MapPinProps, MapPinState } from './types';
@@ -65,41 +65,41 @@ const PIN_COLORS: Record<'Default' | 'Unselected' | 'Selected', string> = {
 const PIN_SHADOWS = {
   Default: {
     shadowColor: palette.neutral[950],
-    shadowOffset: { width: 0, height: spacing[4] },
+    shadowOffset: { width: 0, height: layout.mapPinShadows.default.offsetY },
     shadowOpacity: 0.18,
-    shadowRadius: spacing[8],
-    elevation: spacing[4],
+    shadowRadius: layout.mapPinShadows.default.blur,
+    elevation: layout.mapPinShadows.default.offsetY,
   },
   Unselected: {
     shadowColor: palette.neutral[950],
-    shadowOffset: { width: 0, height: spacing[4] / 2 },
+    shadowOffset: { width: 0, height: layout.mapPinShadows.unselected.offsetY },
     shadowOpacity: 0.12,
-    shadowRadius: spacing[4] + 1,
-    elevation: spacing[4] / 2,
+    shadowRadius: layout.mapPinShadows.unselected.blur,
+    elevation: layout.mapPinShadows.unselected.offsetY,
   },
   Selected: {
     shadowColor: palette.neutral[950],
-    shadowOffset: { width: 0, height: spacing[4] + 2 },
+    shadowOffset: { width: 0, height: layout.mapPinShadows.selected.offsetY },
     shadowOpacity: 0.24,
-    shadowRadius: spacing[12],
-    elevation: spacing[4] + 2,
+    shadowRadius: layout.mapPinShadows.selected.blur,
+    elevation: layout.mapPinShadows.selected.offsetY,
   },
 } as const;
 
 const CLUSTER_SHADOW = {
   shadowColor: palette.neutral[950],
-  shadowOffset: { width: 0, height: spacing[4] },
+  shadowOffset: { width: 0, height: layout.mapPinShadows.cluster.offsetY },
   shadowOpacity: 0.2,
-  shadowRadius: spacing[8] + 2,
-  elevation: spacing[4],
+  shadowRadius: layout.mapPinShadows.cluster.blur,
+  elevation: layout.mapPinShadows.cluster.offsetY,
 } as const;
 
 const USER_DOT_SHADOW = {
   shadowColor: palette.neutral[950],
-  shadowOffset: { width: 0, height: spacing[4] / 4 },
+  shadowOffset: { width: 0, height: layout.mapPinShadows.userLoc.offsetY },
   shadowOpacity: 0.2,
-  shadowRadius: spacing[4] - 1,
-  elevation: 1,
+  shadowRadius: layout.mapPinShadows.userLoc.blur,
+  elevation: layout.mapPinShadows.userLoc.offsetY,
 } as const;
 
 function getAccessibilityLabel(state: MapPinState, count?: number) {
