@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, FeGaussianBlur, Filter, Path } from 'react-native-svg';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Icon } from '@/components/Icon';
 import { colors, palette } from '@/constants/colors';
@@ -125,6 +125,7 @@ function EventPin({
   uri?: string;
 }) {
   const [loadedUri, setLoadedUri] = useState<string>();
+  const filterId = `map-pin-shadow-${useId().replace(/:/g, '')}`;
   const { width, height, haloSize, inset } = PIN_METRICS[state];
   const scale = width / PIN_WIDTH;
   const photoFrameSize = PHOTO_FRAME_SIZE * scale;
@@ -173,24 +174,25 @@ function EventPin({
           accessible={false}
           style={[StyleSheet.absoluteFill, styles.pinSvg]}
         >
+          <Defs>
+            <Filter
+              id={filterId}
+              x={-PIN_SHADOWS[state].shadowRadius * 2}
+              y={-PIN_SHADOWS[state].shadowRadius * 2}
+              width={PIN_WIDTH + PIN_SHADOWS[state].shadowRadius * 4}
+              height={PIN_HEIGHT + PIN_SHADOWS[state].shadowRadius * 4}
+              filterUnits="userSpaceOnUse"
+            >
+              <FeGaussianBlur stdDeviation={PIN_SHADOWS[state].shadowRadius / 2} />
+            </Filter>
+          </Defs>
           <Path
             d={PIN_PATH}
             fill={palette.neutral[950]}
             opacity={PIN_SHADOWS[state].shadowOpacity}
             transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height})`}
+            filter={`url(#${filterId})`}
           />
-          {[3, 2, 1].map((layer) => (
-            <Path
-              key={layer}
-              d={PIN_PATH}
-              fill="none"
-              stroke={palette.neutral[950]}
-              strokeWidth={PIN_SHADOWS[state].shadowRadius * (layer / 2)}
-              strokeLinejoin="round"
-              opacity={PIN_SHADOWS[state].shadowOpacity / (layer * 4)}
-              transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height})`}
-            />
-          ))}
           <Path d={PIN_PATH} fill={PIN_COLORS[state]} />
         </Svg>
 
