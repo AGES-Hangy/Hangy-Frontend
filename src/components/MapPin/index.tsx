@@ -151,7 +151,6 @@ function EventPin({
       <View
         style={[
           styles.pin,
-          PIN_SHADOWS[state],
           {
             width,
             height,
@@ -167,6 +166,12 @@ function EventPin({
           accessible={false}
           style={StyleSheet.absoluteFill}
         >
+          <Path
+            d={PIN_PATH}
+            fill={palette.neutral[950]}
+            opacity={PIN_SHADOWS[state].shadowOpacity}
+            transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height / 2})`}
+          />
           <Path d={PIN_PATH} fill={PIN_COLORS[state]} />
         </Svg>
 
@@ -182,48 +187,50 @@ function EventPin({
             },
           ]}
         >
-          {uri ? (
-            <>
-              {loadedUri !== uri && (
-                <View style={styles.photoPlaceholder}>
-                  <Icon
-                    name="calendar"
-                    size={photoSize / 2}
-                    color={isUnselected ? palette.neutral[600] : colors.action.primary}
-                  />
-                </View>
-              )}
-              <Image
-                key={uri}
-                source={{ uri }}
-                style={styles.photo}
-                contentFit="cover"
-                onLoad={() => setLoadedUri(uri)}
-                onError={() => setLoadedUri(undefined)}
-                accessible={false}
-              />
-              {isUnselected && (
-                <View
-                  style={[
-                    styles.photoVeil,
-                    {
-                      top: photoBorderWidth,
-                      right: photoBorderWidth,
-                      bottom: photoBorderWidth,
-                      left: photoBorderWidth,
-                      borderRadius: radius.full,
-                    },
-                  ]}
+          <View
+            style={[
+              styles.photoClip,
+              {
+                top: photoBorderWidth,
+                right: photoBorderWidth,
+                bottom: photoBorderWidth,
+                left: photoBorderWidth,
+                borderRadius: radius.full,
+              },
+            ]}
+          >
+            {uri ? (
+              <>
+                {loadedUri !== uri && (
+                  <View style={styles.photoPlaceholder}>
+                    <Icon
+                      name="calendar"
+                      size={photoSize / 2}
+                      color={isUnselected ? palette.neutral[600] : colors.action.primary}
+                    />
+                  </View>
+                )}
+                <Image
+                  key={uri}
+                  source={{ uri }}
+                  style={styles.photo}
+                  contentFit="cover"
+                  onLoad={() => setLoadedUri(uri)}
+                  onError={() => setLoadedUri(undefined)}
+                  accessible={false}
                 />
-              )}
-            </>
-          ) : (
-            <Icon
-              name="calendar"
-              size={photoSize / 2}
-              color={isUnselected ? palette.neutral[600] : colors.action.primary}
-            />
-          )}
+                {isUnselected && (
+                  <View style={styles.photoVeil} />
+                )}
+              </>
+            ) : (
+              <Icon
+                name="calendar"
+                size={photoSize / 2}
+                color={isUnselected ? palette.neutral[600] : colors.action.primary}
+              />
+            )}
+          </View>
         </View>
       </View>
     </View>
@@ -321,9 +328,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    overflow: 'hidden',
     borderColor: colors.bg.base,
-    backgroundColor: colors.bg.base,
+    backgroundColor: 'transparent',
+  },
+  photoClip: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   photoPlaceholder: {
     ...StyleSheet.absoluteFillObject,
@@ -332,10 +345,9 @@ const styles = StyleSheet.create({
   },
   photo: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.full,
   },
   photoVeil: {
-    position: 'absolute',
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.bg.base,
     opacity: 0.55,
   },
