@@ -225,9 +225,9 @@ function EventPin({
                 {loadedUri !== uri && (
                   <View style={styles.photoPlaceholder}>
                     <Icon
-                      name="calendar"
+                      name="image"
                       size={photoSize / 2}
-                      color={isUnselected ? palette.neutral[600] : colors.action.primary}
+                      color={colors.action.primary}
                     />
                   </View>
                 )}
@@ -246,9 +246,9 @@ function EventPin({
               </>
             ) : (
               <Icon
-                name="calendar"
+                name="image"
                 size={photoSize / 2}
-                color={isUnselected ? palette.neutral[600] : colors.action.primary}
+                color={colors.action.primary}
               />
             )}
           </View>
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: 'transparent',
+    backgroundColor: palette.primary[100],
   },
   photoPlaceholder: {
     ...ABSOLUTE_FILL,
