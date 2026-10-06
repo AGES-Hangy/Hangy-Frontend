@@ -36,7 +36,11 @@ export function useUserProfile(userId: string | undefined) {
       setLoaded({ id: userId, profile: result });
     } catch (caught) {
       if (requestId !== latestRequest.current) return;
-      setError(describeProfileLoadError(caught));
+      const loadError = describeProfileLoadError(caught);
+      // 404 também é bloqueio: o perfil guardado não pode reaparecer na próxima
+      // volta ao foco, antes de a nova resposta chegar.
+      if (loadError.kind === 'unavailable') setLoaded(null);
+      setError(loadError);
     } finally {
       if (requestId === latestRequest.current) {
         setLoadedId(userId);
