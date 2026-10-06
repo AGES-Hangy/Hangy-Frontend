@@ -59,6 +59,11 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `boom`        | `500`                                     | `500`             |
  * | `offline`     | Falha de rede                             | Falha de rede     |
  * | `slow`        | Timeout, após `API_TIMEOUT_MS`            | Timeout           |
+ * | `flaky`       | 1ª chamada OK, depois `500`               | Idem              |
+ * | `flaky-slow`  | 1ª chamada OK, depois timeout             | Idem              |
+ *
+ * `flaky` e `flaky-slow` contam as chamadas por rota; recarregar o app (ou
+ * `resetMock`) zera a contagem.
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -157,6 +162,7 @@ function estadoInicial() {
       pessoa('p12', 'Antonio Prado', 'PENDING', horasAtras(5)),
     ],
     cancelled: false,
+    chamadasDeUsuario: {} as Record<string, number>,
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -362,11 +368,22 @@ function perfil(userId: string): UserProfile {
   };
 }
 
-async function erroDoUsuario(userId: string) {
+async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
   if (userId === 'missing') throw new MockApiError(404, 'User not found');
   if (userId === 'boom') throw new MockApiError(500, 'Internal server error');
   if (userId === 'offline') throw new MockNetworkError();
   if (userId === 'slow') {
+    await wait(API_TIMEOUT_MS);
+    throw new MockTimeoutError();
+  }
+
+  if (userId === 'flaky' || userId === 'flaky-slow') {
+    const chave = `${rota}:${userId}`;
+    const chamadas = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+    db.chamadasDeUsuario[chave] = chamadas;
+    if (chamadas === 1) return;
+
+    if (userId === 'flaky') throw new MockApiError(500, 'Internal server error');
     await wait(API_TIMEOUT_MS);
     throw new MockTimeoutError();
   }
@@ -481,12 +498,12 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     const userId = partes[1] ?? '';
 
     if (partes.length === 2) {
-      await erroDoUsuario(userId);
+      await erroDoUsuario(userId, 'perfil');
       return perfil(userId) as T;
     }
 
     if (partes.length === 3 && partes[2] === 'events') {
-      await erroDoUsuario(userId);
+      await erroDoUsuario(userId, 'eventos');
       if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
       const items = userId === 'minimal' ? [] : EVENTOS_DO_USUARIO;
       return { items, next_cursor: null } as T;
