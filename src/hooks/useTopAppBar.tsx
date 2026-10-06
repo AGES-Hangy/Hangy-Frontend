@@ -89,7 +89,7 @@ export function useTopAppBar(props: TopAppBarProps | null) {
       action: action ? { ...action, onPress: () => actionRef.current?.onPress?.() } : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hidden, variant, title, unreadCount, showBack, Boolean(onBack), action?.icon, action?.accessibilityLabel],
+    [hidden, variant, title, unreadCount, showBack, Boolean(onBack), action?.icon, action?.accessibilityLabel, action?.disabled],
   );
 
   // No foco, e não na montagem: numa tab bar as telas continuam montadas ao
