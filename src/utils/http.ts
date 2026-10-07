@@ -15,13 +15,19 @@ export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status: number | null;
   readonly detail: string | null;
+  /**
+   * Corpo cru da resposta de erro. Existe para o 422 do Pydantic, cujo
+   * `detail` é um array por campo e por isso não cabe em `detail`.
+   */
+  readonly body: unknown;
 
-  constructor(kind: ApiErrorKind, status: number | null, detail: string | null) {
+  constructor(kind: ApiErrorKind, status: number | null, detail: string | null, body: unknown = null) {
     super(detail ?? kind);
     this.name = 'ApiError';
     this.kind = kind;
     this.status = status;
     this.detail = detail;
+    this.body = body;
   }
 
   /** `true` quando o backend respondeu este status. */
@@ -54,13 +60,13 @@ async function handleUnauthorized() {
   router.replace('/Login');
 }
 
-/** Lê o `detail` do corpo de erro sem explodir quando ele não é JSON. */
-async function readDetail(response: Response): Promise<string | null> {
+/** Lê o corpo de erro (e o `detail` textual) sem explodir quando ele não é JSON. */
+async function readErrorBody(response: Response): Promise<{ detail: string | null; body: unknown }> {
   try {
     const body = await response.json();
-    return typeof body?.detail === 'string' ? body.detail : null;
+    return { detail: typeof body?.detail === 'string' ? body.detail : null, body };
   } catch {
-    return null;
+    return { detail: null, body: null };
   }
 }
 
@@ -115,11 +121,13 @@ export async function apiFetch<T>(
 
   if (response.status === 401) {
     if (!skipUnauthorizedHandler) await handleUnauthorized();
-    throw new ApiError('http', 401, await readDetail(response));
+    const { detail, body } = await readErrorBody(response);
+    throw new ApiError('http', 401, detail, body);
   }
 
   if (!response.ok) {
-    throw new ApiError('http', response.status, await readDetail(response));
+    const { detail, body } = await readErrorBody(response);
+    throw new ApiError('http', response.status, detail, body);
   }
 
   if (response.status === 204) {

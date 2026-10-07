@@ -4,7 +4,13 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import type { IconName } from '@/components/Icon';
 
 /** Aparência do botão — eixo `Variant` do Figma. */
-export type ButtonVariant = 'Primary' | 'Secondary' | 'Accent' | 'Tertiary' | 'Danger';
+export type ButtonVariant =
+  | 'Primary'
+  | 'Secondary'
+  | 'Accent'
+  | 'Tertiary'
+  | 'Danger'
+  | 'DangerText';
 
 /** Altura 52 / 44 / 36 — eixo `Size` do Figma. */
 export type ButtonSize = 'LG' | 'MD' | 'SM';
