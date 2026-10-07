@@ -30,7 +30,17 @@ export const endpoints = {
   passwordResetConfirm: () => '/auth/password-reset/confirm',
   register: () => '/auth/register',
   termsCurrent: () => '/terms/current',
+  me: () => '/users/me',
   userTags: () => '/users/me/tags',
+  /** Perfil de pessoa física: `GET` (leitura para a edição) e `PATCH` (task 071 [BE]). */
+  userProfile: () => '/users/me/profile',
+  /** Perfil de estabelecimento: `GET` (task 077 [BE]) e `PATCH` (task 229 [BE]). */
+  businessProfile: () => '/businesses/me',
+  /**
+   * Exclusão de conta. Ainda sem task de backend: `DELETE /users/me`, com a
+   * senha atual no corpo, é o contrato proposto — confirmar quando a task existir.
+   */
+  account: () => '/users/me',
   event: (eventId: string) => `/events/${eventId}`,
   /** Sem `status`, a API devolve confirmados; `status=PENDING` exige ser o organizador. */
   eventParticipants: (eventId: string, status?: 'PENDING') => {

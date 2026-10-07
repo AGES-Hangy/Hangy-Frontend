@@ -44,9 +44,9 @@ const LOC_TO_FIELD: Record<string, RegisterFormField> = {
   instagram: 'instagram',
 };
 
-type PydanticFieldError = { loc: (string | number)[]; msg: string };
+export type PydanticFieldError = { loc: (string | number)[]; msg: string };
 
-function isPydanticDetail(detail: unknown): detail is PydanticFieldError[] {
+export function isPydanticDetail(detail: unknown): detail is PydanticFieldError[] {
   return Array.isArray(detail) && detail.every((item) => item && typeof item === 'object' && 'loc' in item);
 }
 

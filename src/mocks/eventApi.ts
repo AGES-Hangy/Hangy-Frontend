@@ -259,6 +259,132 @@ function compartilhar(eventId: string): EventShare {
 }
 
 /**
+ * Editar perfil (task 072): as rotas de perfil (tasks de backend 067, 071, 077
+ * e 229) e a exclusão de conta ainda não existem. `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`
+ * troca a conta de mentira para estabelecimento.
+ */
+const MOCK_USER_TYPE = process.env.EXPO_PUBLIC_MOCK_USER_TYPE === 'BUSINESS' ? 'BUSINESS' : 'PERSONAL';
+
+const ARVORE_DE_TAGS = [
+  ['Esportes', ['Futebol', 'Vôlei', 'Corrida', 'Basquete', 'Ciclismo']],
+  ['Gastronomia', ['Café', 'Brunch', 'Churrasco', 'Vinhos']],
+  ['Música', ['Rock', 'Pop', 'Sertanejo', 'Eletrônica']],
+  ['Bem-estar', ['Yoga', 'Meditação']],
+  ['Cultura', ['Museus', 'Literatura']],
+  ['Vida Noturna', ['Show ao vivo', 'Balada', 'Bar']],
+  ['Tecnologia', ['Meetups', 'Hackathons']],
+  ['Ar Livre', ['Trilha', 'Camping']],
+  ['Jogos', ['Tabuleiro', 'Poker']],
+  ['Arte', ['Teatro', 'Cinema', 'Exposição', 'Fotografia']],
+  ['Viagem', ['Bate-volta', 'Mochilão']],
+  ['Negócios', ['Networking', 'Palestras']],
+].map(([nome, micros], macro) => ({
+  id: `macro-${macro}`,
+  name: nome as string,
+  type: 'MACRO' as const,
+  children: (micros as string[]).map((micro, indice) => ({
+    id: `micro-${macro}-${indice}`,
+    name: micro,
+    type: 'MICRO' as const,
+  })),
+}));
+
+const perfil = {
+  email: MOCK_USER_TYPE === 'BUSINESS' ? 'contato@quierocafe.com' : 'rafaela.souza@email.com',
+  pessoa: {
+    name: 'Rafaela Souza',
+    description: 'Organizo rolês de trilha e brunch em Porto Alegre. Sempre topo conhecer gente nova nos eventos.',
+    phone: '51999990000',
+    date_of_birth: '1998-03-14',
+    state: 'RS',
+    city: 'Porto Alegre',
+    cpf: '12345678900',
+  },
+  estabelecimento: {
+    user_id: 'me',
+    business_name: 'Quiero Café',
+    cnpj: '12345678000199',
+    description: 'Cafeteria de especialidade na Cidade Baixa.',
+    address: 'Rua João Alfredo, 480',
+    location: { latitude: -30.0401, longitude: -51.2219 },
+    phone: '5133330000',
+    instagram: '@quierocafe',
+  },
+  tagIds: ['micro-0-0', 'micro-0-1', 'micro-1-0', 'micro-5-0', 'micro-2-0'],
+};
+
+function tagsDoUsuario() {
+  return {
+    tags: ARVORE_DE_TAGS.flatMap((macro) =>
+      macro.children
+        .filter((micro) => perfil.tagIds.includes(micro.id))
+        .map((micro) => ({ id: micro.id, name: micro.name, parent: { id: macro.id, name: macro.name } })),
+    ),
+  };
+}
+
+/** Rotas de perfil. Devolve `undefined` quando a rota não é daqui. */
+function resolverPerfil(partes: string[], method: string, init: RequestInit): { resposta: unknown } | undefined {
+  const body = init.body ? JSON.parse(String(init.body)) : {};
+  const rota = partes.join('/');
+
+  if (rota === 'tags/tree' && method === 'GET') return { resposta: ARVORE_DE_TAGS };
+
+  if (rota === 'users/me' && method === 'GET') {
+    return { resposta: { user_id: 'me', email: perfil.email, user_type: MOCK_USER_TYPE, role: 'USER' } };
+  }
+  // Exclusão de conta, confirmada com a senha. Cenários de erro, pela senha
+  // enviada: `errada...` -> 403 (senha incorreta), `boom...` -> 500.
+  if (rota === 'users/me' && method === 'DELETE') {
+    if (typeof body.password !== 'string' || body.password.length === 0 || body.password.startsWith('errada')) {
+      throw new MockApiError(403, 'Incorrect password');
+    }
+    if (body.password.startsWith('boom')) throw new MockApiError(500, 'Internal server error');
+    return { resposta: undefined };
+  }
+
+  if (rota === 'users/me/tags' && method === 'GET') return { resposta: tagsDoUsuario() };
+  if (rota === 'users/me/tags' && method === 'PUT') {
+    if (!Array.isArray(body.tag_ids) || body.tag_ids.length === 0) {
+      throw new MockApiError(400, 'At least one tag is required');
+    }
+    perfil.tagIds = body.tag_ids;
+    return { resposta: tagsDoUsuario() };
+  }
+
+  const ehPessoa = rota === 'users/me/profile';
+  const ehEstabelecimento = rota === 'businesses/me';
+  if (!ehPessoa && !ehEstabelecimento) return undefined;
+
+  if (ehPessoa && MOCK_USER_TYPE !== 'PERSONAL') throw new MockApiError(403, 'Not a personal profile');
+  if (ehEstabelecimento && MOCK_USER_TYPE !== 'BUSINESS') throw new MockApiError(403, 'Not a business profile');
+
+  const dados: Record<string, unknown> = ehPessoa ? perfil.pessoa : perfil.estabelecimento;
+
+  if (method === 'GET') return { resposta: { ...dados, email: perfil.email } };
+
+  if (method === 'PATCH') {
+    // Cenários de erro, pelo e-mail enviado: `usado@...` -> 409, `boom@...` -> 500.
+    if (typeof body.email === 'string' && body.email.startsWith('usado@')) {
+      throw new MockApiError(409, 'Email is already registered');
+    }
+    if (typeof body.email === 'string' && body.email.startsWith('boom@')) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    if (typeof body.description === 'string' && body.description.length > 500) {
+      throw new MockApiError(400, 'Description exceeds maximum length');
+    }
+
+    const { email, password: _password, ...campos } = body;
+    if (typeof email === 'string') perfil.email = email;
+    Object.assign(dados, campos);
+    return { resposta: { ...dados, updated_at: new Date().toISOString() } };
+  }
+
+  return undefined;
+}
+
+/**
  * Encaminha uma rota para a resposta de mentira correspondente. A assinatura
  * espelha a de `apiFetch` de propósito: quem chama não sabe qual dos dois
  * respondeu.
@@ -269,6 +395,9 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const method = (init.method ?? 'GET').toUpperCase();
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
+
+  const respostaDePerfil = resolverPerfil(partes, method, init);
+  if (respostaDePerfil) return respostaDePerfil.resposta as T;
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
   // também ainda não subiu — o cadastro (task 056) precisa disto pra dar de
