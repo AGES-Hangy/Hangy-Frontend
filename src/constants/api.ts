@@ -37,8 +37,8 @@ export const endpoints = {
   /** Perfil de estabelecimento: `GET` (task 077 [BE]) e `PATCH` (task 229 [BE]). */
   businessProfile: () => '/businesses/me',
   /**
-   * Exclusão de conta. Ainda sem task de backend: `DELETE /users/me` é a rota
-   * proposta — confirmar quando a task existir.
+   * Exclusão de conta. Ainda sem task de backend: `DELETE /users/me`, com a
+   * senha atual no corpo, é o contrato proposto — confirmar quando a task existir.
    */
   account: () => '/users/me',
   event: (eventId: string) => `/events/${eventId}`,

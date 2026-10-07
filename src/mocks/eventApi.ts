@@ -333,9 +333,13 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
   if (rota === 'users/me' && method === 'GET') {
     return { resposta: { user_id: 'me', email: perfil.email, user_type: MOCK_USER_TYPE, role: 'USER' } };
   }
-  // Cenário de erro: a exclusão de conta sempre falha com o e-mail `erro@...`.
+  // Exclusão de conta, confirmada com a senha. Cenários de erro, pela senha
+  // enviada: `errada...` -> 403 (senha incorreta), `boom...` -> 500.
   if (rota === 'users/me' && method === 'DELETE') {
-    if (perfil.email.startsWith('erro@')) throw new MockApiError(500, 'Internal server error');
+    if (typeof body.password !== 'string' || body.password.length === 0 || body.password.startsWith('errada')) {
+      throw new MockApiError(403, 'Incorrect password');
+    }
+    if (body.password.startsWith('boom')) throw new MockApiError(500, 'Internal server error');
     return { resposta: undefined };
   }
 

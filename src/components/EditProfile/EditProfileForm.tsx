@@ -119,6 +119,8 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
 
   const { updateProfile, isLoading: isUpdating } = useUpdateProfile();
   const { saveTags, isLoading: isSavingTags } = useUserTags();
@@ -254,11 +256,26 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
   }
   handleSaveRef.current = () => void handleSave();
 
-  async function handleDeleteAccount() {
-    const deleted = await deleteAccount();
-    setIsDeleteOpen(false);
+  function openDeleteDialog() {
+    setDeletePassword('');
+    setDeletePasswordError(null);
+    setIsDeleteOpen(true);
+  }
 
-    if (!deleted) {
+  async function handleDeleteAccount() {
+    if (deletePassword.length === 0) return;
+    const result = await deleteAccount(deletePassword);
+
+    if (result === 'wrongPassword') {
+      // O diálogo continua aberto, para corrigir a senha sem recomeçar.
+      setDeletePasswordError('Senha incorreta.');
+      return;
+    }
+
+    setIsDeleteOpen(false);
+    setDeletePassword('');
+
+    if (result === 'failed') {
       // Nada é apagado localmente antes do sucesso: conta e sessão continuam.
       showErrorToast('Não foi possível excluir sua conta. Tente de novo.');
       return;
@@ -491,7 +508,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
           <Button
             label="Excluir conta"
             variant="DangerText"
-            onPress={() => setIsDeleteOpen(true)}
+            onPress={openDeleteDialog}
             disabled={isBlocked}
             style={styles.deleteAccount}
           />
@@ -518,9 +535,23 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
         description={copy.deleteDescription}
         cancelLabel="Cancelar"
         isLoading={isDeleting}
+        confirmDisabled={deletePassword.length === 0}
         onConfirm={() => void handleDeleteAccount()}
         onCancel={() => setIsDeleteOpen(false)}
-      />
+      >
+        <TextField
+          type="Password"
+          label="Digite sua senha para confirmar"
+          value={deletePassword}
+          onChangeText={(text) => {
+            setDeletePassword(text);
+            setDeletePasswordError(null);
+          }}
+          error={deletePasswordError ?? undefined}
+          disabled={isDeleting}
+          accessibilityLabel="Senha atual"
+        />
+      </Dialog>
     </View>
   );
 }
