@@ -119,3 +119,21 @@ export interface EventShare {
   location_name: string;
   cover_photo_url: string | null;
 }
+
+/** Item de `GET /events/nearby` (task 119) — só o que o pin e o preview do mapa usam. */
+export interface NearbyEventItem {
+  event_id: string;
+  title: string;
+  event_date: string;
+  location: { latitude: number; longitude: number };
+  location_name: string | null;
+  cover_photo_url: string | null;
+  /** Distância até o centro da busca, calculada pelo backend. */
+  distance_m: number;
+  participants_count: number;
+  is_confirmed: boolean;
+}
+
+export interface NearbyEventsPage {
+  items: NearbyEventItem[];
+}
