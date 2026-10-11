@@ -85,6 +85,8 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `business-boom`    | Sem seguir, 1204 seguidores  | Seguir: `500`                               |
  * | `following-boom`   | Seguindo, 1205 seguidores    | Deixar de seguir: `500`                     |
  * | `follow-gone`      | Sem seguir, 1204 seguidores  | Seguir: `404`, o GET seguinte vem `404`     |
+ * | `one-connection`   | Sem conexão, 1 conexão       | Conectar: `201`, passa a PENDING            |
+ * | `one-follower`     | Sem seguir, 1 seguidor       | Seguir: `204`, +1                           |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -381,9 +383,18 @@ type RelacaoDoUsuario = Partial<
   Pick<UserProfile, 'connection_status' | 'is_following' | 'connections_count'>
 >;
 
-const ESTABELECIMENTOS = new Set(['business', 'following', 'business-boom', 'following-boom', 'follow-gone']);
+const ESTABELECIMENTOS = new Set([
+  'business',
+  'following',
+  'business-boom',
+  'following-boom',
+  'follow-gone',
+  'one-follower',
+]);
 const SEGUIDOS_DE_INICIO = new Set(['following', 'following-boom']);
 const SEGUIDORES_INICIAIS = 1204;
+/** Contadores no singular, para conferir "1 Conexão" e "1 Seguidor". */
+const CONTAGEM_INICIAL: Record<string, number> = { 'one-connection': 1, 'one-follower': 1 };
 
 function statusDeConexaoInicial(userId: string): UserProfile['connection_status'] {
   if (userId === 'pending') return 'PENDING';
@@ -432,7 +443,8 @@ function perfilInicial(userId: string): UserProfile {
     ],
     connection_status: ehEstabelecimento ? null : statusDeConexaoInicial(userId),
     is_following: segue,
-    connections_count: ehEstabelecimento ? SEGUIDORES_INICIAIS + (segue ? 1 : 0) : 8,
+    connections_count:
+      CONTAGEM_INICIAL[userId] ?? (ehEstabelecimento ? SEGUIDORES_INICIAIS + (segue ? 1 : 0) : 8),
   };
 }
 
