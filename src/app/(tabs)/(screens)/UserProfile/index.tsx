@@ -1,10 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
+import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { EventCard } from '@/components/EventCard';
 import type { Event } from '@/components/EventCard/types';
@@ -15,12 +16,13 @@ import { useToast } from '@/components/Toast';
 import { colors } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { useBusinessFollow } from '@/hooks/useBusinessFollow';
 import { useConnections } from '@/hooks/useConnections';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import type { UserEventItem } from '@/types/user';
+import type { UserEventItem, UserProfile as UserProfileData } from '@/types/user';
 
 /** Avatar `MD` do código, que é o `XL` (80) do frame. */
 const AVATAR_DIAMETER = 80;
@@ -43,6 +45,10 @@ const countFormatter = new Intl.NumberFormat('pt-BR');
 
 function formatCount(value: number) {
   return countFormatter.format(value);
+}
+
+function displayName(profile: UserProfileData | null) {
+  return profile?.name?.trim() || null;
 }
 
 function visibilityNotice(profileName: string | null, isBusiness: boolean) {
@@ -68,6 +74,8 @@ export default function UserProfile() {
   const { isOffline } = useNetworkStatus();
   const { addToast } = useToast();
   const { connect, isLoading: isConnecting } = useConnections();
+  const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
+  const [isUnfollowDialogOpen, setIsUnfollowDialogOpen] = useState(false);
 
   const isUnavailable = error?.kind === 'unavailable';
   const visibleProfile = isUnavailable ? null : profile;
@@ -75,7 +83,7 @@ export default function UserProfile() {
   // requisição; a ação confere o valor atual por aqui.
   const profileRef = useRef(visibleProfile);
   profileRef.current = visibleProfile;
-  const name = visibleProfile?.name?.trim() || null;
+  const name = displayName(visibleProfile);
   const description = visibleProfile?.description?.trim() || null;
 
   useTopAppBar({
@@ -150,6 +158,56 @@ export default function UserProfile() {
     if (result === 'unavailable') void reload();
   }, [addToast, connect, patchProfile, reload]);
 
+  // Sem perfil na tela (ex.: virou indisponível) o diálogo fecha, para não
+  // reaparecer sozinho se o perfil voltar.
+  useEffect(() => {
+    if (!visibleProfile) setIsUnfollowDialogOpen(false);
+  }, [visibleProfile]);
+
+  const handleFollow = useCallback(async () => {
+    const target = profileRef.current;
+    if (!target) return;
+    const previous = patchProfile({ is_following: true, connections_count: target.connections_count + 1 });
+    if (!previous) return;
+
+    const result = await follow(target.id);
+    if (result === 'done') {
+      const current = profileRef.current;
+      if (current && !current.is_following) {
+        patchProfile({ is_following: true, connections_count: current.connections_count + 1 });
+      }
+      const businessName = displayName(profileRef.current ?? target);
+      addToast({
+        type: 'success',
+        message: businessName ? `Agora você segue ${businessName}.` : 'Agora você segue este estabelecimento.',
+      });
+      return;
+    }
+
+    patchProfile(previous);
+    if (result === 'unavailable') void reload();
+  }, [addToast, follow, patchProfile, reload]);
+
+  const handleUnfollow = useCallback(async () => {
+    setIsUnfollowDialogOpen(false);
+    const target = profileRef.current;
+    if (!target) return;
+    const previous = patchProfile({ is_following: false, connections_count: target.connections_count - 1 });
+    if (!previous) return;
+
+    const result = await unfollow(target.id);
+    if (result === 'done') {
+      const current = profileRef.current;
+      if (current && current.is_following) {
+        patchProfile({ is_following: false, connections_count: current.connections_count - 1 });
+      }
+      return;
+    }
+
+    patchProfile(previous);
+    if (result === 'unavailable') void reload();
+  }, [patchProfile, reload, unfollow]);
+
   if (isUnavailable) {
     return (
       <View style={styles.stateScreen}>
@@ -194,6 +252,13 @@ export default function UserProfile() {
   const isBusiness = visibleProfile.user_type === 'BUSINESS';
   const avatarSource = visibleProfile.photo_url ? { uri: visibleProfile.photo_url } : undefined;
   const canConnect = !isBusiness && visibleProfile.connection_status === null;
+  const relationshipAction = isBusiness
+    ? visibleProfile.is_following
+      ? () => setIsUnfollowDialogOpen(true)
+      : handleFollow
+    : canConnect
+      ? handleConnect
+      : undefined;
   const count = visibleProfile.connections_count;
   const singular = count === 1;
   const stats = [
@@ -262,9 +327,9 @@ export default function UserProfile() {
                 userType={visibleProfile.user_type}
                 connectionStatus={visibleProfile.connection_status}
                 isFollowing={visibleProfile.is_following}
-                onPress={canConnect ? handleConnect : undefined}
+                onPress={relationshipAction}
                 disabled={isOffline}
-                isLoading={isConnecting}
+                isLoading={isConnecting || isFollowPending}
                 style={styles.relationshipButton}
               />
             </View>
@@ -305,6 +370,16 @@ export default function UserProfile() {
           )}
         </View>
       </ScrollView>
+
+      <Dialog
+        visible={isUnfollowDialogOpen && Boolean(visibleProfile)}
+        variant="SendRequest"
+        title={name ? `Deixar de seguir ${name}?` : 'Deixar de seguir este estabelecimento?'}
+        description="Você pode voltar a seguir quando quiser."
+        confirmLabel="Deixar de seguir"
+        onConfirm={() => void handleUnfollow()}
+        onCancel={() => setIsUnfollowDialogOpen(false)}
+      />
 
       {isOffline && <OfflineBanner />}
     </View>
