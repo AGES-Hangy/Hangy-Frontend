@@ -21,7 +21,6 @@ export interface UserProfile {
   connection_status: ConnectionStatus | null;
   /** Só se aplica a `BUSINESS`. */
   is_following: boolean;
-  is_blocked: boolean;
   connections_count: number;
 }
 

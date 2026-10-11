@@ -367,7 +367,6 @@ function perfil(userId: string): UserProfile {
       tags: [],
       connection_status: null,
       is_following: false,
-      is_blocked: false,
       connections_count: 0,
     };
   }
@@ -388,7 +387,6 @@ function perfil(userId: string): UserProfile {
     ],
     connection_status: userId === 'pending' ? 'PENDING' : userId === 'connected' ? 'CONFIRMED' : null,
     is_following: userId === 'following',
-    is_blocked: false,
     connections_count: 8,
   };
 }
