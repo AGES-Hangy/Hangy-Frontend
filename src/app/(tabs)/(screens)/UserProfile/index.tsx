@@ -15,6 +15,7 @@ import { useToast } from '@/components/Toast';
 import { colors } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { useConnections } from '@/hooks/useConnections';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
@@ -57,7 +58,7 @@ function goBack() {
 
 export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { profile, isLoading, error, reload } = useUserProfile(id);
+  const { profile, isLoading, error, reload, patchProfile } = useUserProfile(id);
   const {
     events,
     isLoading: isLoadingEvents,
@@ -66,9 +67,14 @@ export default function UserProfile() {
   } = useUserEvents(id);
   const { isOffline } = useNetworkStatus();
   const { addToast } = useToast();
+  const { connect, isLoading: isConnecting } = useConnections();
 
   const isUnavailable = error?.kind === 'unavailable';
   const visibleProfile = isUnavailable ? null : profile;
+  // Depois do `await`, o perfil capturado pelo callback é o de antes da
+  // requisição; a ação confere o valor atual por aqui.
+  const profileRef = useRef(visibleProfile);
+  profileRef.current = visibleProfile;
   const name = visibleProfile?.name?.trim() || null;
   const description = visibleProfile?.description?.trim() || null;
 
@@ -116,6 +122,34 @@ export default function UserProfile() {
     if (!isLoading && !error && !isLoadingEvents && !eventsError) feedbackKey.current = null;
   }, [error, eventsError, isLoading, isLoadingEvents]);
 
+  const handleConnect = useCallback(async () => {
+    const target = profileRef.current;
+    if (!target) return;
+    const previous = patchProfile({ connection_status: 'PENDING' });
+    if (!previous) return;
+
+    const result = await connect(target.id);
+    if (result === 'sent') {
+      // Um recarregamento no foco durante a requisição pode ter trazido o
+      // estado de antes do pedido.
+      if (profileRef.current?.connection_status !== 'PENDING') {
+        patchProfile({ connection_status: 'PENDING' });
+      }
+      addToast({ type: 'success', message: 'Solicitação de conexão enviada.' });
+      return;
+    }
+
+    // No 409 o servidor já tem um vínculo: o recarregamento traz o estado real,
+    // sem passar de volta por "Conectar".
+    if (result === 'conflict') {
+      void reload();
+      return;
+    }
+
+    patchProfile(previous);
+    if (result === 'unavailable') void reload();
+  }, [addToast, connect, patchProfile, reload]);
+
   if (isUnavailable) {
     return (
       <View style={styles.stateScreen}>
@@ -159,6 +193,7 @@ export default function UserProfile() {
 
   const isBusiness = visibleProfile.user_type === 'BUSINESS';
   const avatarSource = visibleProfile.photo_url ? { uri: visibleProfile.photo_url } : undefined;
+  const canConnect = !isBusiness && visibleProfile.connection_status === null;
   const count = visibleProfile.connections_count;
   const singular = count === 1;
   const stats = [
@@ -227,7 +262,9 @@ export default function UserProfile() {
                 userType={visibleProfile.user_type}
                 connectionStatus={visibleProfile.connection_status}
                 isFollowing={visibleProfile.is_following}
+                onPress={canConnect ? handleConnect : undefined}
                 disabled={isOffline}
+                isLoading={isConnecting}
                 style={styles.relationshipButton}
               />
             </View>
