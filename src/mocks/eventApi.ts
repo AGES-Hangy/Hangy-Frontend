@@ -5,7 +5,7 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
-import type { UserEventItem, UserProfile } from '@/types/user';
+import type { ConnectionRequestResult, UserEventItem, UserProfile } from '@/types/user';
 import { API_TIMEOUT_MS } from '@/constants/api';
 
 /**
@@ -64,6 +64,25 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  *
  * `flaky` e `flaky-slow` contam as chamadas por rota; recarregar o app (ou
  * `resetMock`) zera a contagem.
+ *
+ * Conectar (`POST /connections`) e seguir (`POST`/`DELETE
+ * /businesses/{id}/follow`) alteram o estado do mock, então o GET seguinte já
+ * devolve o resultado da ação. Recarregar o app (ou `resetMock`) desfaz tudo.
+ *
+ * | `user_id`          | Perfil                       | Ação                                        |
+ * | ------------------ | ---------------------------- | ------------------------------------------- |
+ * | qualquer pessoa    | Sem conexão                  | Conectar: `201`, passa a PENDING            |
+ * | `pending`          | Solicitação enviada          | Conectar: `409`                             |
+ * | `connected`        | Conectada                    | Conectar: `409`                             |
+ * | `rejected`         | `REJECTED`                   | Conectar: `409`                             |
+ * | `connect-conflict` | Sem conexão                  | Conectar: `409`, o GET seguinte vem PENDING |
+ * | `connect-boom`     | Sem conexão                  | Conectar: `500`                             |
+ * | `connect-gone`     | Sem conexão                  | Conectar: `404`, o GET seguinte vem `404`   |
+ * | `business`         | Sem seguir, 1204 seguidores  | Seguir: `204`, +1                           |
+ * | `following`        | Seguindo, 1205 seguidores    | Deixar de seguir: `204`, −1                 |
+ * | `business-boom`    | Sem seguir, 1204 seguidores  | Seguir: `500`                               |
+ * | `following-boom`   | Seguindo, 1205 seguidores    | Deixar de seguir: `500`                     |
+ * | `follow-gone`      | Sem seguir, 1204 seguidores  | Seguir: `404`, o GET seguinte vem `404`     |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -163,6 +182,8 @@ function estadoInicial() {
     ],
     cancelled: false,
     chamadasDeUsuario: {} as Record<string, number>,
+    relacoesDeUsuario: {} as Record<string, RelacaoDoUsuario>,
+    usuariosIndisponiveis: [] as string[],
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -331,7 +352,30 @@ const EVENTOS_DO_USUARIO: UserEventItem[] = [
   },
 ];
 
+type RelacaoDoUsuario = Partial<
+  Pick<UserProfile, 'connection_status' | 'is_following' | 'connections_count'>
+>;
+
+const ESTABELECIMENTOS = new Set(['business', 'following', 'business-boom', 'following-boom', 'follow-gone']);
+const SEGUIDOS_DE_INICIO = new Set(['following', 'following-boom']);
+const SEGUIDORES_INICIAIS = 1204;
+
+function statusDeConexaoInicial(userId: string): UserProfile['connection_status'] {
+  if (userId === 'pending') return 'PENDING';
+  if (userId === 'connected') return 'CONFIRMED';
+  if (userId === 'rejected') return 'REJECTED';
+  return null;
+}
+
+function atualizarRelacao(userId: string, mudanca: RelacaoDoUsuario) {
+  db.relacoesDeUsuario[userId] = { ...db.relacoesDeUsuario[userId], ...mudanca };
+}
+
 function perfil(userId: string): UserProfile {
+  return { ...perfilInicial(userId), ...db.relacoesDeUsuario[userId] };
+}
+
+function perfilInicial(userId: string): UserProfile {
   if (userId === 'minimal') {
     return {
       id: userId,
@@ -346,7 +390,8 @@ function perfil(userId: string): UserProfile {
     };
   }
 
-  const ehEstabelecimento = userId === 'business' || userId === 'following';
+  const ehEstabelecimento = ESTABELECIMENTOS.has(userId);
+  const segue = SEGUIDOS_DE_INICIO.has(userId);
 
   return {
     id: userId,
@@ -360,14 +405,16 @@ function perfil(userId: string): UserProfile {
       { id: 't1', name: 'Esportes' },
       { id: 't2', name: 'Futebol' },
     ],
-    connection_status: userId === 'pending' ? 'PENDING' : userId === 'connected' ? 'CONFIRMED' : null,
-    is_following: userId === 'following',
-    connections_count: 8,
+    connection_status: ehEstabelecimento ? null : statusDeConexaoInicial(userId),
+    is_following: segue,
+    connections_count: ehEstabelecimento ? SEGUIDORES_INICIAIS + (segue ? 1 : 0) : 8,
   };
 }
 
 async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
-  if (userId === 'missing') throw new MockApiError(404, 'User not found');
+  if (userId === 'missing' || db.usuariosIndisponiveis.includes(userId)) {
+    throw new MockApiError(404, 'User not found');
+  }
   if (userId === 'boom') throw new MockApiError(500, 'Internal server error');
   if (userId === 'offline') throw new MockNetworkError();
   if (userId === 'slow') {
@@ -505,6 +552,76 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
       const items = userId === 'minimal' ? [] : EVENTOS_DO_USUARIO;
       return { items, next_cursor: null } as T;
+    }
+  }
+
+  if (partes[0] === 'connections' && partes.length === 1 && method === 'POST') {
+    const body = init.body ? JSON.parse(String(init.body)) : {};
+    const receiverId: string = body.receiver_id ?? '';
+    const destinatario = perfil(receiverId);
+
+    // Estabelecimento cai no mesmo 404 de inexistente, como no backend.
+    if (db.usuariosIndisponiveis.includes(receiverId) || destinatario.user_type === 'BUSINESS') {
+      throw new MockApiError(404, 'User not found');
+    }
+    if (receiverId === 'connect-boom') throw new MockApiError(500, 'Internal server error');
+    if (receiverId === 'connect-gone') {
+      db.usuariosIndisponiveis.push(receiverId);
+      throw new MockApiError(404, 'User not found');
+    }
+    if (receiverId === 'connect-conflict') {
+      atualizarRelacao(receiverId, { connection_status: 'PENDING' });
+      throw new MockApiError(409, 'Connection already exists');
+    }
+    if (destinatario.connection_status !== null) {
+      throw new MockApiError(409, 'Connection already exists');
+    }
+
+    atualizarRelacao(receiverId, { connection_status: 'PENDING' });
+    const resultado: ConnectionRequestResult = {
+      connection_id: `conexao-${receiverId}`,
+      requester_id: 'usuario-logado',
+      receiver_id: receiverId,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
+    };
+    return resultado as T;
+  }
+
+  if (partes[0] === 'businesses' && partes[2] === 'follow' && partes.length === 3) {
+    const businessId = partes[1] ?? '';
+    if (db.usuariosIndisponiveis.includes(businessId)) {
+      throw new MockApiError(404, 'Business not found');
+    }
+    const estabelecimento = perfil(businessId);
+    const ehEstabelecimento = estabelecimento.user_type === 'BUSINESS';
+
+    if (method === 'POST') {
+      if (!ehEstabelecimento) throw new MockApiError(403, 'Target is not a business profile');
+      if (businessId === 'business-boom') throw new MockApiError(500, 'Internal server error');
+      if (businessId === 'follow-gone') {
+        db.usuariosIndisponiveis.push(businessId);
+        throw new MockApiError(404, 'Business not found');
+      }
+      if (!estabelecimento.is_following) {
+        atualizarRelacao(businessId, {
+          is_following: true,
+          connections_count: estabelecimento.connections_count + 1,
+        });
+      }
+      return undefined as T;
+    }
+
+    if (method === 'DELETE') {
+      if (!ehEstabelecimento) throw new MockApiError(404, 'Business not found');
+      if (businessId === 'following-boom') throw new MockApiError(500, 'Internal server error');
+      if (estabelecimento.is_following) {
+        atualizarRelacao(businessId, {
+          is_following: false,
+          connections_count: estabelecimento.connections_count - 1,
+        });
+      }
+      return undefined as T;
     }
   }
 
