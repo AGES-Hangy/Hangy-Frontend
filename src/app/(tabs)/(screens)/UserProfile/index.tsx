@@ -38,6 +38,18 @@ function toEventCardEvent(item: UserEventItem): Event {
   };
 }
 
+const countFormatter = new Intl.NumberFormat('pt-BR');
+
+function formatCount(value: number) {
+  return countFormatter.format(value);
+}
+
+function visibilityNotice(profileName: string | null, isBusiness: boolean) {
+  if (!profileName) return 'Você vê apenas os eventos públicos deste perfil.';
+  const owner = isBusiness ? profileName : profileName.split(/\s+/)[0];
+  return `Você vê apenas os eventos públicos de ${owner}.`;
+}
+
 function goBack() {
   if (router.canGoBack()) router.back();
   else router.replace('/Home');
@@ -147,7 +159,14 @@ export default function UserProfile() {
 
   const isBusiness = visibleProfile.user_type === 'BUSINESS';
   const avatarSource = visibleProfile.photo_url ? { uri: visibleProfile.photo_url } : undefined;
-  const stats = isBusiness ? [] : [{ value: visibleProfile.connections_count, label: 'Conexões' }];
+  const count = visibleProfile.connections_count;
+  const singular = count === 1;
+  const stats = [
+    {
+      value: formatCount(count),
+      label: isBusiness ? (singular ? 'Seguidor' : 'Seguidores') : singular ? 'Conexão' : 'Conexões',
+    },
+  ];
 
   return (
     <View style={styles.screen}>
@@ -201,16 +220,21 @@ export default function UserProfile() {
             </View>
           )}
 
-          <View style={styles.actions}>
-            <RelationshipButton
-              userType={visibleProfile.user_type}
-              connectionStatus={visibleProfile.connection_status}
-              isFollowing={visibleProfile.is_following}
-              disabled={isOffline}
-              style={styles.relationshipButton}
-            />
-          </View>
+          {/* Sem ação na recusa: o vínculo recusado continua ativo no backend e um novo pedido daria 409. */}
+          {visibleProfile.connection_status !== 'REJECTED' && (
+            <View style={styles.actions}>
+              <RelationshipButton
+                userType={visibleProfile.user_type}
+                connectionStatus={visibleProfile.connection_status}
+                isFollowing={visibleProfile.is_following}
+                disabled={isOffline}
+                style={styles.relationshipButton}
+              />
+            </View>
+          )}
         </View>
+
+        <Text style={styles.visibilityNotice}>{visibilityNotice(name, isBusiness)}</Text>
 
         <View style={styles.list}>
           {events === null ? (
@@ -365,6 +389,12 @@ const styles = StyleSheet.create({
   },
   relationshipButton: {
     alignSelf: 'stretch',
+  },
+  visibilityNotice: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+    paddingTop: spacing[4],
+    paddingHorizontal: spacing[16],
   },
   list: {
     gap: spacing[12],
