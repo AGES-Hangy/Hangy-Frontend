@@ -1,6 +1,6 @@
 import type { EventPrivacy, UserType } from '@/types/event';
 
-export type ConnectionStatus = 'PENDING' | 'CONFIRMED';
+export type ConnectionStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
 
 export interface UserTag {
   id: string;
@@ -23,6 +23,14 @@ export interface UserProfile {
   is_following: boolean;
   is_blocked: boolean;
   connections_count: number;
+}
+
+export interface ConnectionRequestResult {
+  connection_id: string;
+  requester_id: string;
+  receiver_id: string;
+  status: ConnectionStatus;
+  created_at: string;
 }
 
 export interface UserEventItem {
