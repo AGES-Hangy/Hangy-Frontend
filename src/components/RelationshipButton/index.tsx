@@ -30,6 +30,7 @@ export function RelationshipButton({
   isFollowing,
   onPress,
   disabled = false,
+  isLoading = false,
   style,
 }: RelationshipButtonProps) {
   const { label, variant } = resolveAppearance({ userType, connectionStatus, isFollowing });
@@ -41,6 +42,7 @@ export function RelationshipButton({
       size="LG"
       onPress={onPress}
       disabled={disabled}
+      isLoading={isLoading}
       style={style}
     />
   );

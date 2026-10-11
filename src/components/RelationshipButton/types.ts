@@ -12,6 +12,7 @@ export type RelationshipButtonProps = {
   isFollowing: boolean;
   onPress?: () => void;
   disabled?: boolean;
+  isLoading?: boolean;
   /** Escape hatch de layout (ex.: `{ alignSelf: 'stretch' }`). Não use para cor, raio ou tipografia. */
   style?: StyleProp<ViewStyle>;
 };
