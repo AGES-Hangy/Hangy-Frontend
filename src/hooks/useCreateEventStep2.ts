@@ -15,6 +15,9 @@ type PublishEventBody = {
   end_date: string;
   location: { latitude: number; longitude: number };
   location_name: string | null;
+  /** Derivados do endereço escolhido; `null` quando o Nominatim não devolve. */
+  location_neighborhood: string | null;
+  location_city: string | null;
   max_participants: number | null;
   privacy: 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY';
 };

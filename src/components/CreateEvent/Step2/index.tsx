@@ -30,6 +30,9 @@ const PRIVACY_DESCRIPTION: Record<Privacy, string> = {
   INVITE_ONLY: 'Só aparece para pessoas convidadas; não entra no feed nem na busca.',
 };
 
+const PRIVATE_LOCATION_HINT =
+  'Quem ainda não foi aprovado vê só o bairro e uma área aproximada no mapa. O endereço completo aparece depois da aprovação.';
+
 export type Step2Handle = {
   submit: () => boolean;
 };
@@ -229,6 +232,11 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         <Text style={[typography.bodyS, { color: colors.text.secondary, marginTop: spacing[8] }]}>
           {PRIVACY_DESCRIPTION[data.privacy]}
         </Text>
+        {data.privacy === 'PRIVATE' ? (
+          <Text style={[typography.bodyS, { color: colors.text.secondary, marginTop: spacing[4] }]}>
+            {PRIVATE_LOCATION_HINT}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

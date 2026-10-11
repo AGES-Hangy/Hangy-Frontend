@@ -11,8 +11,14 @@ export type UpdateEventBody = {
   tag_ids: string[];
   event_date: string;
   end_date: string;
-  location: { latitude: number; longitude: number };
-  location_name: string | null;
+  /**
+   * Os quatro campos de local vão juntos, e só quando o endereço mudou: o
+   * backend recalcula o ponto aproximado sempre que `location` vem no corpo.
+   */
+  location?: { latitude: number; longitude: number };
+  location_name?: string | null;
+  location_neighborhood?: string | null;
+  location_city?: string | null;
 };
 
 type UpdateEventResponse = {

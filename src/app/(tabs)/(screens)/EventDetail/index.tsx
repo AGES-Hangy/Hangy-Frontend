@@ -177,6 +177,11 @@ export default function EventDetail() {
   const pendingCount = event.pending_requests_count ?? 0;
   // Só o organizador vê o aviso, e só quando há alguém esperando.
   const showPendingBanner = event.viewer.is_organizer && pendingCount > 0;
+  // Quem decide o que aparece no item Local é `location_precision`, nunca
+  // `privacy`: evento privado do qual já participo vem `EXACT`. Campo ausente
+  // (backend sem a task 270) conta como `EXACT`.
+  const isLocationApproximate = event.location_precision === 'APPROXIMATE';
+  const locationLabel = event.location_name || (isLocationApproximate ? 'Local aproximado' : null);
   const [descriptionLead, ...descriptionRest] = event.description.split('\n');
 
   const isPendingCancel = event.viewer.participation_status === 'PENDING';
@@ -324,13 +329,20 @@ export default function EventDetail() {
                 </Text>
               </View>
 
-              {event.privacy !== 'PRIVATE' && (
+              {locationLabel && (
                 <View style={styles.infoRow}>
                   <Icon name="map-pin" size={20} color={colors.text.primary} absoluteStrokeWidth />
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {event.location_name}
+                    {locationLabel}
                   </Text>
                 </View>
+              )}
+
+              {isLocationApproximate && (
+                <Text style={styles.locationHint}>
+                  Área aproximada. O endereço exato aparece quando o organizador aprovar sua
+                  participação.
+                </Text>
               )}
 
               <View style={styles.infoRow}>
@@ -531,6 +543,10 @@ const styles = StyleSheet.create({
     flex: 1,
     ...typography.bodyL,
     color: colors.text.primary,
+  },
+  locationHint: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
   },
 
   participation: {
