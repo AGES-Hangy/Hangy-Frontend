@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
@@ -29,6 +29,11 @@ const AVATAR_DIAMETER = 80;
 /** Divisor vertical entre os números do cabeçalho, 1 × 28 no frame. */
 const STAT_DIVIDER_HEIGHT = 28;
 const SKELETON_CARD_COUNT = 3;
+/**
+ * Espera o fade de saída do `Modal` antes de mover o foco do leitor de tela:
+ * com o diálogo ainda saindo, o VoiceOver ignora o novo foco.
+ */
+const MODAL_FADE_OUT_MS = 350;
 
 function toEventCardEvent(item: UserEventItem): Event {
   return {
@@ -76,6 +81,9 @@ export default function UserProfile() {
   const { connect, isLoading: isConnecting } = useConnections();
   const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
   const [isUnfollowDialogOpen, setIsUnfollowDialogOpen] = useState(false);
+  const relationshipButtonRef = useRef<View>(null);
+  // Ligado ao fechar o diálogo; consumido quando o botão volta a aceitar foco.
+  const returnFocusPending = useRef(false);
 
   const isUnavailable = error?.kind === 'unavailable';
   const visibleProfile = isUnavailable ? null : profile;
@@ -188,8 +196,36 @@ export default function UserProfile() {
     if (result === 'unavailable') void reload();
   }, [addToast, follow, patchProfile, reload]);
 
-  const handleUnfollow = useCallback(async () => {
+  const closeUnfollowDialog = useCallback(() => {
+    returnFocusPending.current = true;
     setIsUnfollowDialogOpen(false);
+  }, []);
+
+  // Com o botão ocupado (confirmando) ele não aceita foco: a devolução espera
+  // a requisição terminar.
+  useEffect(() => {
+    if (isUnfollowDialogOpen || isFollowPending || !returnFocusPending.current) return;
+
+    if (Platform.OS === 'web') {
+      returnFocusPending.current = false;
+      // Ao cancelar, o `Modal` da Web já devolve o foco; ao confirmar, o botão
+      // estava desabilitado e o foco caiu no `body`.
+      if (typeof document !== 'undefined' && document.activeElement === document.body) {
+        relationshipButtonRef.current?.focus();
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      returnFocusPending.current = false;
+      const button = relationshipButtonRef.current;
+      if (button) AccessibilityInfo.sendAccessibilityEvent(button, 'focus');
+    }, MODAL_FADE_OUT_MS);
+    return () => clearTimeout(timer);
+  }, [isFollowPending, isUnfollowDialogOpen]);
+
+  const handleUnfollow = useCallback(async () => {
+    closeUnfollowDialog();
     const target = profileRef.current;
     if (!target) return;
     const previous = patchProfile({ is_following: false, connections_count: target.connections_count - 1 });
@@ -206,7 +242,7 @@ export default function UserProfile() {
 
     patchProfile(previous);
     if (result === 'unavailable') void reload();
-  }, [patchProfile, reload, unfollow]);
+  }, [closeUnfollowDialog, patchProfile, reload, unfollow]);
 
   if (isUnavailable) {
     return (
@@ -324,6 +360,7 @@ export default function UserProfile() {
           {visibleProfile.connection_status !== 'REJECTED' && (
             <View style={styles.actions}>
               <RelationshipButton
+                ref={relationshipButtonRef}
                 userType={visibleProfile.user_type}
                 connectionStatus={visibleProfile.connection_status}
                 isFollowing={visibleProfile.is_following}
@@ -378,7 +415,7 @@ export default function UserProfile() {
         description="Você pode voltar a seguir quando quiser."
         confirmLabel="Deixar de seguir"
         onConfirm={() => void handleUnfollow()}
-        onCancel={() => setIsUnfollowDialogOpen(false)}
+        onCancel={closeUnfollowDialog}
       />
 
       {isOffline && <OfflineBanner />}
