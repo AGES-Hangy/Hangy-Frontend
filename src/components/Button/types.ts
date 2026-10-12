@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { ReactElement, Ref } from 'react';
+import type { StyleProp, View, ViewStyle } from 'react-native';
 
 import type { IconName } from '@/components/Icon';
 
@@ -37,4 +37,6 @@ export type ButtonProps = {
    * total). Não use para sobrescrever cor, raio ou tipografia.
    */
   style?: StyleProp<ViewStyle>;
+  /** Repassado ao `Pressable` interno, por exemplo para devolver o foco de acessibilidade ao botão. */
+  ref?: Ref<View>;
 };

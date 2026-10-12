@@ -119,6 +119,7 @@ export function Button({
   onPress,
   accessibilityLabel,
   style,
+  ref,
 }: ButtonProps) {
   const metrics = SIZES[size];
   const isBlocked = disabled || isLoading;
@@ -126,6 +127,7 @@ export function Button({
 
   return (
     <Pressable
+      ref={ref}
       onPress={onPress}
       disabled={isBlocked}
       hitSlop={{ top: verticalHitSlop, bottom: verticalHitSlop }}
