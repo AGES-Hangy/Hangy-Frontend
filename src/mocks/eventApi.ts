@@ -67,9 +67,11 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `flaky` e `flaky-slow` contam as chamadas por rota; recarregar o app (ou
  * `resetMock`) zera a contagem.
  *
- * Conectar (`POST /connections`) e seguir (`POST`/`DELETE
- * /businesses/{id}/follow`) alteram o estado do mock, então o GET seguinte já
- * devolve o resultado da ação. Recarregar o app (ou `resetMock`) desfaz tudo.
+ * Conectar (`POST /connections`), seguir (`POST`/`DELETE
+ * /businesses/{id}/follow`) e bloquear (`POST /users/{id}/block`) alteram o
+ * estado do mock, então o GET seguinte já devolve o resultado da ação.
+ * Recarregar o app (ou `resetMock`) desfaz tudo. Bloquear qualquer outro perfil
+ * responde `204`, e o GET seguinte vem `404`.
  *
  * | `user_id`          | Perfil                       | Ação                                        |
  * | ------------------ | ---------------------------- | ------------------------------------------- |
@@ -87,6 +89,9 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `follow-gone`      | Sem seguir, 1204 seguidores  | Seguir: `404`, o GET seguinte vem `404`     |
  * | `one-connection`   | Sem conexão, 1 conexão       | Conectar: `201`, passa a PENDING            |
  * | `one-follower`     | Sem seguir, 1 seguidor       | Seguir: `204`, +1                           |
+ * | `block-already`    | Sem conexão                  | Bloquear: `409`, o GET seguinte vem `404`   |
+ * | `block-gone`       | Sem conexão                  | Bloquear: `404`, o GET seguinte vem `404`   |
+ * | `block-boom`       | Sem conexão                  | Bloquear: `500`                             |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -818,6 +823,19 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       created_at: new Date().toISOString(),
     };
     return resultado as T;
+  }
+
+  if (partes[0] === 'users' && partes[2] === 'block' && partes.length === 3 && method === 'POST') {
+    const userId = partes[1] ?? '';
+    if (userId === 'block-boom') throw new MockApiError(500, 'Internal server error');
+    if (userId === 'block-gone' || db.usuariosIndisponiveis.includes(userId)) {
+      db.usuariosIndisponiveis.push(userId);
+      throw new MockApiError(404, 'User not found');
+    }
+
+    db.usuariosIndisponiveis.push(userId);
+    if (userId === 'block-already') throw new MockApiError(409, 'User already blocked');
+    return undefined as T;
   }
 
   if (partes[0] === 'businesses' && partes[2] === 'follow' && partes.length === 3) {
