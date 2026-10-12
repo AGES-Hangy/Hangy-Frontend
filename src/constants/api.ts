@@ -81,6 +81,7 @@ export const endpoints = {
   userEvents: (userId: string) => `/users/${encodeURIComponent(userId)}/events`,
   connectionRequests: () => '/connections',
   businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
+  userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
