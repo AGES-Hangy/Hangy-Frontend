@@ -5,7 +5,7 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
-import type { ConnectionRequestResult, UserEventItem, UserProfile } from '@/types/user';
+import type { ConnectionRequestResult, UserEventItem, UserPhoto, UserProfile } from '@/types/user';
 import { API_TIMEOUT_MS } from '@/constants/api';
 
 /**
@@ -93,6 +93,17 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `block-gone`       | Sem conexão                  | Bloquear: `404`, o GET seguinte vem `404`   |
  * | `block-boom`       | Sem conexão                  | Bloquear: `500`                             |
  *
+ * Perfil próprio (`GET /users/me/photos`): como a rota não tem id, o cenário
+ * vem de `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o
+ * valor exige reiniciar o Metro (sem precisar de `-c`).
+ *
+ * | Valor           | Fotos                                               |
+ * | --------------- | --------------------------------------------------- |
+ * | `full` (padrão) | 45 fotos, em duas páginas com o `limit` padrão (30) |
+ * | `empty`         | Lista vazia                                         |
+ * | `error`         | `500` na primeira página                            |
+ * | `error-page`    | Primeira página OK, `500` na seguinte               |
+ *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
  * (modo avião).
@@ -100,6 +111,14 @@ import { API_TIMEOUT_MS } from '@/constants/api';
 
 /** Latência de mentira, para os estados de carregamento aparecerem de verdade. */
 const MOCK_LATENCY_MS = 600;
+
+type CenarioPerfilProprio = 'full' | 'empty' | 'error' | 'error-page';
+const CENARIOS_PERFIL_PROPRIO: readonly string[] = ['full', 'empty', 'error', 'error-page'];
+const valorDoCenarioPerfilProprio = process.env.EXPO_PUBLIC_MOCK_OWN_PROFILE;
+const cenarioPerfilProprio: CenarioPerfilProprio =
+  valorDoCenarioPerfilProprio && CENARIOS_PERFIL_PROPRIO.includes(valorDoCenarioPerfilProprio)
+    ? (valorDoCenarioPerfilProprio as CenarioPerfilProprio)
+    : 'full';
 
 const wait = (ms = MOCK_LATENCY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -453,6 +472,25 @@ function perfilInicial(userId: string): UserProfile {
   };
 }
 
+const TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO = 45;
+const LIMITE_PADRAO_DE_FOTOS = 30;
+const EVENTOS_DAS_FOTOS = [
+  { id: 'guest', title: 'Futebol na PUC' },
+  { id: 'pelada-parcao', title: 'Pelada no Parcão' },
+  { id: 'corrida-orla', title: 'Corrida na Orla' },
+];
+
+function fotosDoPerfilProprio(): UserPhoto[] {
+  if (cenarioPerfilProprio === 'empty') return [];
+  const maisRecente = Date.UTC(2026, 9, 10, 18);
+  return Array.from({ length: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO }, (_, indice) => ({
+    photo_id: `foto-${indice + 1}`,
+    photo_url: `https://picsum.photos/seed/hangy-foto-${indice + 1}/600/600`,
+    event: EVENTOS_DAS_FOTOS[indice % EVENTOS_DAS_FOTOS.length],
+    created_at: new Date(maisRecente - indice * 60 * 60 * 1000).toISOString(),
+  }));
+}
+
 async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
   if (userId === 'missing' || db.usuariosIndisponiveis.includes(userId)) {
     throw new MockApiError(404, 'User not found');
@@ -773,6 +811,24 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     return { ...alvo, status: body.status } as T;
+  }
+
+  if (partes[0] === 'users' && partes[1] === 'me' && partes[2] === 'photos' && partes.length === 3 && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const cursor = params.get('cursor');
+    if (cenarioPerfilProprio === 'error' && !cursor) throw new MockApiError(500, 'Internal server error');
+    if (cenarioPerfilProprio === 'error-page' && cursor) throw new MockApiError(500, 'Internal server error');
+
+    const limite = Number(params.get('limit') ?? LIMITE_PADRAO_DE_FOTOS);
+    const inicio = cursor ? Number(cursor) : 0;
+    if (!Number.isInteger(limite) || limite < 1 || limite > 100 || !Number.isInteger(inicio) || inicio < 0) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+
+    const todas = fotosDoPerfilProprio();
+    const items = todas.slice(inicio, inicio + limite);
+    const fim = inicio + items.length;
+    return { items, next_cursor: fim < todas.length ? String(fim) : null } as T;
   }
 
   // `me` é o usuário logado, não um perfil visitado: fica fora destas regras.
