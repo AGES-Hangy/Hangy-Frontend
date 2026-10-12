@@ -59,6 +59,7 @@ export const endpoints = {
   userEvents: (userId: string) => `/users/${encodeURIComponent(userId)}/events`,
   connections: () => '/connections',
   businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
+  userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
 } as const;
