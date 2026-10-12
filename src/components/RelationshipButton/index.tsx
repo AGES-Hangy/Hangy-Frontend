@@ -32,11 +32,13 @@ export function RelationshipButton({
   disabled = false,
   isLoading = false,
   style,
+  ref,
 }: RelationshipButtonProps) {
   const { label, variant } = resolveAppearance({ userType, connectionStatus, isFollowing });
 
   return (
     <Button
+      ref={ref}
       label={label}
       variant={variant}
       size="LG"
