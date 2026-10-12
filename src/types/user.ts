@@ -45,3 +45,15 @@ export interface UserEventsPage {
   items: UserEventItem[];
   next_cursor: string | null;
 }
+
+export interface UserPhoto {
+  photo_id: string;
+  photo_url: string;
+  event: { id: string; title: string };
+  created_at: string;
+}
+
+export interface UserPhotosPage {
+  items: UserPhoto[];
+  next_cursor: string | null;
+}

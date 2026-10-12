@@ -82,6 +82,13 @@ export const endpoints = {
   connectionRequests: () => '/connections',
   businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
   userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
+  myPhotos: (options?: { limit?: number; cursor?: string | null }) => {
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/users/me/photos${query ? `?${query}` : ''}`;
+  },
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
