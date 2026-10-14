@@ -294,10 +294,8 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
     .filter((city) => normalizeForSearch(city.name).includes(normalizeForSearch(form.city)))
     .map((city) => ({ value: String(city.id), label: city.name }));
 
-  const document = maskDocument(
-    user.userType,
-    isBusiness ? (profile as BusinessProfile).cnpj : (profile as PersonalProfile).cpf,
-  );
+  // O CPF não vem em nenhuma rota de leitura: aparece todo mascarado.
+  const document = maskDocument(user.userType, isBusiness ? (profile as BusinessProfile).cnpj : null);
 
   return (
     <View style={styles.screen}>
@@ -353,17 +351,21 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
               maxLength={BIO_MAX_LENGTH}
               disabled={isBlocked}
             />
-            <TextField
-              label="Telefone"
-              placeholder="(51) 99999-9999"
-              value={form.phone}
-              onChangeText={(text) => update({ phone: maskPhone(text) }, 'phone')}
-              onBlur={() => touch('phone')}
-              error={errorOf('phone')}
-              keyboardType="phone-pad"
-              maxLength={15}
-              disabled={isBlocked}
-            />
+            {/* Pessoa física: o backend não devolve nem grava telefone no perfil,
+                então o campo não é oferecido. */}
+            {isBusiness && (
+              <TextField
+                label="Telefone"
+                placeholder="(51) 99999-9999"
+                value={form.phone}
+                onChangeText={(text) => update({ phone: maskPhone(text) }, 'phone')}
+                onBlur={() => touch('phone')}
+                error={errorOf('phone')}
+                keyboardType="phone-pad"
+                maxLength={15}
+                disabled={isBlocked}
+              />
+            )}
             {isBusiness ? (
               <TextField
                 label="Instagram"
@@ -376,19 +378,16 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
                 disabled={isBlocked}
               />
             ) : (
-              <TextField
-                type="Date"
-                label="Data de nascimento"
-                dateValue={form.dateOfBirth ?? undefined}
-                onChangeDate={(date) => {
-                  // Limpar o campo (Web) não apaga a data: ela é obrigatória no cadastro.
-                  if (date) update({ dateOfBirth: date }, 'dateOfBirth');
-                  touch('dateOfBirth');
-                }}
-                maximumDate={new Date()}
-                error={errorOf('dateOfBirth')}
-                disabled={isBlocked}
-              />
+              <View style={styles.lockedField}>
+                <TextField
+                  type="Date"
+                  label="Data de nascimento"
+                  dateValue={form.dateOfBirth ?? undefined}
+                  onChangeDate={() => {}}
+                  disabled
+                />
+                <FieldHint text="A data de nascimento não pode ser alterada." />
+              </View>
             )}
           </View>
 
@@ -454,40 +453,54 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
           <View style={styles.section}>
             <SectionHeader title="CONTA" variant="overline" />
-            <TextField
-              label="E-mail"
-              placeholder="seuemail@exemplo.com"
-              value={form.email}
-              onChangeText={(text) => update({ email: text }, 'email')}
-              onBlur={() => touch('email')}
-              error={errorOf('email')}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              disabled={isBlocked}
-            />
+            {isBusiness ? (
+              <TextField
+                label="E-mail"
+                placeholder="seuemail@exemplo.com"
+                value={form.email}
+                onChangeText={(text) => update({ email: text }, 'email')}
+                onBlur={() => touch('email')}
+                error={errorOf('email')}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                disabled={isBlocked}
+              />
+            ) : (
+              // `PATCH /users/me/profile` ignora e-mail: o campo só mostra o valor.
+              <View style={styles.lockedField}>
+                <TextField label="E-mail" value={form.email} disabled />
+                <FieldHint text="O e-mail não pode ser alterado por aqui." />
+              </View>
+            )}
             <View style={styles.lockedField}>
               <TextField label={copy.documentLabel} value={document} disabled />
               <FieldHint text={copy.documentHint} />
             </View>
-            <TextField
-              type="Password"
-              label="Nova senha"
-              value={form.password}
-              onChangeText={(text) => update({ password: text }, 'password')}
-              onBlur={() => touch('password')}
-              error={errorOf('password')}
-              disabled={isBlocked}
-            />
-            <TextField
-              type="Password"
-              label="Confirmar nova senha"
-              value={form.confirmPassword}
-              onChangeText={(text) => update({ confirmPassword: text }, 'confirmPassword')}
-              onBlur={() => touch('confirmPassword')}
-              error={errorOf('confirmPassword')}
-              disabled={isBlocked}
-            />
-            <Text style={styles.help}>Deixe em branco para manter a senha atual.</Text>
+            {/* Pessoa física: não há rota que troque a senha neste salvamento
+                (o backend ignoraria o campo). Volta quando existir a rota. */}
+            {isBusiness && (
+              <>
+                <TextField
+                  type="Password"
+                  label="Nova senha"
+                  value={form.password}
+                  onChangeText={(text) => update({ password: text }, 'password')}
+                  onBlur={() => touch('password')}
+                  error={errorOf('password')}
+                  disabled={isBlocked}
+                />
+                <TextField
+                  type="Password"
+                  label="Confirmar nova senha"
+                  value={form.confirmPassword}
+                  onChangeText={(text) => update({ confirmPassword: text }, 'confirmPassword')}
+                  onBlur={() => touch('confirmPassword')}
+                  error={errorOf('confirmPassword')}
+                  disabled={isBlocked}
+                />
+                <Text style={styles.help}>Deixe em branco para manter a senha atual.</Text>
+              </>
+            )}
           </View>
 
           <InterestsSection

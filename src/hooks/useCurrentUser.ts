@@ -10,6 +10,10 @@ export interface CurrentUser {
   userId: string;
   userType: UserType;
   email: string;
+  /** Nome da pessoa ou nome fantasia. */
+  name: string | null;
+  /** Dados da conta que só `GET /users/me` devolve (nascimento, estado e cidade; CNPJ e endereço). */
+  profile: CurrentUserResponse['profile'];
 }
 
 /**
@@ -27,7 +31,13 @@ export function useCurrentUser() {
 
     try {
       const data = await apiFetch<CurrentUserResponse>(endpoints.me());
-      setUser({ userId: data.user_id, userType: data.user_type, email: data.email });
+      setUser({
+        userId: data.id,
+        userType: data.user_type,
+        email: data.email,
+        name: data.name ?? null,
+        profile: data.profile ?? null,
+      });
     } catch (caught) {
       setError(describeLoadError(caught));
     } finally {

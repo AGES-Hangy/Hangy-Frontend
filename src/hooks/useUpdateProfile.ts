@@ -1,12 +1,15 @@
 import { useCallback, useState } from 'react';
 
 import { endpoints } from '@/constants/api';
+import type { CurrentUser } from '@/hooks/useCurrentUser';
 import type { UserType } from '@/types/event';
 import type {
   BusinessProfile,
   BusinessProfilePatch,
+  CurrentUserPersonalData,
   PersonalProfile,
   PersonalProfilePatch,
+  PersonalProfileResponse,
 } from '@/types/profile';
 import { isApiErrorLike } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
@@ -16,27 +19,49 @@ function profileEndpoint(userType: UserType) {
   return userType === 'BUSINESS' ? endpoints.businessProfile() : endpoints.userProfile();
 }
 
+/** `null` quando a rota de leitura responde 404/405 (backend sem a rota). */
+async function readProfile<T>(userType: UserType): Promise<T | null> {
+  try {
+    return await apiFetch<T>(profileEndpoint(userType));
+  } catch (caught) {
+    if (isApiErrorLike(caught) && (caught.status === 404 || caught.status === 405)) {
+      if (__DEV__) console.warn('[perfil] rota de leitura do perfil não existe neste backend');
+      return null;
+    }
+    throw caught;
+  }
+}
+
 /**
  * Leitura do perfil para preencher a edição. Lança em falha — quem chama
  * traduz com `describeLoadError`.
  *
- * As rotas de leitura (tasks 071/077 [BE]) ainda não existem no `develop` do
- * backend. Enquanto respondem 404/405, a tela abre com os campos vazios em vez
- * de ficar inacessível: como o `PATCH` só leva o que mudou, campo vazio não
- * tocado nunca é enviado.
+ * Pessoa física: `GET /users/me/profile` devolve `{ profile, counts }` e só
+ * traz nome e bio; e-mail, nascimento, estado e cidade vêm de `GET /users/me`,
+ * já carregado em `user`. Estabelecimento: `GET /businesses/me` já é plano.
+ *
+ * Contra um backend sem a rota de leitura (404/405), a tela abre com o que
+ * `user` tiver em vez de ficar inacessível: como o `PATCH` só leva o que
+ * mudou, campo vazio não tocado nunca é enviado.
  */
 export async function fetchProfileForEdit(
-  userType: UserType,
+  user: CurrentUser,
 ): Promise<PersonalProfile | BusinessProfile> {
-  try {
-    return await apiFetch<PersonalProfile | BusinessProfile>(profileEndpoint(userType));
-  } catch (caught) {
-    if (isApiErrorLike(caught) && (caught.status === 404 || caught.status === 405)) {
-      if (__DEV__) console.warn('[perfil] rota de leitura do perfil ainda não existe no backend');
-      return {};
-    }
-    throw caught;
+  if (user.userType === 'BUSINESS') {
+    return (await readProfile<BusinessProfile>(user.userType)) ?? {};
   }
+
+  const response = await readProfile<PersonalProfileResponse>(user.userType);
+  const account = user.profile as CurrentUserPersonalData | null;
+
+  return {
+    name: response?.profile.name ?? user.name,
+    description: response?.profile.description,
+    email: user.email,
+    date_of_birth: account?.date_of_birth,
+    state: account?.state,
+    city: account?.city,
+  };
 }
 
 /**

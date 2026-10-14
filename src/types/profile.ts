@@ -1,7 +1,8 @@
 /**
- * Contratos da API de perfil — cópia do que as tasks de backend 071, 077 e
- * 229 descrevem. Várias rotas ainda não existem no `develop` do backend; se
- * algo divergir quando subirem, o backend é a fonte de verdade.
+ * Contratos da API de perfil. As rotas de pessoa física e a leitura do
+ * estabelecimento espelham os DTOs do backend; o `PATCH /businesses/me`
+ * (task 229) ainda não existe no `develop` do backend e segue a descrição da
+ * task. Em qualquer divergência, o backend é a fonte de verdade.
  *
  * Os campos ficam em `snake_case`, como em `types/event.ts`.
  */
@@ -10,23 +11,58 @@ import type { UserType } from '@/types/event';
 
 /** `GET /users/me`. */
 export interface CurrentUserResponse {
-  user_id: string;
+  id: string;
   email: string;
   user_type: UserType;
-  role?: string;
+  name?: string | null;
+  profile?: CurrentUserPersonalData | CurrentUserBusinessData | null;
 }
 
-/** `GET /users/me/profile` — leitura do perfil de pessoa física para a edição. */
+/** `profile` de `GET /users/me` numa conta de pessoa física. */
+export interface CurrentUserPersonalData {
+  /** `YYYY-MM-DD`. */
+  date_of_birth: string;
+  /** UF, como o cadastro envia. */
+  state: string;
+  city: string;
+  photo_url?: string | null;
+}
+
+/** `profile` de `GET /users/me` numa conta de estabelecimento. */
+export interface CurrentUserBusinessData {
+  cnpj: string;
+  address: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  photo_url?: string | null;
+}
+
+/** `GET /users/me/profile`: o perfil vem dentro de `profile`, ao lado dos contadores das abas. */
+export interface PersonalProfileResponse {
+  profile: {
+    id: string;
+    name: string | null;
+    description: string | null;
+    photo_url: string | null;
+    tags: Array<{ id: string; name: string }>;
+    connections_count: number;
+  };
+  counts: { past: number; confirmed: number; photos: number };
+}
+
+/**
+ * Perfil de pessoa física no formato que a edição usa — montado a partir de
+ * `GET /users/me/profile` (nome e bio) e de `GET /users/me` (e-mail,
+ * nascimento, estado e cidade). Não é a resposta de uma rota.
+ */
 export interface PersonalProfile {
   name?: string | null;
   description?: string | null;
-  phone?: string | null;
   /** `YYYY-MM-DD`. */
   date_of_birth?: string | null;
   /** UF, como o cadastro envia. */
   state?: string | null;
   city?: string | null;
-  cpf?: string | null;
   email?: string | null;
 }
 
@@ -42,16 +78,17 @@ export interface BusinessProfile {
   email?: string | null;
 }
 
-/** `PATCH /users/me/profile` — só os campos que mudaram. Nunca `cpf`. */
+/**
+ * `PATCH /users/me/profile` — só os campos que mudaram. O backend ignora em
+ * silêncio qualquer outro campo (`extra="ignore"`), então nada além destes
+ * pode ser enviado: a resposta seria sucesso sem gravar. `description: null`
+ * limpa a bio.
+ */
 export type PersonalProfilePatch = Partial<{
   name: string;
-  description: string;
-  phone: string;
-  date_of_birth: string;
+  description: string | null;
   state: string;
   city: string;
-  email: string;
-  password: string;
 }>;
 
 /** `PATCH /businesses/me` — só os campos que mudaram. Nunca `cnpj`. */

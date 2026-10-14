@@ -8,7 +8,6 @@ import type {
   PersonalProfilePatch,
   UserTag,
 } from '@/types/profile';
-import { isAtLeast18 } from '@/utils/age';
 import { isValidEmail, maskInstagramHandle, maskPhone, onlyDigits } from '@/utils/documentValidation';
 import type { EditProfileFieldErrors } from '@/utils/profileErrors';
 
@@ -29,8 +28,9 @@ export const MINIMUM_AREAS: Record<UserType, number> = { PERSONAL: 3, BUSINESS: 
 export type EditProfileFormState = {
   name: string;
   bio: string;
+  /** Só estabelecimento. */
   phone: string;
-  /** Só pessoa física. */
+  /** Só pessoa física, e só para exibir: o backend não deixa alterar. */
   dateOfBirth: Date | null;
   /** Só estabelecimento. */
   instagram: string;
@@ -42,8 +42,9 @@ export type EditProfileFormState = {
   address: string;
   latitude: number | null;
   longitude: number | null;
+  /** Na pessoa física só para exibir: o `PATCH` do perfil pessoal não altera e-mail. */
   email: string;
-  /** Em branco = manter a senha atual. */
+  /** Só estabelecimento. Em branco = manter a senha atual. */
   password: string;
   confirmPassword: string;
 };
@@ -54,11 +55,6 @@ function parseIsoDate(value: string | null | undefined): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
   if (!match) return null;
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-}
-
-function toIsoDate(date: Date): string {
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export function buildInitialForm(
@@ -72,7 +68,7 @@ export function buildInitialForm(
   return {
     name: (isBusiness ? business.business_name : personal.name) ?? '',
     bio: profile.description ?? '',
-    phone: maskPhone(profile.phone ?? ''),
+    phone: isBusiness ? maskPhone(business.phone ?? '') : '',
     dateOfBirth: isBusiness ? null : parseIsoDate(personal.date_of_birth),
     instagram: isBusiness ? maskInstagramHandle(business.instagram ?? '') : '',
     stateUf: isBusiness ? '' : personal.state ?? '',
@@ -97,15 +93,15 @@ export function buildProfilePatch(
   form: EditProfileFormState,
   initial: EditProfileFormState,
 ): PersonalProfilePatch | BusinessProfilePatch {
-  const shared: PersonalProfilePatch & BusinessProfilePatch = {};
-
-  if (form.bio.trim() !== initial.bio.trim()) shared.description = form.bio.trim();
-  if (onlyDigits(form.phone) !== onlyDigits(initial.phone)) shared.phone = onlyDigits(form.phone);
-  if (form.email.trim() !== initial.email.trim()) shared.email = form.email.trim();
-  if (form.password.length > 0) shared.password = form.password;
+  const bio = form.bio.trim();
+  const bioChanged = bio !== initial.bio.trim();
 
   if (userType === 'BUSINESS') {
-    const patch: BusinessProfilePatch = { ...shared };
+    const patch: BusinessProfilePatch = {};
+    if (bioChanged) patch.description = bio;
+    if (onlyDigits(form.phone) !== onlyDigits(initial.phone)) patch.phone = onlyDigits(form.phone);
+    if (form.email.trim() !== initial.email.trim()) patch.email = form.email.trim();
+    if (form.password.length > 0) patch.password = form.password;
     if (form.name.trim() !== initial.name.trim()) patch.business_name = form.name.trim();
     if (form.instagram.trim() !== initial.instagram.trim()) patch.instagram = form.instagram.trim();
 
@@ -123,11 +119,12 @@ export function buildProfilePatch(
     return patch;
   }
 
-  const patch: PersonalProfilePatch = { ...shared };
+  // Só o que `PATCH /users/me/profile` grava. Telefone, e-mail, senha e data
+  // de nascimento ficam de fora: o backend os ignora e responderia sucesso.
+  const patch: PersonalProfilePatch = {};
   if (form.name.trim() !== initial.name.trim()) patch.name = form.name.trim();
-  if (form.dateOfBirth?.getTime() !== initial.dateOfBirth?.getTime() && form.dateOfBirth) {
-    patch.date_of_birth = toIsoDate(form.dateOfBirth);
-  }
+  // Bio apagada vai como `null`, que é como o backend a limpa.
+  if (bioChanged) patch.description = bio.length > 0 ? bio : null;
   // Compara a UF, e não o rótulo: o rótulo muda sozinho quando a lista do
   // IBGE carrega e troca "RS" por "Rio Grande do Sul".
   if (form.stateUf !== initial.stateUf) patch.state = form.stateUf;
@@ -156,22 +153,22 @@ export function validateForm(
 
   if (form.bio.length > BIO_MAX_LENGTH) errors.bio = 'Bio muito longa';
 
-  const phoneDigits = onlyDigits(form.phone);
-  const phoneChanged = phoneDigits !== onlyDigits(initial.phone);
-  if (phoneChanged && phoneDigits.length !== 10 && phoneDigits.length !== 11) {
-    errors.phone = 'Digite um telefone válido, com DDD.';
-  }
-
-  if (!isValidEmail(form.email)) errors.email = 'Digite um e-mail válido.';
-
-  if (form.password.length > 0 || form.confirmPassword.length > 0) {
-    if (form.password.length < PASSWORD_MIN_LENGTH || form.password.length > PASSWORD_MAX_LENGTH) {
-      errors.password = `Use entre ${PASSWORD_MIN_LENGTH} e ${PASSWORD_MAX_LENGTH} caracteres.`;
-    }
-    if (form.confirmPassword !== form.password) errors.confirmPassword = 'As senhas não conferem.';
-  }
-
   if (isBusiness) {
+    const phoneDigits = onlyDigits(form.phone);
+    const phoneChanged = phoneDigits !== onlyDigits(initial.phone);
+    if (phoneChanged && phoneDigits.length !== 10 && phoneDigits.length !== 11) {
+      errors.phone = 'Digite um telefone válido, com DDD.';
+    }
+
+    if (!isValidEmail(form.email)) errors.email = 'Digite um e-mail válido.';
+
+    if (form.password.length > 0 || form.confirmPassword.length > 0) {
+      if (form.password.length < PASSWORD_MIN_LENGTH || form.password.length > PASSWORD_MAX_LENGTH) {
+        errors.password = `Use entre ${PASSWORD_MIN_LENGTH} e ${PASSWORD_MAX_LENGTH} caracteres.`;
+      }
+      if (form.confirmPassword !== form.password) errors.confirmPassword = 'As senhas não conferem.';
+    }
+
     if (form.instagram.trim().length > 0 && !INSTAGRAM_HANDLE.test(form.instagram.trim())) {
       errors.instagram = 'Use o formato @usuario, só com letras, números, ponto e sublinhado.';
     }
@@ -184,10 +181,6 @@ export function validateForm(
       errors.address = 'Selecione um endereço da lista ou do mapa.';
     }
   } else {
-    if (form.dateOfBirth && !isAtLeast18(form.dateOfBirth)) {
-      errors.dateOfBirth = 'É preciso ter 18 anos ou mais para usar o Hangy.';
-    }
-
     const locationChanged = form.stateUf !== initial.stateUf || form.city.trim() !== initial.city.trim();
     if (locationChanged) {
       if (form.stateUf.length === 0) errors.state = 'Selecione um estado da lista.';

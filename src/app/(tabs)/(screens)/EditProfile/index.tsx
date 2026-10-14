@@ -59,13 +59,13 @@ export default function EditProfile() {
   const userType = user?.userType;
 
   useEffect(() => {
-    if (!userType || isOtherUser || visit === 0) return;
+    if (!user || isOtherUser || visit === 0) return;
 
     let isCurrent = true;
     setLoaded(null);
     setLoadError(null);
 
-    Promise.all([fetchProfileForEdit(userType), fetchUserTags()])
+    Promise.all([fetchProfileForEdit(user), fetchUserTags()])
       .then(([profile, userTags]) => {
         if (isCurrent) setLoaded({ visit, profile, userTags });
       })
@@ -76,7 +76,7 @@ export default function EditProfile() {
     return () => {
       isCurrent = false;
     };
-  }, [userType, isOtherUser, visit, attempt]);
+  }, [user, isOtherUser, visit, attempt]);
 
   const closeRef = useRef<(() => void) | null>(null);
   const registerClose = useCallback((close: (() => void) | null) => {

@@ -293,12 +293,12 @@ const perfil = {
   email: MOCK_USER_TYPE === 'BUSINESS' ? 'contato@quierocafe.com' : 'rafaela.souza@email.com',
   pessoa: {
     name: 'Rafaela Souza',
-    description: 'Organizo rolês de trilha e brunch em Porto Alegre. Sempre topo conhecer gente nova nos eventos.',
-    phone: '51999990000',
+    description: 'Organizo rolês de trilha e brunch em Porto Alegre. Sempre topo conhecer gente nova nos eventos.' as
+      | string
+      | null,
     date_of_birth: '1998-03-14',
     state: 'RS',
     city: 'Porto Alegre',
-    cpf: '12345678900',
   },
   estabelecimento: {
     user_id: 'me',
@@ -331,7 +331,26 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
   if (rota === 'tags/tree' && method === 'GET') return { resposta: ARVORE_DE_TAGS };
 
   if (rota === 'users/me' && method === 'GET') {
-    return { resposta: { user_id: 'me', email: perfil.email, user_type: MOCK_USER_TYPE, role: 'USER' } };
+    // Mesmo formato do `CurrentUserOutput` do backend.
+    const { pessoa, estabelecimento } = perfil;
+    return {
+      resposta: {
+        id: 'me',
+        email: perfil.email,
+        user_type: MOCK_USER_TYPE,
+        name: MOCK_USER_TYPE === 'BUSINESS' ? estabelecimento.business_name : pessoa.name,
+        profile:
+          MOCK_USER_TYPE === 'BUSINESS'
+            ? {
+                cnpj: estabelecimento.cnpj,
+                address: estabelecimento.address,
+                latitude: estabelecimento.location.latitude,
+                longitude: estabelecimento.location.longitude,
+                photo_url: null,
+              }
+            : { date_of_birth: pessoa.date_of_birth, state: pessoa.state, city: pessoa.city, photo_url: null },
+      },
+    };
   }
   // Exclusão de conta, confirmada com a senha. Cenários de erro, pela senha
   // enviada: `errada...` -> 403 (senha incorreta), `boom...` -> 500.
@@ -359,7 +378,51 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
   if (ehPessoa && MOCK_USER_TYPE !== 'PERSONAL') throw new MockApiError(403, 'Not a personal profile');
   if (ehEstabelecimento && MOCK_USER_TYPE !== 'BUSINESS') throw new MockApiError(403, 'Not a business profile');
 
-  const dados: Record<string, unknown> = ehPessoa ? perfil.pessoa : perfil.estabelecimento;
+  if (ehPessoa) {
+    const { pessoa } = perfil;
+
+    // Mesmo envelope do `UserProfileOutput` do backend.
+    if (method === 'GET') {
+      return {
+        resposta: {
+          profile: {
+            id: 'me',
+            name: pessoa.name,
+            description: pessoa.description,
+            photo_url: null,
+            tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
+            connections_count: 0,
+          },
+          counts: { past: 0, confirmed: 0, photos: 0 },
+        },
+      };
+    }
+
+    if (method === 'PATCH') {
+      if (typeof body.description === 'string' && body.description.length > 500) {
+        throw new MockApiError(400, 'Description exceeds maximum length');
+      }
+      // Como o `UserProfileUpdateInput` (`extra="ignore"`): só estes quatro
+      // campos são gravados, o resto é ignorado sem erro.
+      if (typeof body.name === 'string') pessoa.name = body.name;
+      if ('description' in body) pessoa.description = body.description;
+      if (typeof body.state === 'string') pessoa.state = body.state;
+      if (typeof body.city === 'string') pessoa.city = body.city;
+      return {
+        resposta: {
+          id: 'me',
+          name: pessoa.name,
+          description: pessoa.description,
+          city: pessoa.city,
+          updated_at: new Date().toISOString(),
+        },
+      };
+    }
+
+    return undefined;
+  }
+
+  const dados: Record<string, unknown> = perfil.estabelecimento;
 
   if (method === 'GET') return { resposta: { ...dados, email: perfil.email } };
 
