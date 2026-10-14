@@ -8,7 +8,14 @@
 
 export type EventPrivacy = 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY';
 
-export type EventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'FINISHED';
+/**
+ * Quanto do local a API entregou a quem está vendo. Evento privado vem
+ * `APPROXIMATE` para quem ainda não foi aprovado; a tela só renderiza isso,
+ * sem deduzir nada de `privacy`.
+ */
+export type LocationPrecision = 'EXACT' | 'APPROXIMATE';
+
+export type EventStatus ='DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'FINISHED';
 
 export type ParticipationStatus =
   | 'INVITED'
@@ -55,11 +62,18 @@ export interface ParticipantsPreview {
 export interface EventDetail {
   event_id: string;
   title: string;
-  description: string;
+  /** Opcional na criação — `null` quando o organizador não preencheu. */
+  description: string | null;
   event_date: string;
   end_date: string;
+  /** Em `APPROXIMATE` é o centro da área, não o ponto do evento. */
   location: { latitude: number; longitude: number };
-  location_name: string;
+  /** Endereço em `EXACT`; bairro e cidade em `APPROXIMATE` (`null` sem bairro). */
+  location_name: string | null;
+  /** Ausente enquanto o backend não entrega a task 270 — tratar como `EXACT`. */
+  location_precision?: LocationPrecision;
+  /** Raio da área em metros; só faz sentido em `APPROXIMATE`. */
+  location_radius_m?: number | null;
   privacy: EventPrivacy;
   status: EventStatus;
   cover_photo_url: string | null;

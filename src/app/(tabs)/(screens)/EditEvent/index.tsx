@@ -11,6 +11,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
@@ -37,6 +38,11 @@ type EditEventFormData = {
   date: Date | null;
   time: Date | null;
   location: string;
+  /** `null` enquanto o texto digitado não virou um local da lista ou do mapa. */
+  locationCoordinates: { latitude: number; longitude: number } | null;
+  /** Bairro e cidade do local selecionado — derivados dele, nunca digitados. */
+  locationNeighborhood: string | null;
+  locationCity: string | null;
   tagIds: string[];
 };
 
@@ -48,11 +54,16 @@ function toFormData(event: EventDetail): EditEventFormData {
   const eventDate = new Date(event.event_date);
   return {
     title: event.title,
-    description: event.description,
+    description: event.description ?? '',
     coverUri: event.cover_photo_url,
     date: eventDate,
     time: eventDate,
-    location: event.location_name,
+    location: event.location_name ?? '',
+    locationCoordinates: event.location,
+    // O detalhe não devolve bairro e cidade separados; só são preenchidos (e
+    // enviados) quando o organizador escolhe um endereço novo.
+    locationNeighborhood: null,
+    locationCity: null,
     tagIds: event.tags.map((tag) => tag.id),
   };
 }
@@ -68,7 +79,7 @@ function validate(form: EditEventFormData): MissingField[] {
   const missing: MissingField[] = [];
   if (form.title.trim().length === 0) missing.push('title');
   if (!form.date || !form.time || !isFutureDate(form.date, form.time)) missing.push('dateRow');
-  if (form.location.trim().length === 0) missing.push('location');
+  if (form.location.trim().length === 0 || form.locationCoordinates === null) missing.push('location');
   if (form.tagIds.length === 0) missing.push('tags');
   return missing;
 }
@@ -235,6 +246,31 @@ export default function EditEvent() {
       return { ...current, tagIds: [...current.tagIds, tagId] };
     });
 
+  // Digitar invalida o que veio da seleção anterior — coordenadas, bairro e
+  // cidade saem sempre do mesmo ponto. Voltar ao texto original restaura o
+  // local original, para desfazer a digitação não exigir escolher de novo.
+  const handleChangeLocation = (value: string) =>
+    setForm((current) => {
+      if (!current) return current;
+      const original = originalRef.current;
+      if (original && value === original.location) {
+        return {
+          ...current,
+          location: value,
+          locationCoordinates: original.locationCoordinates,
+          locationNeighborhood: original.locationNeighborhood,
+          locationCity: original.locationCity,
+        };
+      }
+      return {
+        ...current,
+        location: value,
+        locationCoordinates: null,
+        locationNeighborhood: null,
+        locationCity: null,
+      };
+    });
+
   const handlePickCover = async () => {
     const picked = await pickImage();
     if (picked) set('coverUri', picked.uri);
@@ -262,6 +298,16 @@ export default function EditEvent() {
     eventDate.setHours(form.time!.getHours(), form.time!.getMinutes(), 0, 0);
     const endDate = new Date(eventDate.getTime() + durationMsRef.current);
 
+    // Bairro e cidade entram na comparação: escolher de novo o mesmo endereço
+    // num evento antigo (sem esses dois) mantém texto e coordenadas, mas
+    // precisa enviar o local para o backend gravá-los.
+    const locationChanged =
+      form.location !== original?.location ||
+      form.locationCoordinates?.latitude !== original?.locationCoordinates?.latitude ||
+      form.locationCoordinates?.longitude !== original?.locationCoordinates?.longitude ||
+      form.locationNeighborhood !== original?.locationNeighborhood ||
+      form.locationCity !== original?.locationCity;
+
     const saved = await saveEvent({
       title: form.title,
       description: form.description || null,
@@ -269,10 +315,16 @@ export default function EditEvent() {
       tag_ids: form.tagIds,
       event_date: eventDate.toISOString(),
       end_date: endDate.toISOString(),
-      // Não há seleção de local de verdade ainda: as coordenadas seguem
-      // fixas no ponto original do evento, só o texto é editável.
-      location: event.location,
-      location_name: form.location || null,
+      // Sem mexer no endereço, nenhum campo de local vai no corpo: o backend
+      // recalcula o ponto aproximado sempre que `location` chega.
+      ...(locationChanged && form.locationCoordinates
+        ? {
+            location: form.locationCoordinates,
+            location_name: form.location || null,
+            location_neighborhood: form.locationNeighborhood,
+            location_city: form.locationCity,
+          }
+        : {}),
     });
 
     if (saved) {
@@ -387,16 +439,36 @@ export default function EditEvent() {
               )}
             </View>
 
-            <View style={styles.field} ref={locationRef}>
+            <View style={[styles.field, styles.locationField]} ref={locationRef}>
               <FieldLabel label="Local" required />
-              <TextField
-                type="Location"
+              <AddressAutocompleteField
                 value={form.location}
-                onChangeText={(value) => set('location', value)}
+                onChangeText={handleChangeLocation}
+                onSelect={(suggestion) =>
+                  setForm((current) =>
+                    current
+                      ? {
+                          ...current,
+                          location: suggestion.shortLabel,
+                          locationCoordinates: {
+                            latitude: suggestion.latitude,
+                            longitude: suggestion.longitude,
+                          },
+                          locationNeighborhood: suggestion.neighborhood,
+                          locationCity: suggestion.city,
+                        }
+                      : current,
+                  )
+                }
                 placeholder="Digite o local do evento"
                 maxLength={120}
-                error={showSummary && missing.includes('location') ? 'Informe o local do evento' : undefined}
+                error={
+                  showSummary && missing.includes('location')
+                    ? 'Selecione um local da lista ou do mapa'
+                    : undefined
+                }
                 reserveMessageSpace
+                accessibilityLabel="Local do evento, obrigatório"
                 disabled={isSaving}
               />
             </View>
@@ -476,6 +548,12 @@ const styles = StyleSheet.create({
   },
   field: {
     marginBottom: spacing[24],
+  },
+  // A lista de sugestões do campo é absoluta; sem elevar o wrapper, o bloco
+  // de tags pinta por cima dela e não deixa tocar nas sugestões.
+  locationField: {
+    zIndex: 1,
+    elevation: 1,
   },
   fieldLabel: {
     color: palette.neutral[700],

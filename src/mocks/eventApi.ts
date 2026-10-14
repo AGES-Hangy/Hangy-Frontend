@@ -30,7 +30,9 @@ import type {
  * | ----------- | ------------------------------------------------------- |
  * | qualquer    | Caminho feliz, na visão do organizador                   |
  * | `guest`     | Visitante comum num evento público (ação `CONFIRM`)      |
- * | `private`   | Evento privado sem participação: sem lista de confirmados|
+ * | `private`   | Evento privado sem participação: sem lista de confirmados, local aproximado (bairro) |
+ * | `private-no-area` | Igual a `private`, mas sem bairro: "Local aproximado" |
+ * | `private-confirmed` | Evento privado já aprovado: local exato          |
  * | `cancelled` | `410 Event was cancelled` (`/share`: `404`, ver task 101) |
  * | `missing`   | `404 Event not found`                                    |
  * | `boom`      | `500` no detalhe                                         |
@@ -149,9 +151,18 @@ const DESCRICAO = [
 /** Só os dois ids que este mock conhece — `useTags` não passa por `resolveMock`. */
 const NOME_DA_TAG: Record<string, string> = { t1: 'Esportes', t2: 'Futebol' };
 
+/** Cenários de evento privado visto por quem não organiza. */
+const CENARIOS_PRIVADOS = ['private', 'private-no-area', 'private-confirmed'];
+
+const ehVisitante = (eventId: string) => eventId === 'guest' || CENARIOS_PRIVADOS.includes(eventId);
+
 function detalhe(eventId: string): EventDetail {
-  const ehOrganizador = eventId !== 'guest' && eventId !== 'private';
-  const ehPrivado = eventId === 'private';
+  const ehOrganizador = !ehVisitante(eventId);
+  const ehPrivado = CENARIOS_PRIVADOS.includes(eventId);
+  const aprovado = eventId === 'private-confirmed';
+  // Privado sem aprovação: a API troca o endereço pelo bairro e o ponto pelo
+  // centro de uma área. Depois de aprovado, volta tudo exato.
+  const localAproximado = ehPrivado && !aprovado;
   const overrides = db.overrides;
 
   return {
@@ -161,8 +172,16 @@ function detalhe(eventId: string): EventDetail {
     // O frame mostra 16:00 em Porto Alegre (UTC-3).
     event_date: overrides?.event_date ?? '2026-10-30T19:00:00Z',
     end_date: overrides?.end_date ?? '2026-10-30T22:00:00Z',
-    location: overrides?.location ?? { latitude: -30.0577, longitude: -51.1738 },
-    location_name: overrides?.location_name ?? 'DRY Moments',
+    location: localAproximado
+      ? { latitude: -30.0531, longitude: -51.1762 }
+      : (overrides?.location ?? { latitude: -30.0577, longitude: -51.1738 }),
+    location_name: localAproximado
+      ? eventId === 'private-no-area'
+        ? null
+        : 'Partenon, Porto Alegre'
+      : (overrides?.location_name ?? 'DRY Moments'),
+    location_precision: localAproximado ? 'APPROXIMATE' : 'EXACT',
+    location_radius_m: localAproximado ? 500 : null,
     privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
     status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
     cover_photo_url: overrides?.cover_photo_url ?? 'https://picsum.photos/seed/hangy-evento/900/600',
@@ -170,12 +189,18 @@ function detalhe(eventId: string): EventDetail {
     organizer: { id: 'org-1', name: 'Ana Souza', user_type: 'PERSONAL', avatar_url: null },
     viewer: {
       is_organizer: ehOrganizador,
-      participation_status: null,
+      participation_status: aprovado ? 'CONFIRMED' : null,
       // Num evento privado em que não participo, a lista de confirmados some.
-      can_see_participants: !ehPrivado,
-      available_action: ehOrganizador ? 'SHARE' : 'CONFIRM',
+      can_see_participants: !localAproximado,
+      available_action: ehOrganizador
+        ? 'SHARE'
+        : aprovado
+          ? 'CANCEL_PRESENCE'
+          : ehPrivado
+            ? 'REQUEST'
+            : 'CONFIRM',
     },
-    participants_preview: ehPrivado
+    participants_preview: localAproximado
       ? null
       : {
           count: db.confirmed.length,
@@ -207,7 +232,7 @@ function participantes(eventId: string, statusFiltro: string | null): Participan
     throw new MockApiError(403, 'Only the organizer can list pending participants');
   }
 
-  const ehOrganizador = eventId !== 'guest' && eventId !== 'private';
+  const ehOrganizador = !ehVisitante(eventId);
   const items = pedindoPendentes ? db.pending : db.confirmed;
 
   const counts: ParticipantsPage['counts'] = { CONFIRMED: db.confirmed.length };
@@ -253,7 +278,7 @@ function compartilhar(eventId: string): EventShare {
     web_url: `https://hangy.app/e/${eventId}`,
     title: evento.title,
     event_date: evento.event_date,
-    location_name: evento.location_name,
+    location_name: evento.location_name ?? '',
     cover_photo_url: evento.cover_photo_url,
   };
 }
@@ -291,14 +316,17 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (eventId === 'finished') throw new MockApiError(409, 'Event already finished');
 
     const body = init.body ? JSON.parse(String(init.body)) : {};
+    // Os campos de local só vêm quando o endereço mudou; sem eles, vale o
+    // que o evento já tinha.
+    const atual = detalhe(eventId);
     db.overrides = {
       title: body.title,
       description: body.description ?? null,
       cover_photo_url: body.cover_photo_url ?? null,
       event_date: body.event_date,
       end_date: body.end_date,
-      location: body.location,
-      location_name: body.location_name ?? null,
+      location: body.location ?? atual.location,
+      location_name: body.location ? (body.location_name ?? null) : atual.location_name,
       tag_ids: body.tag_ids ?? [],
     };
 
