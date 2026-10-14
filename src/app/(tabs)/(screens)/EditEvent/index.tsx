@@ -54,7 +54,7 @@ function toFormData(event: EventDetail): EditEventFormData {
   const eventDate = new Date(event.event_date);
   return {
     title: event.title,
-    description: event.description,
+    description: event.description ?? '',
     coverUri: event.cover_photo_url,
     date: eventDate,
     time: eventDate,
@@ -298,10 +298,15 @@ export default function EditEvent() {
     eventDate.setHours(form.time!.getHours(), form.time!.getMinutes(), 0, 0);
     const endDate = new Date(eventDate.getTime() + durationMsRef.current);
 
+    // Bairro e cidade entram na comparação: escolher de novo o mesmo endereço
+    // num evento antigo (sem esses dois) mantém texto e coordenadas, mas
+    // precisa enviar o local para o backend gravá-los.
     const locationChanged =
       form.location !== original?.location ||
       form.locationCoordinates?.latitude !== original?.locationCoordinates?.latitude ||
-      form.locationCoordinates?.longitude !== original?.locationCoordinates?.longitude;
+      form.locationCoordinates?.longitude !== original?.locationCoordinates?.longitude ||
+      form.locationNeighborhood !== original?.locationNeighborhood ||
+      form.locationCity !== original?.locationCity;
 
     const saved = await saveEvent({
       title: form.title,

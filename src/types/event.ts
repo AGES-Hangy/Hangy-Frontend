@@ -62,7 +62,8 @@ export interface ParticipantsPreview {
 export interface EventDetail {
   event_id: string;
   title: string;
-  description: string;
+  /** Opcional na criação — `null` quando o organizador não preencheu. */
+  description: string | null;
   event_date: string;
   end_date: string;
   /** Em `APPROXIMATE` é o centro da área, não o ponto do evento. */

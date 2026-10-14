@@ -182,7 +182,8 @@ export default function EventDetail() {
   // (backend sem a task 270) conta como `EXACT`.
   const isLocationApproximate = event.location_precision === 'APPROXIMATE';
   const locationLabel = event.location_name || (isLocationApproximate ? 'Local aproximado' : null);
-  const [descriptionLead, ...descriptionRest] = event.description.split('\n');
+  // A descrição é opcional na criação e a API devolve `null` sem ela.
+  const [descriptionLead, ...descriptionRest] = (event.description ?? '').split('\n');
 
   const isPendingCancel = event.viewer.participation_status === 'PENDING';
   // Mesma ação da API (CANCEL_PRESENCE) serve pra cancelar presença
@@ -405,7 +406,11 @@ export default function EventDetail() {
             <Text style={styles.descriptionHeading} accessibilityRole="header">
               Descrição
             </Text>
-            <Text style={styles.descriptionLead}>{descriptionLead}</Text>
+            {descriptionLead ? (
+              <Text style={styles.descriptionLead}>{descriptionLead}</Text>
+            ) : (
+              <Text style={styles.descriptionText}>Sem descrição.</Text>
+            )}
             {descriptionRest.filter(Boolean).map((paragraph) => (
               <Text key={paragraph} style={styles.descriptionText}>
                 {paragraph}
