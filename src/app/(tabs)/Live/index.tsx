@@ -84,14 +84,12 @@ function toPreviewEvent(event: NearbyEventItem, userCoordinate: Coordinate | nul
     date: event.event_date,
     location: event.location_name,
     imageUrl: event.cover_photo_url ?? '',
-    // ⚠️ `GET /events/nearby` não devolve `privacy`, mas o MapPreview exige o
-    // badge. Alinhar com a task 119 se o campo vier no contrato.
-    privacy: 'PUBLIC',
-    // `distance_m` é até o centro da busca, que muda ao arrastar o mapa; com a
-    // posição do usuário em mãos, a distância é até ele.
-    distance: formatDistance(
-      userCoordinate ? distanceInMeters(userCoordinate, event.location) : event.distance_m,
-    ),
+    privacy: event.privacy,
+    // `distance_m` é até o centro da busca, que muda ao arrastar o mapa — não
+    // serve como distância "de você". Sem a posição do usuário, o card omite a linha.
+    distance: userCoordinate
+      ? formatDistance(distanceInMeters(userCoordinate, event.location))
+      : undefined,
   };
 }
 

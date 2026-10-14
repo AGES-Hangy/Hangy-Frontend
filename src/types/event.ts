@@ -128,6 +128,11 @@ export interface NearbyEventItem {
   location: { latitude: number; longitude: number };
   location_name: string | null;
   cover_photo_url: string | null;
+  /**
+   * Vem do contrato do backend #86, ainda sem merge. Opcional até o endpoint
+   * estar disponível: sem o campo, o preview oculta o selo em vez de assumir `PUBLIC`.
+   */
+  privacy?: EventPrivacy;
   /** Distância até o centro da busca, calculada pelo backend. */
   distance_m: number;
   participants_count: number;

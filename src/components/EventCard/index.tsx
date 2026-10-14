@@ -75,7 +75,7 @@ export function EventCard({
 	onNotifyPress,
 }: EventCardProps) {
 	const dateTime = formatEventDateTime(event.date);
-	const accessibleLabel = [event.title, dateTime, event.location, getPrivacyBadgeLabel(event.privacy)]
+	const accessibleLabel = [event.title, dateTime, event.location, event.privacy && getPrivacyBadgeLabel(event.privacy)]
 		.filter(Boolean)
 		.join(', ');
 	if (variant === 'Request') {
@@ -127,7 +127,8 @@ function EventImage({ event, style, placeholderColor }: { event: Event; style: o
 	);
 }
 
-function PrivacyTag({ privacy }: { privacy: EventPrivacy }) {
+function PrivacyTag({ privacy }: { privacy?: EventPrivacy }) {
+	if (!privacy) return null;
 	return (
 		<View style={styles.privacyTagWrap}>
 			<Badge family="Privacy" value={getPrivacyBadgeValue(privacy)} />
@@ -226,7 +227,7 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 			<View style={styles.compactContent}>
 				<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
 				{meta ? <Text numberOfLines={1} style={styles.detailText}>{meta}</Text> : null}
-				<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
+				{event.privacy && <Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />}
 			</View>
 
 			{stateBadge ? (
@@ -244,7 +245,7 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 }
 
 function MapPreviewCard({ event }: { event: Event }) {
-	const distance = event.distance ?? '250 metros';
+	const distance = event.distance;
 
 	return (
 		<View style={[styles.cardFlat, styles.mapPreview]}>
@@ -253,10 +254,12 @@ function MapPreviewCard({ event }: { event: Event }) {
 			</View>
 			<View style={styles.mapDetails}>
 				<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
-				<Text numberOfLines={1} style={[styles.detailText, styles.mapPreviewDistance]}>
-					a {distance} de você
-				</Text>
-				<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
+				{distance != null && (
+					<Text numberOfLines={1} style={[styles.detailText, styles.mapPreviewDistance]}>
+						a {distance} de você
+					</Text>
+				)}
+				{event.privacy && <Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />}
 			</View>
 		</View>
 	);
@@ -288,9 +291,11 @@ function MiniCard({
 			>
 				<View style={styles.miniImageWrap}>
 					<EventImage event={event} style={styles.miniImage} placeholderColor={palette.primary[200]} />
-					<View style={styles.overlayBadge}>
-						<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
-					</View>
+					{event.privacy && (
+						<View style={styles.overlayBadge}>
+							<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
+						</View>
+					)}
 				</View>
 
 				<View style={[styles.carouselContent, styles.miniContent]}>

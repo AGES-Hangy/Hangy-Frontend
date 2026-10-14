@@ -10,7 +10,8 @@ export interface Event {
   date: string | null; // Eventos privados podem ocultar a data.
   location: string | null; // Eventos privados podem ocultar o local.
   imageUrl: string;
-  privacy: EventPrivacy;
+  /** Sem valor, o card oculta o selo em vez de assumir uma privacidade. */
+  privacy?: EventPrivacy;
   distance?: string;
   requesterName?: string;
   /** Tags do evento — chips no rodapé de `Featured` e `Mini`. */
