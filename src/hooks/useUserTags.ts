@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
 import { endpoints } from '@/constants/api';
+import type { UserTag } from '@/types/profile';
+import { isApiErrorLike } from '@/utils/apiErrors';
 import { apiFetch, ApiError } from '@/utils/http';
 import { mapSaveTagsError, type TagsErrorOutcome } from '@/utils/registerErrors';
 
@@ -9,7 +11,25 @@ type SaveTagsResponse = {
 };
 
 /**
- * `PUT /users/me/tags` — etapa 4 do cadastro (Pessoa Física e Empresa), já com o
+ * Seleção atual de tags do usuário (`GET /users/me/tags`), para a edição de
+ * perfil. Lança em falha. A rota (task 067 [BE]) ainda não existe no backend:
+ * enquanto responde 404/405, devolve a seleção vazia.
+ */
+export async function fetchUserTags(): Promise<UserTag[]> {
+  try {
+    const data = await apiFetch<{ tags?: UserTag[] } | UserTag[]>(endpoints.userTags());
+    return Array.isArray(data) ? data : data.tags ?? [];
+  } catch (caught) {
+    if (isApiErrorLike(caught) && (caught.status === 404 || caught.status === 405)) {
+      if (__DEV__) console.warn('[perfil] GET /users/me/tags ainda não existe no backend');
+      return [];
+    }
+    throw caught;
+  }
+}
+
+/**
+ * `PUT /users/me/tags` — etapa 4 do cadastro e Editar perfil, já com o
  * usuário autenticado pelo `POST /auth/register` anterior. Usa `apiFetch`
  * (não o `fetch` cru de `useRegister`/`useTags`) porque é uma rota
  * autenticada: herda o 401 global de graça.

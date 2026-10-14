@@ -76,6 +76,12 @@ const VARIANTS: Record<ButtonVariant, VariantVisuals> = {
     pressed: { backgroundColor: colors.action.danger, contentColor: colors.text.inverse },
     disabled: DISABLED_FILL,
   },
+  DangerText: {
+    // Button/DangerText (Sprint 3 Components): ação destrutiva só de texto.
+    default: { contentColor: colors.action.danger },
+    pressed: { contentColor: colors.action.danger },
+    disabled: { contentColor: colors.text.disabled },
+  },
 };
 
 /** Variantes cujo Pressed o Figma define com fill próprio, em vez de opacidade. */
@@ -101,7 +107,7 @@ function isIconName(value: unknown): value is IconName {
 }
 
 /**
- * Botão base do app — 5 variantes, 3 tamanhos e 4 estados do Design System.
+ * Botão base do app — 6 variantes, 3 tamanhos e 4 estados do Design System.
  *
  * ```tsx
  * <Button label="Criar evento" icon="plus" onPress={criarEvento} />

@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { colors } from '@/constants/colors';
@@ -17,6 +18,7 @@ export default function Profile() {
   const { userId, name } = useLocalSearchParams<{ userId?: string; name?: string }>();
   const isOwnProfile = !userId;
 
+  const { user } = useCurrentUser();
   const { unregisterDevice } = useUnregisterDevice();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -54,6 +56,18 @@ export default function Profile() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>{isOwnProfile ? 'Profile' : name}</Text>
+      {isOwnProfile && (
+        <Button
+          label="Editar perfil"
+          variant="Secondary"
+          // A mesma rota para pessoa física e estabelecimento: a variante sai
+          // do tipo da conta logada, dentro da tela.
+          onPress={() =>
+            router.push({ pathname: '/EditProfile', params: user ? { userId: user.userId } : {} })
+          }
+          style={styles.logout}
+        />
+      )}
       {isOwnProfile && (
         <Button
           label="Sair"
