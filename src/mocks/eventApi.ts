@@ -5,10 +5,12 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
+import type { PersonalProfileResponse } from '@/types/profile';
 import type {
   ConnectionRequestResult,
   UserEventItem,
   UserEventsPage,
+  UserEventsTab,
   UserEventsTabs,
   UserPhoto,
   UserProfile,
@@ -80,7 +82,8 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  *
  * `GET /users/{id}/events` devolve as abas de quem visita, `history` (encerrados)
  * e `created` (criados e não encerrados), com `interests` e `confirmed` em
- * `null`. Com `tab` e `cursor` vem só a continuação daquela aba.
+ * `null`. Com `tab` e `cursor` vem só a continuação daquela aba. Com o id da
+ * conta logada (`me`), vêm as quatro abas do dono, com privados (veja abaixo).
  *
  * Conectar (`POST /connections`), seguir (`POST`/`DELETE
  * /businesses/{id}/follow`) e bloquear (`POST /users/{id}/block`) alteram o
@@ -109,16 +112,17 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `block-gone`       | Sem conexão                  | Bloquear: `404`, o GET seguinte vem `404`   |
  * | `block-boom`       | Sem conexão                  | Bloquear: `500`                             |
  *
- * Perfil próprio (`GET /users/me/photos`): como a rota não tem id, o cenário
- * vem de `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o
- * valor exige reiniciar o Metro (sem precisar de `-c`).
+ * Perfil próprio (`GET /users/me/photos`, `GET /users/me/events` e os
+ * contadores de `GET /users/me/profile`): o cenário vem de
+ * `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o valor
+ * exige reiniciar o Metro (sem precisar de `-c`).
  *
- * | Valor           | Fotos                                               |
- * | --------------- | --------------------------------------------------- |
- * | `full` (padrão) | 45 fotos, em duas páginas com o `limit` padrão (30) |
- * | `empty`         | Lista vazia                                         |
- * | `error`         | `500` na primeira página                            |
- * | `error-page`    | Primeira página OK, `500` na seguinte               |
+ * | Valor           | Fotos                                               | Eventos do dono                                      | Contadores                                           |
+ * | --------------- | --------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
+ * | `full` (padrão) | 45 fotos, em duas páginas com o `limit` padrão (30) | Criados 4, Interesses 2, Confirmados 2, Histórico 25 | 134 conexões, 25 encerrados, 2 confirmados, 45 fotos |
+ * | `empty`         | Lista vazia                                         | Abas vazias                                          | Zerados                                              |
+ * | `error`         | `500` na primeira página                            | `500` na primeira carga                              | Como em `full`                                       |
+ * | `error-page`    | Primeira página OK, `500` na seguinte               | Primeira carga OK, `500` no "Ver mais"               | Como em `full`                                       |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -575,6 +579,131 @@ function fotosDoPerfilProprio(): UserPhoto[] {
   }));
 }
 
+const EVENTOS_CRIADOS_DO_DONO: UserEventItem[] = [
+  {
+    event_id: 'por-do-sol-cais',
+    title: 'Pôr do sol no Cais',
+    event_date: '2026-11-16T19:00:00Z',
+    location_name: 'Cais do Porto',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-cais/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'futebol-orla',
+    title: 'Futebol na Orla',
+    event_date: '2026-11-17T13:00:00Z',
+    location_name: 'Orla do Guaíba',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-futebol/900/600',
+    privacy: 'INVITE_ONLY',
+    participation_status: null,
+  },
+  {
+    event_id: 'noite-amigos',
+    title: 'Noite com os Amigos',
+    event_date: '2026-11-22T00:00:00Z',
+    location_name: 'Av. Soledade',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-noite/900/600',
+    privacy: 'PRIVATE',
+    participation_status: null,
+  },
+  // Rascunho: o `UserEventOutput` não tem `event_status`, então ele chega
+  // igual aos outros.
+  {
+    event_id: 'churrasco-rascunho',
+    title: 'Churrasco de fim de ano',
+    event_date: '2026-12-20T15:00:00Z',
+    location_name: null,
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const EVENTOS_DE_INTERESSE_DO_DONO: UserEventItem[] = [
+  {
+    event_id: 'samba-cidade-baixa',
+    title: 'Roda de samba na Cidade Baixa',
+    event_date: '2026-11-20T22:00:00Z',
+    location_name: 'Cidade Baixa',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-samba/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'brique-redencao',
+    title: 'Brique da Redenção',
+    event_date: '2026-11-29T13:00:00Z',
+    location_name: 'Parque Farroupilha',
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const EVENTOS_CONFIRMADOS_DO_DONO: UserEventItem[] = [
+  {
+    event_id: 'private-confirmed',
+    title: 'Jantar no Bom Fim',
+    event_date: '2026-11-18T23:00:00Z',
+    location_name: 'Bom Fim',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-jantar/900/600',
+    privacy: 'PRIVATE',
+    participation_status: 'CONFIRMED',
+  },
+  {
+    event_id: 'trilha-itapua',
+    title: 'Trilha em Itapuã',
+    event_date: '2026-12-05T11:00:00Z',
+    location_name: 'Parque de Itapuã',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-itapua/900/600',
+    privacy: 'PUBLIC',
+    participation_status: 'CONFIRMED',
+  },
+];
+
+const TOTAL_DO_HISTORICO_DO_DONO = 25;
+const ABAS_DE_VISITANTE: readonly UserEventsTab[] = ['history', 'created'];
+const ABAS_DO_DONO: readonly UserEventsTab[] = ['history', 'created', 'interests', 'confirmed'];
+
+/** Encerrados, alternando os que o dono criou e os que confirmou, com as três privacidades. */
+function historicoDoDono(): UserEventItem[] {
+  const privacidades = ['PUBLIC', 'PRIVATE', 'INVITE_ONLY'] as const;
+  const maisRecente = Date.UTC(2026, 9, 10, 19);
+  return Array.from({ length: TOTAL_DO_HISTORICO_DO_DONO }, (_, indice) => ({
+    event_id: `encerrado-${indice + 1}`,
+    title: `Evento encerrado ${indice + 1}`,
+    event_date: new Date(maisRecente - indice * 3 * UM_DIA_MS).toISOString(),
+    location_name: 'Porto Alegre',
+    cover_photo_url: `https://picsum.photos/seed/hangy-encerrado-${indice + 1}/900/600`,
+    privacy: privacidades[indice % privacidades.length],
+    participation_status: indice % 2 === 0 ? null : 'CONFIRMED',
+  }));
+}
+
+function eventosDoDono(aba: UserEventsTab): UserEventItem[] {
+  if (cenarioPerfilProprio === 'empty') return [];
+  if (aba === 'history') return historicoDoDono();
+  if (aba === 'created') return EVENTOS_CRIADOS_DO_DONO;
+  if (aba === 'interests') return EVENTOS_DE_INTERESSE_DO_DONO;
+  return EVENTOS_CONFIRMADOS_DO_DONO;
+}
+
+/** Contadores de `GET /users/me/profile` coerentes com as abas e as fotos do dono. */
+function contadoresDoDono() {
+  if (cenarioPerfilProprio === 'empty') {
+    return { connections_count: 0, counts: { past: 0, confirmed: 0, photos: 0 } };
+  }
+  return {
+    connections_count: 134,
+    counts: {
+      past: TOTAL_DO_HISTORICO_DO_DONO,
+      confirmed: EVENTOS_CONFIRMADOS_DO_DONO.length,
+      photos: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO,
+    },
+  };
+}
+
 async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
   if (userId === 'missing' || db.usuariosIndisponiveis.includes(userId)) {
     throw new MockApiError(404, 'User not found');
@@ -817,6 +946,13 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const eventId = partes[1] ?? '';
 
   const respostaDePerfil = resolverPerfil(partes, method, init);
+  // Por cima da resposta do PR #62 (TID072), que vem zerada: os contadores
+  // seguem `EXPO_PUBLIC_MOCK_OWN_PROFILE`, como as abas e as fotos do dono.
+  if (respostaDePerfil && partes.join('/') === 'users/me/profile' && method === 'GET') {
+    const resposta = respostaDePerfil.resposta as PersonalProfileResponse;
+    const { connections_count, counts } = contadoresDoDono();
+    return { profile: { ...resposta.profile, connections_count }, counts } as T;
+  }
   if (respostaDePerfil) return respostaDePerfil.resposta as T;
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
@@ -932,8 +1068,10 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return { items, next_cursor: fim < todas.length ? String(fim) : null } as T;
   }
 
-  // `me` é o usuário logado, não um perfil visitado: fica fora destas regras.
-  if (partes[0] === 'users' && partes[1] !== 'me' && method === 'GET') {
+  // `me` é o usuário logado, não um perfil visitado: fica fora destas regras,
+  // menos nas abas de eventos, em que é o dono.
+  const ehAbasDoDono = partes[1] === 'me' && partes[2] === 'events' && partes.length === 3;
+  if (partes[0] === 'users' && (partes[1] !== 'me' || ehAbasDoDono) && method === 'GET') {
     const userId = partes[1] ?? '';
 
     if (partes.length === 2) {
@@ -942,27 +1080,43 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     if (partes.length === 3 && partes[2] === 'events') {
-      await erroDoUsuario(userId, 'eventos');
-      if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
+      const ehDono = userId === 'me';
+      if (!ehDono) {
+        await erroDoUsuario(userId, 'eventos');
+        if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
+      }
 
       const params = new URLSearchParams(path.split('?')[1] ?? '');
       const tab = params.get('tab');
       const cursor = params.get('cursor');
       const limite = Number(params.get('limit') ?? LIMITE_PADRAO_DE_EVENTOS);
+      const abasPermitidas = ehDono ? ABAS_DO_DONO : ABAS_DE_VISITANTE;
       if ((tab === null) !== (cursor === null)) throw new MockApiError(400, 'Invalid tab');
-      if (tab !== null && tab !== 'history' && tab !== 'created') throw new MockApiError(400, 'Invalid tab');
+      if (tab !== null && !abasPermitidas.some((aba) => aba === tab)) throw new MockApiError(400, 'Invalid tab');
       if (!Number.isInteger(limite) || limite < 1 || limite > 100 || (cursor !== null && !/^\d+$/.test(cursor))) {
         throw new MockApiError(400, 'Invalid pagination parameters');
       }
       if (userId === 'events-page-boom' && cursor !== null) throw new MockApiError(500, 'Internal server error');
+      if (ehDono && cenarioPerfilProprio === 'error' && cursor === null) {
+        throw new MockApiError(500, 'Internal server error');
+      }
+      if (ehDono && cenarioPerfilProprio === 'error-page' && cursor !== null) {
+        throw new MockApiError(500, 'Internal server error');
+      }
 
-      const pagina = (aba: AbaDeVisitante) =>
-        tab === null || tab === aba ? paginaDeEventos(eventosDaAba(userId, aba), cursor, limite) : null;
+      const eventos = (aba: UserEventsTab) => {
+        if (ehDono) return eventosDoDono(aba);
+        return aba === 'history' || aba === 'created' ? eventosDaAba(userId, aba) : [];
+      };
+      const pagina = (aba: UserEventsTab) =>
+        abasPermitidas.includes(aba) && (tab === null || tab === aba)
+          ? paginaDeEventos(eventos(aba), cursor, limite)
+          : null;
       const abas: UserEventsTabs = {
         history: pagina('history'),
         created: pagina('created'),
-        interests: null,
-        confirmed: null,
+        interests: pagina('interests'),
+        confirmed: pagina('confirmed'),
       };
       return abas as T;
     }
