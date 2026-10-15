@@ -1,4 +1,4 @@
-import type { EventPrivacy, UserType } from '@/types/event';
+import type { EventPrivacy, ParticipationStatus, UserType } from '@/types/event';
 
 export type ConnectionStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
 
@@ -35,16 +35,23 @@ export interface ConnectionRequestResult {
 export interface UserEventItem {
   event_id: string;
   title: string;
-  event_date: string | null;
+  event_date: string;
   location_name: string | null;
   cover_photo_url: string | null;
   privacy: EventPrivacy;
+  /** Sempre `null` para quem visita; para o dono, `CONFIRMED` quando ele confirmou presença. */
+  participation_status: ParticipationStatus | null;
 }
 
 export interface UserEventsPage {
   items: UserEventItem[];
   next_cursor: string | null;
 }
+
+export type UserEventsTab = 'history' | 'created' | 'interests' | 'confirmed';
+
+/** `null` é aba não permitida a quem pede; aba permitida e vazia vem com `items` vazio. */
+export type UserEventsTabs = Record<UserEventsTab, UserEventsPage | null>;
 
 export interface UserPhoto {
   photo_id: string;

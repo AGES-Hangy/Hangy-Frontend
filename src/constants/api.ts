@@ -1,3 +1,5 @@
+import type { UserEventsTab } from '@/types/user';
+
 export const API_BASE_URL = 'http://localhost:8000';
 
 /**
@@ -78,7 +80,20 @@ export const endpoints = {
     `/events/${eventId}/participants/${participantId}`,
   myCreatedEvents: () => '/users/me/events/created',
   user: (userId: string) => `/users/${encodeURIComponent(userId)}`,
-  userEvents: (userId: string) => `/users/${encodeURIComponent(userId)}/events`,
+  /** Sem tab, vem a primeira página de cada aba permitida. */
+  userEvents: (
+    userId: string,
+    options?: { limit?: number } | { tab: UserEventsTab; cursor: string; limit?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (options && 'tab' in options) {
+      params.set('tab', options.tab);
+      params.set('cursor', options.cursor);
+    }
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    const query = params.toString();
+    return `/users/${encodeURIComponent(userId)}/events${query ? `?${query}` : ''}`;
+  },
   connectionRequests: () => '/connections',
   businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
   userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
