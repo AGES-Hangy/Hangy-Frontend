@@ -5,7 +5,14 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
-import type { ConnectionRequestResult, UserEventItem, UserPhoto, UserProfile } from '@/types/user';
+import type {
+  ConnectionRequestResult,
+  UserEventItem,
+  UserEventsPage,
+  UserEventsTabs,
+  UserPhoto,
+  UserProfile,
+} from '@/types/user';
 import { API_TIMEOUT_MS } from '@/constants/api';
 
 /**
@@ -48,24 +55,30 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  *
  * Nas rotas de usuário, o `user_id` escolhe o cenário (`/UserProfile?id=pending`):
  *
- * | `user_id`     | Perfil                                    | Eventos           |
- * | ------------- | ----------------------------------------- | ----------------- |
- * | qualquer      | Pessoa sem conexão (Conectar)             | 3 eventos         |
- * | `pending`     | Pessoa com solicitação enviada            | 3 eventos         |
- * | `connected`   | Pessoa conectada                          | 3 eventos         |
- * | `business`    | Estabelecimento sem seguir                | 3 eventos         |
- * | `following`   | Estabelecimento seguido                   | 3 eventos         |
- * | `minimal`     | Sem nome, bio, foto e tags                | Lista vazia       |
- * | `events-boom` | Pessoa sem conexão                        | `500`             |
- * | `missing`     | `404 User not found`                      | `404`             |
- * | `boom`        | `500`                                     | `500`             |
- * | `offline`     | Falha de rede                             | Falha de rede     |
- * | `slow`        | Timeout, após `API_TIMEOUT_MS`            | Timeout           |
- * | `flaky`       | 1ª chamada OK, depois `500`               | Idem              |
- * | `flaky-slow`  | 1ª chamada OK, depois timeout             | Idem              |
+ * | `user_id`          | Perfil                                    | Eventos                |
+ * | ------------------ | ----------------------------------------- | ---------------------- |
+ * | qualquer           | Pessoa sem conexão (Conectar)             | 3 por aba              |
+ * | `pending`          | Pessoa com solicitação enviada            | 3 por aba              |
+ * | `connected`        | Pessoa conectada                          | 3 por aba              |
+ * | `business`         | Estabelecimento sem seguir                | 3 por aba              |
+ * | `following`        | Estabelecimento seguido                   | 3 por aba              |
+ * | `minimal`          | Sem nome, bio, foto e tags                | Abas vazias            |
+ * | `events-boom`      | Pessoa sem conexão                        | `500`                  |
+ * | `many-events`      | Pessoa sem conexão                        | 25 por aba, 2 páginas  |
+ * | `events-page-boom` | Pessoa sem conexão                        | 25 por aba, 2ª: `500`  |
+ * | `missing`          | `404 User not found`                      | `404`                  |
+ * | `boom`             | `500`                                     | `500`                  |
+ * | `offline`          | Falha de rede                             | Falha de rede          |
+ * | `slow`             | Timeout, após `API_TIMEOUT_MS`            | Timeout                |
+ * | `flaky`            | 1ª chamada OK, depois `500`               | Idem                   |
+ * | `flaky-slow`       | 1ª chamada OK, depois timeout             | Idem                   |
  *
  * `flaky` e `flaky-slow` contam as chamadas por rota; recarregar o app (ou
  * `resetMock`) zera a contagem.
+ *
+ * `GET /users/{id}/events` devolve as abas de quem visita, `history` (encerrados)
+ * e `created` (criados e não encerrados), com `interests` e `confirmed` em
+ * `null`. Com `tab` e `cursor` vem só a continuação daquela aba.
  *
  * Conectar (`POST /connections`), seguir (`POST`/`DELETE
  * /businesses/{id}/follow`) e bloquear (`POST /users/{id}/block`) alteram o
@@ -376,7 +389,7 @@ function compartilhar(eventId: string): EventShare {
   };
 }
 
-const EVENTOS_DO_USUARIO: UserEventItem[] = [
+const EVENTOS_CRIADOS_DO_USUARIO: UserEventItem[] = [
   {
     event_id: 'guest',
     title: 'Futebol na PUC',
@@ -405,6 +418,70 @@ const EVENTOS_DO_USUARIO: UserEventItem[] = [
     participation_status: null,
   },
 ];
+
+const EVENTOS_PASSADOS_DO_USUARIO: UserEventItem[] = [
+  {
+    event_id: 'trilha-morro',
+    title: 'Trilha no Morro do Osso',
+    event_date: '2026-09-20T12:00:00Z',
+    location_name: 'Morro do Osso',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-trilha/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'brunch-moinhos',
+    title: 'Brunch no Moinhos',
+    event_date: '2026-08-30T14:00:00Z',
+    location_name: 'Moinhos de Vento',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-brunch/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'cinema-casa',
+    title: 'Cinema na Casa de Cultura',
+    event_date: '2026-07-12T22:00:00Z',
+    location_name: 'Casa de Cultura Mario Quintana',
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const LIMITE_PADRAO_DE_EVENTOS = 20;
+const TOTAL_DE_EVENTOS_NA_PAGINACAO = 25;
+const UM_DIA_MS = 24 * 60 * 60 * 1000;
+const COM_MUITOS_EVENTOS = new Set(['many-events', 'events-page-boom']);
+
+type AbaDeVisitante = 'history' | 'created';
+
+function muitosEventos(aba: AbaDeVisitante): UserEventItem[] {
+  const primeiro = aba === 'created' ? Date.UTC(2026, 10, 1, 19) : Date.UTC(2026, 8, 30, 19);
+  const passo = aba === 'created' ? UM_DIA_MS : -UM_DIA_MS;
+  return Array.from({ length: TOTAL_DE_EVENTOS_NA_PAGINACAO }, (_, indice) => ({
+    event_id: `${aba}-${indice + 1}`,
+    title: `${aba === 'created' ? 'Evento criado' : 'Evento passado'} ${indice + 1}`,
+    event_date: new Date(primeiro + indice * passo).toISOString(),
+    location_name: 'Porto Alegre',
+    cover_photo_url: `https://picsum.photos/seed/hangy-${aba}-${indice + 1}/900/600`,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  }));
+}
+
+function eventosDaAba(userId: string, aba: AbaDeVisitante): UserEventItem[] {
+  if (userId === 'minimal') return [];
+  if (COM_MUITOS_EVENTOS.has(userId)) return muitosEventos(aba);
+  return aba === 'created' ? EVENTOS_CRIADOS_DO_USUARIO : EVENTOS_PASSADOS_DO_USUARIO;
+}
+
+function paginaDeEventos(eventos: UserEventItem[], cursor: string | null, limite: number): UserEventsPage {
+  const inicio = cursor ? Number(cursor) : 0;
+  const items = eventos.slice(inicio, inicio + limite);
+  const fim = inicio + items.length;
+  return { items, next_cursor: fim < eventos.length ? String(fim) : null };
+}
 
 type RelacaoDoUsuario = Partial<
   Pick<UserProfile, 'connection_status' | 'is_following' | 'connections_count'>
@@ -846,8 +923,27 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (partes.length === 3 && partes[2] === 'events') {
       await erroDoUsuario(userId, 'eventos');
       if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
-      const items = userId === 'minimal' ? [] : EVENTOS_DO_USUARIO;
-      return { items, next_cursor: null } as T;
+
+      const params = new URLSearchParams(path.split('?')[1] ?? '');
+      const tab = params.get('tab');
+      const cursor = params.get('cursor');
+      const limite = Number(params.get('limit') ?? LIMITE_PADRAO_DE_EVENTOS);
+      if ((tab === null) !== (cursor === null)) throw new MockApiError(400, 'Invalid tab');
+      if (tab !== null && tab !== 'history' && tab !== 'created') throw new MockApiError(400, 'Invalid tab');
+      if (!Number.isInteger(limite) || limite < 1 || limite > 100 || (cursor !== null && !/^\d+$/.test(cursor))) {
+        throw new MockApiError(400, 'Invalid pagination parameters');
+      }
+      if (userId === 'events-page-boom' && cursor !== null) throw new MockApiError(500, 'Internal server error');
+
+      const pagina = (aba: AbaDeVisitante) =>
+        tab === null || tab === aba ? paginaDeEventos(eventosDaAba(userId, aba), cursor, limite) : null;
+      const abas: UserEventsTabs = {
+        history: pagina('history'),
+        created: pagina('created'),
+        interests: null,
+        confirmed: null,
+      };
+      return abas as T;
     }
   }
 
