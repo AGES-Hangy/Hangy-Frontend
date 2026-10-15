@@ -1,15 +1,24 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
+import { EmptyState } from '@/components/EmptyState';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { ProfileHeader } from '@/components/Profile/ProfileHeader';
+import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
+import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useMyProfile } from '@/hooks/useMyProfile';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { removeToken } from '@/utils/auth';
+import type { LoadError } from '@/utils/apiErrors';
 
 export default function Profile() {
   // Sem `userId` é o perfil próprio; com, é o de outra pessoa ou de um
@@ -18,8 +27,16 @@ export default function Profile() {
   const { userId, name } = useLocalSearchParams<{ userId?: string; name?: string }>();
   const isOwnProfile = !userId;
 
-  const { user } = useCurrentUser();
+  const { user, error: userError, refetch: refetchUser } = useCurrentUser();
+  // Só a pessoa física tem `GET /users/me/profile`; o estabelecimento fica no
+  // placeholder até a etapa do perfil comercial.
+  const isPersonalProfile = isOwnProfile && user?.userType === 'PERSONAL';
+  const { profile, counts, error: profileError, reload: reloadProfile } = useMyProfile({
+    enabled: isPersonalProfile,
+  });
   const { unregisterDevice } = useUnregisterDevice();
+  const { isOffline } = useNetworkStatus();
+  const { addToast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -29,6 +46,10 @@ export default function Profile() {
     await unregisterDevice({ isLoggingOut: true });
     await removeToken();
     router.replace('/Login');
+  }
+
+  function openEditProfile() {
+    router.push({ pathname: '/EditProfile', params: user ? { userId: user.userId } : {} });
   }
 
   useTopAppBar(
@@ -52,6 +73,88 @@ export default function Profile() {
           },
         },
   );
+
+  // Tipo do último erro de recarga já avisado: cada volta ao foco gera um erro
+  // novo, e sem a chave a mesma falha seria avisada a cada retorno à aba.
+  const feedbackKey = useRef<string | null>(null);
+
+  const retryProfile = useCallback(() => {
+    feedbackKey.current = null;
+    void reloadProfile();
+  }, [reloadProfile]);
+
+  const reloadFailure = profile && profileError ? profileError : null;
+
+  useEffect(() => {
+    if (!profileError) feedbackKey.current = null;
+  }, [profileError]);
+
+  useEffect(() => {
+    if (!reloadFailure || feedbackKey.current === reloadFailure.kind) return;
+    feedbackKey.current = reloadFailure.kind;
+
+    if (reloadFailure.kind === 'timeout' || reloadFailure.kind === 'server') {
+      addToast({ type: 'error', message: reloadFailure.message, actionLabel: 'Tentar de novo', onAction: retryProfile });
+    } else if (!isOffline) {
+      addToast({ type: 'error', message: reloadFailure.message });
+    }
+  }, [addToast, isOffline, reloadFailure, retryProfile]);
+
+  const logoutButton = (
+    <Button
+      label="Sair da conta"
+      variant="Secondary"
+      onPress={handleLogout}
+      isLoading={isLoggingOut}
+      style={styles.fullWidth}
+    />
+  );
+
+  if (isOwnProfile && !user) {
+    return userError ? (
+      <LoadErrorState error={userError} onRetry={refetchUser} logoutButton={logoutButton} offline={isOffline} />
+    ) : (
+      <ProfileSkeleton offline={isOffline} />
+    );
+  }
+
+  if (isPersonalProfile) {
+    if (!profile || !counts) {
+      return profileError ? (
+        <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} offline={isOffline} />
+      ) : (
+        <ProfileSkeleton offline={isOffline} />
+      );
+    }
+
+    const eventsCount = counts.confirmed + counts.past;
+
+    return (
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={[styles.content, isOffline && styles.contentOffline]}>
+          <ProfileHeader
+            photoUrl={profile.photo_url}
+            avatarVariant="User"
+            stats={[
+              { value: profile.connections_count, label: profile.connections_count === 1 ? 'Conexão' : 'Conexões' },
+              { value: eventsCount, label: eventsCount === 1 ? 'Evento' : 'Eventos' },
+              { value: counts.photos, label: counts.photos === 1 ? 'Foto' : 'Fotos' },
+            ]}
+            name={profile.name?.trim() || null}
+            description={profile.description?.trim() || null}
+            tags={profile.tags}
+            actions={
+              <Button label="Editar perfil" variant="Secondary" onPress={openEditProfile} style={styles.fullWidth} />
+            }
+          />
+
+          {/* No Figma, "Sair da conta" fica no Editar perfil; aqui é o único logout do app por enquanto. */}
+          <View style={styles.logoutRow}>{logoutButton}</View>
+        </ScrollView>
+        {isOffline && <OfflineBanner />}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -82,6 +185,43 @@ export default function Profile() {
   );
 }
 
+function ProfileSkeleton({ offline }: { offline: boolean }) {
+  return (
+    <View style={styles.screen}>
+      <View
+        style={[styles.content, offline && styles.contentOffline]}
+        accessible
+        accessibilityLabel="Carregando perfil"
+        accessibilityRole="progressbar"
+      >
+        <ProfileHeaderSkeleton />
+      </View>
+      {offline && <OfflineBanner />}
+    </View>
+  );
+}
+
+function LoadErrorState({
+  error,
+  onRetry,
+  logoutButton,
+  offline,
+}: {
+  error: LoadError;
+  onRetry: () => void;
+  logoutButton: ReactNode;
+  offline: boolean;
+}) {
+  return (
+    <View style={styles.stateScreen}>
+      <EmptyState context="Search" title={error.title} text={error.message} cta ctaLabel="Tentar de novo" onCtaPress={onRetry} />
+      {/* Sem o perfil, esta é a única saída da conta. */}
+      <View style={styles.logoutRow}>{logoutButton}</View>
+      {offline && <OfflineBanner />}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -96,5 +236,30 @@ const styles = StyleSheet.create({
   },
   logout: {
     marginTop: spacing[24],
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.surface.card,
+  },
+  stateScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: colors.surface.card,
+  },
+  content: {
+    paddingTop: spacing[16],
+    paddingBottom: spacing[24],
+    gap: spacing[8],
+  },
+  // Mesmo respiro de `UserProfile`: o `OfflineBanner` é absoluto e cobriria o topo.
+  contentOffline: {
+    paddingTop: spacing[64],
+  },
+  logoutRow: {
+    paddingTop: spacing[16],
+    paddingHorizontal: spacing[16],
+  },
+  fullWidth: {
+    alignSelf: 'stretch',
   },
 });
