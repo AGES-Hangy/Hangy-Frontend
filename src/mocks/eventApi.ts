@@ -384,6 +384,7 @@ const EVENTOS_DO_USUARIO: UserEventItem[] = [
     location_name: 'DRY Moments',
     cover_photo_url: 'https://picsum.photos/seed/hangy-evento/900/600',
     privacy: 'PUBLIC',
+    participation_status: null,
   },
   {
     event_id: 'pelada-parcao',
@@ -392,6 +393,7 @@ const EVENTOS_DO_USUARIO: UserEventItem[] = [
     location_name: 'Parcão',
     cover_photo_url: 'https://picsum.photos/seed/hangy-parcao/900/600',
     privacy: 'PUBLIC',
+    participation_status: null,
   },
   {
     event_id: 'corrida-orla',
@@ -400,6 +402,7 @@ const EVENTOS_DO_USUARIO: UserEventItem[] = [
     location_name: 'Orla do Guaíba',
     cover_photo_url: null,
     privacy: 'PUBLIC',
+    participation_status: null,
   },
 ];
 
