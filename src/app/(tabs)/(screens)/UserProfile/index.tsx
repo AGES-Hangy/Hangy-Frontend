@@ -71,11 +71,12 @@ export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { profile, isLoading, error, reload, patchProfile } = useUserProfile(id);
   const {
-    events,
+    tabs: eventTabs,
     isLoading: isLoadingEvents,
     error: eventsError,
     reload: reloadEvents,
   } = useUserEvents(id);
+  const events = eventTabs ? (eventTabs.created?.items ?? []) : null;
   const { isOffline } = useNetworkStatus();
   const { addToast } = useToast();
   const { connect, isLoading: isConnecting } = useConnections();
