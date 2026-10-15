@@ -102,6 +102,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `business-boom`    | Sem seguir, 1204 seguidores  | Seguir: `500`                               |
  * | `following-boom`   | Seguindo, 1205 seguidores    | Deixar de seguir: `500`                     |
  * | `follow-gone`      | Sem seguir, 1204 seguidores  | Seguir: `404`, o GET seguinte vem `404`     |
+ * | `unfollow-gone`    | Seguindo, 1205 seguidores    | Deixar de seguir: `404`, GET seguinte `404` |
  * | `one-connection`   | Sem conexão, 1 conexão       | Conectar: `201`, passa a PENDING            |
  * | `one-follower`     | Sem seguir, 1 seguidor       | Seguir: `204`, +1                           |
  * | `block-already`    | Sem conexão                  | Bloquear: `409`, o GET seguinte vem `404`   |
@@ -495,9 +496,10 @@ const ESTABELECIMENTOS = new Set([
   'business-boom',
   'following-boom',
   'follow-gone',
+  'unfollow-gone',
   'one-follower',
 ]);
-const SEGUIDOS_DE_INICIO = new Set(['following', 'following-boom']);
+const SEGUIDOS_DE_INICIO = new Set(['following', 'following-boom', 'unfollow-gone']);
 const SEGUIDORES_INICIAIS = 1204;
 /** Contadores no singular, para conferir "1 Conexão" e "1 Seguidor". */
 const CONTAGEM_INICIAL: Record<string, number> = { 'one-connection': 1, 'one-follower': 1 };
@@ -1039,6 +1041,10 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (method === 'DELETE') {
       if (!ehEstabelecimento) throw new MockApiError(404, 'Business not found');
       if (businessId === 'following-boom') throw new MockApiError(500, 'Internal server error');
+      if (businessId === 'unfollow-gone') {
+        db.usuariosIndisponiveis.push(businessId);
+        throw new MockApiError(404, 'Business not found');
+      }
       if (estabelecimento.is_following) {
         atualizarRelacao(businessId, {
           is_following: false,
