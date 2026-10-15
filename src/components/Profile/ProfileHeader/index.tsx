@@ -44,7 +44,13 @@ export function ProfileHeader({
               const value = countFormatter.format(stat.value);
               return (
                 <Fragment key={stat.label}>
-                  {index > 0 && <View style={styles.statDivider} />}
+                  {index > 0 && (
+                    <>
+                      <View style={styles.statSpacer} />
+                      <View style={styles.statDivider} />
+                      <View style={styles.statSpacer} />
+                    </>
+                  )}
                   <View style={styles.stat} accessible accessibilityLabel={`${value} ${stat.label}`}>
                     <Text style={styles.statValue}>{value}</Text>
                     <Text style={styles.statLabel}>{stat.label}</Text>
@@ -96,11 +102,17 @@ const styles = StyleSheet.create({
     gap: spacing[20],
     paddingHorizontal: spacing[16],
   },
+  // Nos frames, o bloco abraça os números e não se estica até a margem.
   stats: {
-    flex: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+  },
+  // O vão de 24–26 entre número e divisor nos frames. É uma caixa, e não `gap`,
+  // para encolher em telas estreitas em vez de empurrar o último número para fora.
+  statSpacer: {
+    width: spacing[24],
+    flexShrink: 1,
   },
   stat: {
     alignItems: 'center',
