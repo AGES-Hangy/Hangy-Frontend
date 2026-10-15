@@ -2,48 +2,34 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
-import { EventCard } from '@/components/EventCard';
-import type { Event } from '@/components/EventCard/types';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { ProfileEventList } from '@/components/Profile/ProfileEventList';
+import { ProfileEventListSkeleton } from '@/components/Profile/ProfileEventListSkeleton';
 import { ProfileHeader } from '@/components/Profile/ProfileHeader';
 import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
 import { ProfileTabs } from '@/components/ProfileTabs';
 import { RelationshipButton } from '@/components/RelationshipButton';
-import { SectionEmptyState } from '@/components/SectionEmptyState';
 import { SectionHeader } from '@/components/SectionHeader';
 import { useToast } from '@/components/Toast';
 import { colors } from '@/constants/colors';
-import { layout, radius, spacing } from '@/constants/layout';
+import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useBusinessFollow } from '@/hooks/useBusinessFollow';
 import { useConnections } from '@/hooks/useConnections';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import type { UserEventItem, UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
-import type { LoadError } from '@/utils/apiErrors';
+import type { UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
 
-const SKELETON_CARD_COUNT = 3;
 /**
  * Espera o fade de saída do `Modal` antes de mover o foco do leitor de tela:
  * com o diálogo ainda saindo, o VoiceOver ignora o novo foco.
  */
 const MODAL_FADE_OUT_MS = 350;
-
-function toEventCardEvent(item: UserEventItem): Event {
-  return {
-    id: item.event_id,
-    title: item.title,
-    date: item.event_date,
-    location: item.location_name,
-    imageUrl: item.cover_photo_url ?? '',
-    privacy: item.privacy,
-  };
-}
 
 function displayName(profile: UserProfileData | null) {
   return profile?.name?.trim() || null;
@@ -56,6 +42,11 @@ const PERSON_EVENTS_TABS = [
   { value: 'created', label: 'Eventos' },
 ] as const satisfies ReadonlyArray<{ value: PersonEventsTab; label: string }>;
 
+const EMPTY_EVENTS: Record<PersonEventsTab, { title: string; text: string }> = {
+  history: { title: 'Nenhum evento no histórico', text: 'Os eventos que já aconteceram aparecem aqui.' },
+  created: { title: 'Nenhum evento por aqui', text: 'Quando este perfil tiver eventos, eles aparecem aqui.' },
+};
+
 function visibilityNotice(profileName: string | null, isBusiness: boolean) {
   if (isBusiness) {
     return profileName
@@ -65,11 +56,6 @@ function visibilityNotice(profileName: string | null, isBusiness: boolean) {
   return profileName
     ? `Você vê apenas os eventos públicos que ${profileName.split(/\s+/)[0]} criou.`
     : 'Você vê apenas os eventos públicos criados por este perfil.';
-}
-
-function loadedAnnouncement(count: number, isEnd: boolean) {
-  const loaded = count === 1 ? '1 evento carregado.' : `${count} eventos carregados.`;
-  return isEnd ? `${loaded} Fim da lista.` : loaded;
 }
 
 function goBack() {
@@ -88,12 +74,8 @@ export default function UserProfile() {
     loadMore,
   } = useUserEvents(id);
   const [personEventsTab, setPersonEventsTab] = useState<PersonEventsTab>('created');
-  const loadMoreButtonRef = useRef<View>(null);
-  // "Ver mais" em andamento: a aba e quantos itens ela tinha, para anunciar
-  // quantos chegaram e devolver o foco ao botão.
-  const pendingLoadMore = useRef<{ tab: UserEventsTab; countBefore: number } | null>(null);
-  const shownLoadMoreErrors = useRef(new Map<UserEventsTab, LoadError>());
   const { isOffline } = useNetworkStatus();
+  const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
   const { addToast } = useToast();
   const { connect, isLoading: isConnecting } = useConnections();
   const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
@@ -164,44 +146,6 @@ export default function UserProfile() {
   useEffect(() => {
     setPersonEventsTab('created');
   }, [id]);
-
-  useEffect(() => {
-    if (!eventTabs) return;
-    for (const tab of ['history', 'created'] as const) {
-      const loadMoreError = eventTabs[tab]?.loadMoreError;
-      if (!loadMoreError || shownLoadMoreErrors.current.get(tab) === loadMoreError) continue;
-      shownLoadMoreErrors.current.set(tab, loadMoreError);
-      if (!isOffline) {
-        addToast({ type: 'error', message: 'Não foi possível carregar mais eventos. Toque em Ver mais para tentar de novo.' });
-      }
-    }
-  }, [addToast, eventTabs, isOffline]);
-
-  useEffect(() => {
-    const pending = pendingLoadMore.current;
-    const tabState = pending && eventTabs ? eventTabs[pending.tab] : null;
-    if (!pending || !tabState || tabState.loadingMore) return;
-    pendingLoadMore.current = null;
-
-    const added = tabState.items.length - pending.countBefore;
-    if (added > 0) AccessibilityInfo.announceForAccessibility(loadedAnnouncement(added, !tabState.hasMore));
-    // Durante a carga o botão fica desabilitado, e na Web isso tira o foco dele.
-    if (
-      tabState.hasMore &&
-      Platform.OS === 'web' &&
-      typeof document !== 'undefined' &&
-      document.activeElement === document.body
-    ) {
-      loadMoreButtonRef.current?.focus();
-    }
-  }, [eventTabs]);
-
-  const handleLoadMore = useCallback((tab: UserEventsTab) => {
-    const tabState = eventTabs?.[tab];
-    if (!tabState || tabState.loadingMore) return;
-    pendingLoadMore.current = { tab, countBefore: tabState.items.length };
-    void loadMore(tab);
-  }, [eventTabs, loadMore]);
 
   useEffect(() => {
     if (!isLoading && !error && !isLoadingEvents && !eventsError) feedbackKey.current = null;
@@ -416,58 +360,16 @@ export default function UserProfile() {
           <Text style={styles.visibilityNotice}>{visibilityNotice(name, isBusiness)}</Text>
         )}
 
-        <View style={styles.list}>
-          {events === null ? (
-            eventsError ? (
-              <View style={styles.sectionError}>
-                <SectionEmptyState
-                  icon="circle-alert"
-                  title="Não foi possível carregar os eventos"
-                  text="Tente de novo."
-                />
-                <Button label="Tentar de novo" variant="Tertiary" size="MD" onPress={retryEvents} />
-              </View>
-            ) : (
-              <EventsSkeleton />
-            )
-          ) : events.length === 0 ? (
-            activeEventsTab === 'history' ? (
-              <SectionEmptyState
-                icon="calendar-x"
-                title="Nenhum evento no histórico"
-                text="Os eventos que já aconteceram aparecem aqui."
-              />
-            ) : (
-              <SectionEmptyState
-                icon="calendar-x"
-                title="Nenhum evento por aqui"
-                text="Quando este perfil tiver eventos, eles aparecem aqui."
-              />
-            )
-          ) : (
-            <>
-              {events.map((item) => (
-                <EventCard
-                  key={item.event_id}
-                  variant="Compact"
-                  event={toEventCardEvent(item)}
-                  onPress={() => router.push(`/EventDetail?id=${item.event_id}`)}
-                />
-              ))}
-              {activeEvents?.hasMore && (
-                <Button
-                  ref={loadMoreButtonRef}
-                  label="Ver mais"
-                  variant="Tertiary"
-                  size="MD"
-                  isLoading={activeEvents.loadingMore}
-                  onPress={() => handleLoadMore(activeEventsTab)}
-                  style={styles.loadMore}
-                />
-              )}
-            </>
-          )}
-        </View>
+        <ProfileEventList
+          items={events}
+          loadFailed={eventsError !== null}
+          onRetry={retryEvents}
+          empty={EMPTY_EVENTS[activeEventsTab]}
+          hasMore={activeEvents?.hasMore ?? false}
+          isLoadingMore={activeEvents?.loadingMore ?? false}
+          onLoadMore={() => handleLoadMore(activeEventsTab)}
+          loadMoreButtonRef={loadMoreButtonRef}
+        />
       </ScrollView>
 
       <Dialog
@@ -485,21 +387,6 @@ export default function UserProfile() {
   );
 }
 
-function EventsSkeleton() {
-  return (
-    <View
-      style={styles.skeletonList}
-      accessible
-      accessibilityLabel="Carregando eventos"
-      accessibilityRole="progressbar"
-    >
-      {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
-        <View key={index} style={[styles.skeletonBlock, styles.skeletonCard]} />
-      ))}
-    </View>
-  );
-}
-
 function UserProfileSkeleton({ offline }: { offline: boolean }) {
   return (
     <View
@@ -509,9 +396,7 @@ function UserProfileSkeleton({ offline }: { offline: boolean }) {
       accessibilityRole="progressbar"
     >
       <ProfileHeaderSkeleton />
-      <View style={styles.list}>
-        <EventsSkeleton />
-      </View>
+      <ProfileEventListSkeleton />
     </View>
   );
 }
@@ -544,32 +429,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     paddingHorizontal: spacing[16],
   },
-  loadMore: {
-    alignSelf: 'center',
-  },
   visibilityNotice: {
     ...typography.bodyS,
     color: colors.text.secondary,
     paddingTop: spacing[4],
     paddingHorizontal: spacing[16],
-  },
-  list: {
-    gap: spacing[12],
-    paddingTop: spacing[12],
-    paddingHorizontal: spacing[16],
-  },
-  sectionError: {
-    gap: spacing[12],
-  },
-  skeletonList: {
-    gap: spacing[12],
-  },
-  skeletonBlock: {
-    backgroundColor: colors.surface.sunken,
-    borderRadius: radius.sm,
-  },
-  skeletonCard: {
-    height: layout.eventCard.compactHeight,
-    borderRadius: radius.md,
   },
 });
