@@ -1,15 +1,15 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
-import { Chip } from '@/components/Chip';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { EventCard } from '@/components/EventCard';
 import type { Event } from '@/components/EventCard/types';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { ProfileHeader } from '@/components/Profile/ProfileHeader';
+import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
 import { ProfileTabs } from '@/components/ProfileTabs';
 import { RelationshipButton } from '@/components/RelationshipButton';
 import { SectionEmptyState } from '@/components/SectionEmptyState';
@@ -27,10 +27,6 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import type { UserEventItem, UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
 import type { LoadError } from '@/utils/apiErrors';
 
-/** Avatar `MD` do código, que é o `XL` (80) do frame. */
-const AVATAR_DIAMETER = 80;
-/** Divisor vertical entre os números do cabeçalho, 1 × 28 no frame. */
-const STAT_DIVIDER_HEIGHT = 28;
 const SKELETON_CARD_COUNT = 3;
 /**
  * Espera o fade de saída do `Modal` antes de mover o foco do leitor de tela:
@@ -47,12 +43,6 @@ function toEventCardEvent(item: UserEventItem): Event {
     imageUrl: item.cover_photo_url ?? '',
     privacy: item.privacy,
   };
-}
-
-const countFormatter = new Intl.NumberFormat('pt-BR');
-
-function formatCount(value: number) {
-  return countFormatter.format(value);
 }
 
 function displayName(profile: UserProfileData | null) {
@@ -365,7 +355,6 @@ export default function UserProfile() {
   }
 
   const isBusiness = visibleProfile.user_type === 'BUSINESS';
-  const avatarSource = visibleProfile.photo_url ? { uri: visibleProfile.photo_url } : undefined;
   const canConnect = !isBusiness && visibleProfile.connection_status === null;
   const relationshipAction = isBusiness
     ? visibleProfile.is_following
@@ -378,7 +367,7 @@ export default function UserProfile() {
   const singular = count === 1;
   const stats = [
     {
-      value: formatCount(count),
+      value: count,
       label: isBusiness ? (singular ? 'Seguidor' : 'Seguidores') : singular ? 'Conexão' : 'Conexões',
     },
   ];
@@ -386,58 +375,16 @@ export default function UserProfile() {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, isOffline && styles.contentOffline]}>
-        <View style={styles.header}>
-          <View style={styles.top}>
-            {/* Decorativo: o nome vem logo abaixo e o leitor de tela não precisa anunciar a foto. */}
-            {isBusiness ? (
-              <Avatar variant="Store" size="MD" source={avatarSource} />
-            ) : (
-              <Avatar size="MD" source={avatarSource} />
-            )}
-
-            {stats.length > 0 && (
-              <View style={styles.stats}>
-                {stats.map((stat, index) => (
-                  <Fragment key={stat.label}>
-                    {index > 0 && <View style={styles.statDivider} />}
-                    <View style={styles.stat} accessible accessibilityLabel={`${stat.value} ${stat.label}`}>
-                      <Text style={styles.statValue}>{stat.value}</Text>
-                      <Text style={styles.statLabel}>{stat.label}</Text>
-                    </View>
-                  </Fragment>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {(name || description) && (
-            <View style={styles.identity}>
-              {name && (
-                <Text style={styles.name} accessibilityRole="header">
-                  {name}
-                </Text>
-              )}
-              {description && <Text style={styles.description}>{description}</Text>}
-            </View>
-          )}
-
-          {visibleProfile.tags.length > 0 && (
-            // O `Chip` é sempre um botão. As tags aqui não são tocáveis, então o
-            // grupo vira um único elemento para o leitor de tela e não recebe toque.
-            <View
-              style={styles.tags}
-              accessible
-              accessibilityLabel={`Interesses: ${visibleProfile.tags.map((tag) => tag.name).join(', ')}`}
-            >
-              {visibleProfile.tags.map((tag) => (
-                <Chip key={tag.id} label={tag.name} size="sm" categoryType="macro" isSelected />
-              ))}
-            </View>
-          )}
-
-          {/* Sem ação na recusa: o vínculo recusado continua ativo no backend e um novo pedido daria 409. */}
-          {visibleProfile.connection_status !== 'REJECTED' && (
-            <View style={styles.actions}>
+        <ProfileHeader
+          photoUrl={visibleProfile.photo_url}
+          avatarVariant={isBusiness ? 'Store' : 'User'}
+          stats={stats}
+          name={name}
+          description={description}
+          tags={visibleProfile.tags}
+          actions={
+            // Sem ação na recusa: o vínculo recusado continua ativo no backend e um novo pedido daria 409.
+            visibleProfile.connection_status !== 'REJECTED' ? (
               <RelationshipButton
                 ref={relationshipButtonRef}
                 userType={visibleProfile.user_type}
@@ -448,9 +395,9 @@ export default function UserProfile() {
                 isLoading={isConnecting || isFollowPending}
                 style={styles.relationshipButton}
               />
-            </View>
-          )}
-        </View>
+            ) : null
+          }
+        />
 
         {isBusiness ? (
           <View style={styles.sectionTitle}>
@@ -561,15 +508,7 @@ function UserProfileSkeleton({ offline }: { offline: boolean }) {
       accessibilityLabel="Carregando perfil"
       accessibilityRole="progressbar"
     >
-      <View style={styles.header}>
-        <View style={styles.top}>
-          <View style={[styles.skeletonBlock, styles.skeletonAvatar]} />
-        </View>
-        <View style={styles.identity}>
-          <View style={[styles.skeletonBlock, styles.skeletonName]} />
-          <View style={[styles.skeletonBlock, styles.skeletonDescription]} />
-        </View>
-      </View>
+      <ProfileHeaderSkeleton />
       <View style={styles.list}>
         <EventsSkeleton />
       </View>
@@ -595,61 +534,6 @@ const styles = StyleSheet.create({
   // Mesmo respiro de `Notifications`: o `OfflineBanner` é absoluto e cobriria o topo.
   contentOffline: {
     paddingTop: spacing[64],
-  },
-  header: {
-    gap: spacing[12],
-  },
-  top: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[20],
-    paddingHorizontal: spacing[16],
-  },
-  stats: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stat: {
-    alignItems: 'center',
-    gap: spacing[4],
-  },
-  statValue: {
-    ...typography.h4,
-    color: colors.text.primary,
-  },
-  statLabel: {
-    ...typography.caption,
-    color: colors.text.tertiary,
-  },
-  statDivider: {
-    width: 1,
-    height: STAT_DIVIDER_HEIGHT,
-    backgroundColor: colors.border.default,
-  },
-  identity: {
-    gap: spacing[4],
-    paddingHorizontal: spacing[16],
-  },
-  name: {
-    ...typography.h3,
-    color: colors.text.primary,
-  },
-  description: {
-    ...typography.bodyS,
-    color: colors.text.secondary,
-  },
-  tags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-    pointerEvents: 'none',
-  },
-  actions: {
-    paddingTop: spacing[4],
-    paddingHorizontal: spacing[16],
   },
   relationshipButton: {
     alignSelf: 'stretch',
@@ -683,19 +567,6 @@ const styles = StyleSheet.create({
   skeletonBlock: {
     backgroundColor: colors.surface.sunken,
     borderRadius: radius.sm,
-  },
-  skeletonAvatar: {
-    width: AVATAR_DIAMETER,
-    height: AVATAR_DIAMETER,
-    borderRadius: radius.full,
-  },
-  skeletonName: {
-    width: '60%',
-    height: typography.h3.lineHeight,
-  },
-  skeletonDescription: {
-    width: '90%',
-    height: typography.bodyS.lineHeight,
   },
   skeletonCard: {
     height: layout.eventCard.compactHeight,
