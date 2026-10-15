@@ -64,8 +64,10 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `following`        | Estabelecimento seguido                   | 3 por aba              |
  * | `minimal`          | Sem nome, bio, foto e tags                | Abas vazias            |
  * | `events-boom`      | Pessoa sem conexão                        | `500`                  |
- * | `many-events`      | Pessoa sem conexão                        | 25 por aba, 2 páginas  |
- * | `events-page-boom` | Pessoa sem conexão                        | 25 por aba, 2ª: `500`  |
+ * | `many-events`      | Pessoa sem conexão                        | 45 por aba, 3 páginas  |
+ * | `events-page-boom` | Pessoa sem conexão                        | 45 por aba, 2ª: `500`  |
+ * | `events-flaky`     | Pessoa sem conexão                        | 1ª: `500`, depois 45   |
+ * | `long-flaky`       | Perfil: 1ª chamada OK, depois `500`       | 45 por aba             |
  * | `missing`          | `404 User not found`                      | `404`                  |
  * | `boom`             | `500`                                     | `500`                  |
  * | `offline`          | Falha de rede                             | Falha de rede          |
@@ -450,9 +452,9 @@ const EVENTOS_PASSADOS_DO_USUARIO: UserEventItem[] = [
 ];
 
 const LIMITE_PADRAO_DE_EVENTOS = 20;
-const TOTAL_DE_EVENTOS_NA_PAGINACAO = 25;
+const TOTAL_DE_EVENTOS_NA_PAGINACAO = 45;
 const UM_DIA_MS = 24 * 60 * 60 * 1000;
-const COM_MUITOS_EVENTOS = new Set(['many-events', 'events-page-boom']);
+const COM_MUITOS_EVENTOS = new Set(['many-events', 'events-page-boom', 'events-flaky', 'long-flaky']);
 
 type AbaDeVisitante = 'history' | 'created';
 
@@ -580,6 +582,23 @@ async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
   if (userId === 'slow') {
     await wait(API_TIMEOUT_MS);
     throw new MockTimeoutError();
+  }
+
+  // Só o perfil falha: o "Tentar de novo" do toast não pode recarregar a lista
+  // longa que já está na tela.
+  if (userId === 'long-flaky' && rota === 'perfil') {
+    const chave = `${rota}:${userId}`;
+    const chamadas = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+    db.chamadasDeUsuario[chave] = chamadas;
+    if (chamadas > 1) throw new MockApiError(500, 'Internal server error');
+  }
+
+  // Só a primeira carga dos eventos falha, para testar o "Tentar de novo" da seção.
+  if (userId === 'events-flaky' && rota === 'eventos') {
+    const chave = `${rota}:${userId}`;
+    const chamadas = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+    db.chamadasDeUsuario[chave] = chamadas;
+    if (chamadas === 1) throw new MockApiError(500, 'Internal server error');
   }
 
   if (userId === 'flaky' || userId === 'flaky-slow') {
