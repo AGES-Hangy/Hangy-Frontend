@@ -10,8 +10,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { EventCard } from '@/components/EventCard';
 import type { Event } from '@/components/EventCard/types';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { ProfileTabs } from '@/components/ProfileTabs';
 import { RelationshipButton } from '@/components/RelationshipButton';
 import { SectionEmptyState } from '@/components/SectionEmptyState';
+import { SectionHeader } from '@/components/SectionHeader';
 import { useToast } from '@/components/Toast';
 import { colors } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
@@ -22,7 +24,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import type { UserEventItem, UserProfile as UserProfileData } from '@/types/user';
+import type { UserEventItem, UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
+import type { LoadError } from '@/utils/apiErrors';
 
 /** Avatar `MD` do código, que é o `XL` (80) do frame. */
 const AVATAR_DIAMETER = 80;
@@ -56,10 +59,27 @@ function displayName(profile: UserProfileData | null) {
   return profile?.name?.trim() || null;
 }
 
+type PersonEventsTab = Extract<UserEventsTab, 'history' | 'created'>;
+
+const PERSON_EVENTS_TABS = [
+  { value: 'history', label: 'Histórico' },
+  { value: 'created', label: 'Eventos' },
+] as const satisfies ReadonlyArray<{ value: PersonEventsTab; label: string }>;
+
 function visibilityNotice(profileName: string | null, isBusiness: boolean) {
-  if (!profileName) return 'Você vê apenas os eventos públicos deste perfil.';
-  const owner = isBusiness ? profileName : profileName.split(/\s+/)[0];
-  return `Você vê apenas os eventos públicos de ${owner}.`;
+  if (isBusiness) {
+    return profileName
+      ? `Você vê apenas os eventos públicos de ${profileName}.`
+      : 'Você vê apenas os eventos públicos deste estabelecimento.';
+  }
+  return profileName
+    ? `Você vê apenas os eventos públicos que ${profileName.split(/\s+/)[0]} criou.`
+    : 'Você vê apenas os eventos públicos criados por este perfil.';
+}
+
+function loadedAnnouncement(count: number, isEnd: boolean) {
+  const loaded = count === 1 ? '1 evento carregado.' : `${count} eventos carregados.`;
+  return isEnd ? `${loaded} Fim da lista.` : loaded;
 }
 
 function goBack() {
@@ -75,8 +95,14 @@ export default function UserProfile() {
     isLoading: isLoadingEvents,
     error: eventsError,
     reload: reloadEvents,
+    loadMore,
   } = useUserEvents(id);
-  const events = eventTabs ? (eventTabs.created?.items ?? []) : null;
+  const [personEventsTab, setPersonEventsTab] = useState<PersonEventsTab>('created');
+  const loadMoreButtonRef = useRef<View>(null);
+  // "Ver mais" em andamento: a aba e quantos itens ela tinha, para anunciar
+  // quantos chegaram e devolver o foco ao botão.
+  const pendingLoadMore = useRef<{ tab: UserEventsTab; countBefore: number } | null>(null);
+  const shownLoadMoreErrors = useRef(new Map<UserEventsTab, LoadError>());
   const { isOffline } = useNetworkStatus();
   const { addToast } = useToast();
   const { connect, isLoading: isConnecting } = useConnections();
@@ -88,6 +114,9 @@ export default function UserProfile() {
 
   const isUnavailable = error?.kind === 'unavailable';
   const visibleProfile = isUnavailable ? null : profile;
+  const activeEventsTab: PersonEventsTab = visibleProfile?.user_type === 'BUSINESS' ? 'created' : personEventsTab;
+  const activeEvents = eventTabs ? eventTabs[activeEventsTab] : null;
+  const events = eventTabs ? (activeEvents?.items ?? []) : null;
   // Depois do `await`, o perfil capturado pelo callback é o de antes da
   // requisição; a ação confere o valor atual por aqui.
   const profileRef = useRef(visibleProfile);
@@ -108,10 +137,17 @@ export default function UserProfile() {
   // retorno à tela.
   const feedbackKey = useRef<string | null>(null);
 
-  const retryAll = useCallback(() => {
+  // O toast guarda o `retryFailed` de quando apareceu: o que falhou é lido no
+  // toque. Recarregar os eventos sem erro descartaria as páginas do "Ver mais".
+  const failed = useRef({ profile: false, events: false });
+  useEffect(() => {
+    failed.current = { profile: error !== null, events: eventsError !== null };
+  }, [error, eventsError]);
+
+  const retryFailed = useCallback(() => {
     feedbackKey.current = null;
-    void reload();
-    void reloadEvents();
+    if (failed.current.profile) void reload();
+    if (failed.current.events) void reloadEvents();
   }, [reload, reloadEvents]);
 
   const retryEvents = useCallback(() => {
@@ -129,11 +165,53 @@ export default function UserProfile() {
     feedbackKey.current = key;
 
     if (reloadFailure.kind === 'timeout' || reloadFailure.kind === 'server') {
-      addToast({ type: 'error', message: reloadFailure.message, actionLabel: 'Tentar de novo', onAction: retryAll });
+      addToast({ type: 'error', message: reloadFailure.message, actionLabel: 'Tentar de novo', onAction: retryFailed });
     } else if (!isOffline) {
       addToast({ type: 'error', message: reloadFailure.message });
     }
-  }, [addToast, id, isOffline, reloadFailure, retryAll]);
+  }, [addToast, id, isOffline, reloadFailure, retryFailed]);
+
+  useEffect(() => {
+    setPersonEventsTab('created');
+  }, [id]);
+
+  useEffect(() => {
+    if (!eventTabs) return;
+    for (const tab of ['history', 'created'] as const) {
+      const loadMoreError = eventTabs[tab]?.loadMoreError;
+      if (!loadMoreError || shownLoadMoreErrors.current.get(tab) === loadMoreError) continue;
+      shownLoadMoreErrors.current.set(tab, loadMoreError);
+      if (!isOffline) {
+        addToast({ type: 'error', message: 'Não foi possível carregar mais eventos. Toque em Ver mais para tentar de novo.' });
+      }
+    }
+  }, [addToast, eventTabs, isOffline]);
+
+  useEffect(() => {
+    const pending = pendingLoadMore.current;
+    const tabState = pending && eventTabs ? eventTabs[pending.tab] : null;
+    if (!pending || !tabState || tabState.loadingMore) return;
+    pendingLoadMore.current = null;
+
+    const added = tabState.items.length - pending.countBefore;
+    if (added > 0) AccessibilityInfo.announceForAccessibility(loadedAnnouncement(added, !tabState.hasMore));
+    // Durante a carga o botão fica desabilitado, e na Web isso tira o foco dele.
+    if (
+      tabState.hasMore &&
+      Platform.OS === 'web' &&
+      typeof document !== 'undefined' &&
+      document.activeElement === document.body
+    ) {
+      loadMoreButtonRef.current?.focus();
+    }
+  }, [eventTabs]);
+
+  const handleLoadMore = useCallback((tab: UserEventsTab) => {
+    const tabState = eventTabs?.[tab];
+    if (!tabState || tabState.loadingMore) return;
+    pendingLoadMore.current = { tab, countBefore: tabState.items.length };
+    void loadMore(tab);
+  }, [eventTabs, loadMore]);
 
   useEffect(() => {
     if (!isLoading && !error && !isLoadingEvents && !eventsError) feedbackKey.current = null;
@@ -271,7 +349,7 @@ export default function UserProfile() {
             text={error.message}
             cta
             ctaLabel="Tentar de novo"
-            onCtaPress={retryAll}
+            onCtaPress={retryFailed}
           />
           {isOffline && <OfflineBanner />}
         </View>
@@ -374,7 +452,22 @@ export default function UserProfile() {
           )}
         </View>
 
-        <Text style={styles.visibilityNotice}>{visibilityNotice(name, isBusiness)}</Text>
+        {isBusiness ? (
+          <View style={styles.sectionTitle}>
+            <SectionHeader title="Eventos" />
+          </View>
+        ) : (
+          <ProfileTabs
+            items={PERSON_EVENTS_TABS}
+            value={personEventsTab}
+            onChange={setPersonEventsTab}
+            style={styles.tabs}
+          />
+        )}
+
+        {activeEventsTab === 'created' && (
+          <Text style={styles.visibilityNotice}>{visibilityNotice(name, isBusiness)}</Text>
+        )}
 
         <View style={styles.list}>
           {events === null ? (
@@ -391,20 +484,41 @@ export default function UserProfile() {
               <EventsSkeleton />
             )
           ) : events.length === 0 ? (
-            <SectionEmptyState
-              icon="calendar-x"
-              title="Nenhum evento por aqui"
-              text="Quando este perfil tiver eventos, eles aparecem aqui."
-            />
-          ) : (
-            events.map((item) => (
-              <EventCard
-                key={item.event_id}
-                variant="Compact"
-                event={toEventCardEvent(item)}
-                onPress={() => router.push(`/EventDetail?id=${item.event_id}`)}
+            activeEventsTab === 'history' ? (
+              <SectionEmptyState
+                icon="calendar-x"
+                title="Nenhum evento no histórico"
+                text="Os eventos que já aconteceram aparecem aqui."
               />
-            ))
+            ) : (
+              <SectionEmptyState
+                icon="calendar-x"
+                title="Nenhum evento por aqui"
+                text="Quando este perfil tiver eventos, eles aparecem aqui."
+              />
+            )
+          ) : (
+            <>
+              {events.map((item) => (
+                <EventCard
+                  key={item.event_id}
+                  variant="Compact"
+                  event={toEventCardEvent(item)}
+                  onPress={() => router.push(`/EventDetail?id=${item.event_id}`)}
+                />
+              ))}
+              {activeEvents?.hasMore && (
+                <Button
+                  ref={loadMoreButtonRef}
+                  label="Ver mais"
+                  variant="Tertiary"
+                  size="MD"
+                  isLoading={activeEvents.loadingMore}
+                  onPress={() => handleLoadMore(activeEventsTab)}
+                  style={styles.loadMore}
+                />
+              )}
+            </>
           )}
         </View>
       </ScrollView>
@@ -539,6 +653,15 @@ const styles = StyleSheet.create({
   },
   relationshipButton: {
     alignSelf: 'stretch',
+  },
+  tabs: {
+    marginHorizontal: spacing[16],
+  },
+  sectionTitle: {
+    paddingHorizontal: spacing[16],
+  },
+  loadMore: {
+    alignSelf: 'center',
   },
   visibilityNotice: {
     ...typography.bodyS,
