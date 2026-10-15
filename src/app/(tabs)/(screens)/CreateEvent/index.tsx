@@ -33,6 +33,8 @@ const EMPTY_FORM: CreateEventFormData = {
   time: null,
   location: '',
   locationCoordinates: null,
+  locationNeighborhood: null,
+  locationCity: null,
   participantLimit: 10,
   unlimited: false,
   privacy: 'PUBLIC',
@@ -139,6 +141,8 @@ export default function CreateEvent() {
       end_date: endDate.toISOString(),
       location: form.locationCoordinates,
       location_name: form.location || null,
+      location_neighborhood: form.locationNeighborhood,
+      location_city: form.locationCity,
       max_participants: form.unlimited ? null : form.participantLimit,
       privacy: form.privacy,
     });
@@ -191,11 +195,21 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               onChangeDate={(v) => setForm((f) => ({ ...f, date: v }))}
               onChangeTime={(v) => setForm((f) => ({ ...f, time: v }))}
-              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: null }))}
+              // Digitar invalida tudo que veio da seleção anterior: bairro e
+              // cidade saem sempre do mesmo ponto que as coordenadas.
+              onChangeLocation={(v) => setForm((f) => ({
+                ...f,
+                location: v,
+                locationCoordinates: null,
+                locationNeighborhood: null,
+                locationCity: null,
+              }))}
               onSelectLocation={(suggestion) => setForm((f) => ({
                 ...f,
                 location: suggestion.shortLabel,
                 locationCoordinates: { latitude: suggestion.latitude, longitude: suggestion.longitude },
+                locationNeighborhood: suggestion.neighborhood,
+                locationCity: suggestion.city,
               }))}
               onChangeParticipantLimit={(v) => setForm((f) => ({ ...f, participantLimit: v }))}
               onChangeUnlimited={(v) => setForm((f) => ({ ...f, unlimited: v }))}

@@ -16,11 +16,15 @@ function devicePlatform(): 'ANDROID' | 'IOS' | null {
   return null;
 }
 
-/** Nunca lança: falhas são silenciosas; formato recusado pelo backend desiste até o app reiniciar. */
+/**
+ * Nunca lança: falhas são silenciosas; formato recusado pelo backend desiste
+ * até o app reiniciar. Devolve `true` só quando o backend confirmou o
+ * registro — quem não liga para o resultado (abertura do app) ignora.
+ */
 export function useRegisterDevice() {
-  const registerDevice = useCallback(async (pushToken: string): Promise<void> => {
+  const registerDevice = useCallback(async (pushToken: string): Promise<boolean> => {
     const platform = devicePlatform();
-    if (!platform || hasGivenUp) return;
+    if (!platform || hasGivenUp) return false;
 
     try {
       // Salvo antes do POST: se o backend gravar e a resposta se perder, o
@@ -30,11 +34,13 @@ export function useRegisterDevice() {
         method: 'POST',
         body: JSON.stringify({ device_token: pushToken, platform }),
       });
+      return true;
     } catch (caught) {
       if (isApiErrorLike(caught) && caught.status === 400 && caught.detail === 'Invalid device token format') {
         hasGivenUp = true;
         if (__DEV__) console.warn('[push] backend recusou o formato do token de push');
       }
+      return false;
     }
   }, []);
 

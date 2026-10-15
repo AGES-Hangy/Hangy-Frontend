@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react';
 
-export type DialogVariant = 'LeaveEvent' | 'DeleteEvent' | 'SendRequest' | 'DiscardEvent';
+export type DialogVariant =
+  | 'LeaveEvent'
+  | 'DeleteEvent'
+  | 'SendRequest'
+  | 'DiscardEvent'
+  | 'DeleteAccount'
+  | 'RemoveTagArea'
+  | 'DiscardChanges';
 
 export type DialogProps = {
   visible: boolean;
@@ -34,6 +41,8 @@ export type DialogProps = {
   description?: string;
   /** Sobrescreve o rótulo do botão de confirmar. Ver `title`. */
   confirmLabel?: string;
+  /** Rótulo do botão que desiste da ação. Padrão: "Voltar". */
+  cancelLabel?: string;
 
   /**
    * Ação em voo: o botão de confirmar vira spinner e os dois botões param de

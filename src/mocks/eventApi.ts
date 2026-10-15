@@ -35,7 +35,9 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | ----------- | ------------------------------------------------------- |
  * | qualquer    | Caminho feliz, na visão do organizador                   |
  * | `guest`     | Visitante comum num evento público (ação `CONFIRM`)      |
- * | `private`   | Evento privado sem participação: sem lista de confirmados|
+ * | `private`   | Evento privado sem participação: sem lista de confirmados, local aproximado (bairro) |
+ * | `private-no-area` | Igual a `private`, mas sem bairro: "Local aproximado" |
+ * | `private-confirmed` | Evento privado já aprovado: local exato          |
  * | `cancelled` | `410 Event was cancelled` (`/share`: `404`, ver task 101) |
  * | `missing`   | `404 Event not found`                                    |
  * | `boom`      | `500` no detalhe                                         |
@@ -242,9 +244,18 @@ const DESCRICAO = [
 /** Só os dois ids que este mock conhece — `useTags` não passa por `resolveMock`. */
 const NOME_DA_TAG: Record<string, string> = { t1: 'Esportes', t2: 'Futebol' };
 
+/** Cenários de evento privado visto por quem não organiza. */
+const CENARIOS_PRIVADOS = ['private', 'private-no-area', 'private-confirmed'];
+
+const ehVisitante = (eventId: string) => eventId === 'guest' || CENARIOS_PRIVADOS.includes(eventId);
+
 function detalhe(eventId: string): EventDetail {
-  const ehOrganizador = eventId !== 'guest' && eventId !== 'private';
-  const ehPrivado = eventId === 'private';
+  const ehOrganizador = !ehVisitante(eventId);
+  const ehPrivado = CENARIOS_PRIVADOS.includes(eventId);
+  const aprovado = eventId === 'private-confirmed';
+  // Privado sem aprovação: a API troca o endereço pelo bairro e o ponto pelo
+  // centro de uma área. Depois de aprovado, volta tudo exato.
+  const localAproximado = ehPrivado && !aprovado;
   const overrides = db.overrides;
 
   return {
@@ -254,8 +265,16 @@ function detalhe(eventId: string): EventDetail {
     // O frame mostra 16:00 em Porto Alegre (UTC-3).
     event_date: overrides?.event_date ?? '2026-10-30T19:00:00Z',
     end_date: overrides?.end_date ?? '2026-10-30T22:00:00Z',
-    location: overrides?.location ?? { latitude: -30.0577, longitude: -51.1738 },
-    location_name: overrides?.location_name ?? 'DRY Moments',
+    location: localAproximado
+      ? { latitude: -30.0531, longitude: -51.1762 }
+      : (overrides?.location ?? { latitude: -30.0577, longitude: -51.1738 }),
+    location_name: localAproximado
+      ? eventId === 'private-no-area'
+        ? null
+        : 'Partenon, Porto Alegre'
+      : (overrides?.location_name ?? 'DRY Moments'),
+    location_precision: localAproximado ? 'APPROXIMATE' : 'EXACT',
+    location_radius_m: localAproximado ? 500 : null,
     privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
     status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
     cover_photo_url: overrides?.cover_photo_url ?? 'https://picsum.photos/seed/hangy-evento/900/600',
@@ -263,12 +282,18 @@ function detalhe(eventId: string): EventDetail {
     organizer: { id: 'org-1', name: 'Ana Souza', user_type: 'PERSONAL', avatar_url: null },
     viewer: {
       is_organizer: ehOrganizador,
-      participation_status: null,
+      participation_status: aprovado ? 'CONFIRMED' : null,
       // Num evento privado em que não participo, a lista de confirmados some.
-      can_see_participants: !ehPrivado,
-      available_action: ehOrganizador ? 'SHARE' : 'CONFIRM',
+      can_see_participants: !localAproximado,
+      available_action: ehOrganizador
+        ? 'SHARE'
+        : aprovado
+          ? 'CANCEL_PRESENCE'
+          : ehPrivado
+            ? 'REQUEST'
+            : 'CONFIRM',
     },
-    participants_preview: ehPrivado
+    participants_preview: localAproximado
       ? null
       : {
           count: db.confirmed.length,
@@ -300,7 +325,7 @@ function participantes(eventId: string, statusFiltro: string | null): Participan
     throw new MockApiError(403, 'Only the organizer can list pending participants');
   }
 
-  const ehOrganizador = eventId !== 'guest' && eventId !== 'private';
+  const ehOrganizador = !ehVisitante(eventId);
   const items = pedindoPendentes ? db.pending : db.confirmed;
 
   const counts: ParticipantsPage['counts'] = { CONFIRMED: db.confirmed.length };
@@ -346,7 +371,7 @@ function compartilhar(eventId: string): EventShare {
     web_url: `https://hangy.app/e/${eventId}`,
     title: evento.title,
     event_date: evento.event_date,
-    location_name: evento.location_name,
+    location_name: evento.location_name ?? '',
     cover_photo_url: evento.cover_photo_url,
   };
 }
@@ -406,7 +431,7 @@ function atualizarRelacao(userId: string, mudanca: RelacaoDoUsuario) {
   db.relacoesDeUsuario[userId] = { ...db.relacoesDeUsuario[userId], ...mudanca };
 }
 
-function perfil(userId: string): UserProfile {
+function perfilVisitado(userId: string): UserProfile {
   return { ...perfilInicial(userId), ...db.relacoesDeUsuario[userId] };
 }
 
@@ -490,6 +515,195 @@ async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
 }
 
 /**
+ * Editar perfil (task 072): as rotas de perfil (tasks de backend 067, 071, 077
+ * e 229) e a exclusão de conta ainda não existem. `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`
+ * troca a conta de mentira para estabelecimento.
+ */
+const MOCK_USER_TYPE = process.env.EXPO_PUBLIC_MOCK_USER_TYPE === 'BUSINESS' ? 'BUSINESS' : 'PERSONAL';
+
+const ARVORE_DE_TAGS = [
+  ['Esportes', ['Futebol', 'Vôlei', 'Corrida', 'Basquete', 'Ciclismo']],
+  ['Gastronomia', ['Café', 'Brunch', 'Churrasco', 'Vinhos']],
+  ['Música', ['Rock', 'Pop', 'Sertanejo', 'Eletrônica']],
+  ['Bem-estar', ['Yoga', 'Meditação']],
+  ['Cultura', ['Museus', 'Literatura']],
+  ['Vida Noturna', ['Show ao vivo', 'Balada', 'Bar']],
+  ['Tecnologia', ['Meetups', 'Hackathons']],
+  ['Ar Livre', ['Trilha', 'Camping']],
+  ['Jogos', ['Tabuleiro', 'Poker']],
+  ['Arte', ['Teatro', 'Cinema', 'Exposição', 'Fotografia']],
+  ['Viagem', ['Bate-volta', 'Mochilão']],
+  ['Negócios', ['Networking', 'Palestras']],
+].map(([nome, micros], macro) => ({
+  id: `macro-${macro}`,
+  name: nome as string,
+  type: 'MACRO' as const,
+  children: (micros as string[]).map((micro, indice) => ({
+    id: `micro-${macro}-${indice}`,
+    name: micro,
+    type: 'MICRO' as const,
+  })),
+}));
+
+const perfil = {
+  email: MOCK_USER_TYPE === 'BUSINESS' ? 'contato@quierocafe.com' : 'rafaela.souza@email.com',
+  pessoa: {
+    name: 'Rafaela Souza',
+    description: 'Organizo rolês de trilha e brunch em Porto Alegre. Sempre topo conhecer gente nova nos eventos.' as
+      | string
+      | null,
+    date_of_birth: '1998-03-14',
+    state: 'RS',
+    city: 'Porto Alegre',
+  },
+  estabelecimento: {
+    user_id: 'me',
+    business_name: 'Quiero Café',
+    cnpj: '12345678000199',
+    description: 'Cafeteria de especialidade na Cidade Baixa.',
+    address: 'Rua João Alfredo, 480',
+    location: { latitude: -30.0401, longitude: -51.2219 },
+    phone: '5133330000',
+    instagram: '@quierocafe',
+  },
+  tagIds: ['micro-0-0', 'micro-0-1', 'micro-1-0', 'micro-5-0', 'micro-2-0'],
+};
+
+function tagsDoUsuario() {
+  return {
+    tags: ARVORE_DE_TAGS.flatMap((macro) =>
+      macro.children
+        .filter((micro) => perfil.tagIds.includes(micro.id))
+        .map((micro) => ({ id: micro.id, name: micro.name, parent: { id: macro.id, name: macro.name } })),
+    ),
+  };
+}
+
+/** Rotas de perfil. Devolve `undefined` quando a rota não é daqui. */
+function resolverPerfil(partes: string[], method: string, init: RequestInit): { resposta: unknown } | undefined {
+  const body = init.body ? JSON.parse(String(init.body)) : {};
+  const rota = partes.join('/');
+
+  if (rota === 'tags/tree' && method === 'GET') return { resposta: ARVORE_DE_TAGS };
+
+  if (rota === 'users/me' && method === 'GET') {
+    // Mesmo formato do `CurrentUserOutput` do backend.
+    const { pessoa, estabelecimento } = perfil;
+    return {
+      resposta: {
+        id: 'me',
+        email: perfil.email,
+        user_type: MOCK_USER_TYPE,
+        name: MOCK_USER_TYPE === 'BUSINESS' ? estabelecimento.business_name : pessoa.name,
+        profile:
+          MOCK_USER_TYPE === 'BUSINESS'
+            ? {
+                cnpj: estabelecimento.cnpj,
+                address: estabelecimento.address,
+                latitude: estabelecimento.location.latitude,
+                longitude: estabelecimento.location.longitude,
+                photo_url: null,
+              }
+            : { date_of_birth: pessoa.date_of_birth, state: pessoa.state, city: pessoa.city, photo_url: null },
+      },
+    };
+  }
+  // Exclusão de conta, confirmada com a senha. Cenários de erro, pela senha
+  // enviada: `errada...` -> 403 (senha incorreta), `boom...` -> 500.
+  if (rota === 'users/me' && method === 'DELETE') {
+    if (typeof body.password !== 'string' || body.password.length === 0 || body.password.startsWith('errada')) {
+      throw new MockApiError(403, 'Incorrect password');
+    }
+    if (body.password.startsWith('boom')) throw new MockApiError(500, 'Internal server error');
+    return { resposta: undefined };
+  }
+
+  if (rota === 'users/me/tags' && method === 'GET') return { resposta: tagsDoUsuario() };
+  if (rota === 'users/me/tags' && method === 'PUT') {
+    if (!Array.isArray(body.tag_ids) || body.tag_ids.length === 0) {
+      throw new MockApiError(400, 'At least one tag is required');
+    }
+    perfil.tagIds = body.tag_ids;
+    return { resposta: tagsDoUsuario() };
+  }
+
+  const ehPessoa = rota === 'users/me/profile';
+  const ehEstabelecimento = rota === 'businesses/me';
+  if (!ehPessoa && !ehEstabelecimento) return undefined;
+
+  if (ehPessoa && MOCK_USER_TYPE !== 'PERSONAL') throw new MockApiError(403, 'Not a personal profile');
+  if (ehEstabelecimento && MOCK_USER_TYPE !== 'BUSINESS') throw new MockApiError(403, 'Not a business profile');
+
+  if (ehPessoa) {
+    const { pessoa } = perfil;
+
+    // Mesmo envelope do `UserProfileOutput` do backend.
+    if (method === 'GET') {
+      return {
+        resposta: {
+          profile: {
+            id: 'me',
+            name: pessoa.name,
+            description: pessoa.description,
+            photo_url: null,
+            tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
+            connections_count: 0,
+          },
+          counts: { past: 0, confirmed: 0, photos: 0 },
+        },
+      };
+    }
+
+    if (method === 'PATCH') {
+      if (typeof body.description === 'string' && body.description.length > 500) {
+        throw new MockApiError(400, 'Description exceeds maximum length');
+      }
+      // Como o `UserProfileUpdateInput` (`extra="ignore"`): só estes quatro
+      // campos são gravados, o resto é ignorado sem erro.
+      if (typeof body.name === 'string') pessoa.name = body.name;
+      if ('description' in body) pessoa.description = body.description;
+      if (typeof body.state === 'string') pessoa.state = body.state;
+      if (typeof body.city === 'string') pessoa.city = body.city;
+      return {
+        resposta: {
+          id: 'me',
+          name: pessoa.name,
+          description: pessoa.description,
+          city: pessoa.city,
+          updated_at: new Date().toISOString(),
+        },
+      };
+    }
+
+    return undefined;
+  }
+
+  const dados: Record<string, unknown> = perfil.estabelecimento;
+
+  if (method === 'GET') return { resposta: { ...dados, email: perfil.email } };
+
+  if (method === 'PATCH') {
+    // Cenários de erro, pelo e-mail enviado: `usado@...` -> 409, `boom@...` -> 500.
+    if (typeof body.email === 'string' && body.email.startsWith('usado@')) {
+      throw new MockApiError(409, 'Email is already registered');
+    }
+    if (typeof body.email === 'string' && body.email.startsWith('boom@')) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    if (typeof body.description === 'string' && body.description.length > 500) {
+      throw new MockApiError(400, 'Description exceeds maximum length');
+    }
+
+    const { email, password: _password, ...campos } = body;
+    if (typeof email === 'string') perfil.email = email;
+    Object.assign(dados, campos);
+    return { resposta: { ...dados, updated_at: new Date().toISOString() } };
+  }
+
+  return undefined;
+}
+
+/**
  * Encaminha uma rota para a resposta de mentira correspondente. A assinatura
  * espelha a de `apiFetch` de propósito: quem chama não sabe qual dos dois
  * respondeu.
@@ -500,6 +714,9 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const method = (init.method ?? 'GET').toUpperCase();
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
+
+  const respostaDePerfil = resolverPerfil(partes, method, init);
+  if (respostaDePerfil) return respostaDePerfil.resposta as T;
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
   // também ainda não subiu — o cadastro (task 056) precisa disto pra dar de
@@ -522,14 +739,17 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (eventId === 'finished') throw new MockApiError(409, 'Event already finished');
 
     const body = init.body ? JSON.parse(String(init.body)) : {};
+    // Os campos de local só vêm quando o endereço mudou; sem eles, vale o
+    // que o evento já tinha.
+    const atual = detalhe(eventId);
     db.overrides = {
       title: body.title,
       description: body.description ?? null,
       cover_photo_url: body.cover_photo_url ?? null,
       event_date: body.event_date,
       end_date: body.end_date,
-      location: body.location,
-      location_name: body.location_name ?? null,
+      location: body.location ?? atual.location,
+      location_name: body.location ? (body.location_name ?? null) : atual.location_name,
       tag_ids: body.tag_ids ?? [],
     };
 
@@ -617,7 +837,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
 
     if (partes.length === 2) {
       await erroDoUsuario(userId, 'perfil');
-      return perfil(userId) as T;
+      return perfilVisitado(userId) as T;
     }
 
     if (partes.length === 3 && partes[2] === 'events') {
@@ -631,7 +851,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   if (partes[0] === 'connections' && partes.length === 1 && method === 'POST') {
     const body = init.body ? JSON.parse(String(init.body)) : {};
     const receiverId: string = body.receiver_id ?? '';
-    const destinatario = perfil(receiverId);
+    const destinatario = perfilVisitado(receiverId);
 
     // Estabelecimento cai no mesmo 404 de inexistente, como no backend.
     if (db.usuariosIndisponiveis.includes(receiverId) || destinatario.user_type === 'BUSINESS') {
@@ -679,7 +899,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (db.usuariosIndisponiveis.includes(businessId)) {
       throw new MockApiError(404, 'Business not found');
     }
-    const estabelecimento = perfil(businessId);
+    const estabelecimento = perfilVisitado(businessId);
     const ehEstabelecimento = estabelecimento.user_type === 'BUSINESS';
 
     if (method === 'POST') {

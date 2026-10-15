@@ -35,6 +35,13 @@ export const spacing = {
  */
 export const pressedOpacity = 0.85;
 export const layout = {
+  mapPinShadows: {
+    default: { offsetY: 4, blur: 8 },
+    unselected: { offsetY: 2, blur: 5 },
+    selected: { offsetY: 6, blur: 12 },
+    cluster: { offsetY: 4, blur: 10 },
+    userLoc: { offsetY: 1, blur: 3 },
+  },
   emptyState: {
     illustrationSize: 96,
     textMaxWidth: 260,

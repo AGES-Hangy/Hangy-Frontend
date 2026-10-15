@@ -17,6 +17,9 @@ export type CreateEventFormData = {
   location: string;
   /** Coordenadas de um local selecionado e confirmado, nunca inferidas do texto. */
   locationCoordinates: { latitude: number; longitude: number } | null;
+  /** Bairro e cidade do local selecionado — derivados dele, nunca digitados. */
+  locationNeighborhood: string | null;
+  locationCity: string | null;
   participantLimit: number;
   unlimited: boolean;
   privacy: Privacy;

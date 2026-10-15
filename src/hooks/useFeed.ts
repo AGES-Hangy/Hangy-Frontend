@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { useToast } from '@/components/Toast';
 import { API_BASE_URL } from '@/constants/api';
@@ -65,6 +65,15 @@ function normalizeFeed(data: ApiFeedResponse): FeedSection[] {
       })),
     hasMore: section.has_more ?? false,
   }));
+}
+
+// No módulo, e não em estado: quem invalida (ex.: Editar perfil, ao salvar as
+// tags) não está na árvore da Home, que continua montada na tab bar.
+let isFeedStale = false;
+
+/** Marca o feed como desatualizado: ele é recarregado na próxima visita à Home. */
+export function invalidateFeed() {
+  isFeedStale = true;
 }
 
 export function useFeed() {
@@ -149,10 +158,20 @@ export function useFeed() {
   );
 
   useEffect(() => {
+    // A carga inicial já traz o feed atual.
+    isFeedStale = false;
     void loadFeed();
   }, [loadFeed]);
 
   const refresh = useCallback(() => loadFeed({ silent: true }), [loadFeed]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isFeedStale) return;
+      isFeedStale = false;
+      void loadFeed({ silent: true });
+    }, [loadFeed]),
+  );
 
   return { sections, isLoading, error, isOffline, reload: loadFeed, refresh };
 }

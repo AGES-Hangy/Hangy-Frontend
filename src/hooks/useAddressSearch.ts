@@ -30,10 +30,28 @@ export type AddressSuggestion = {
   shortLabel: string;
   latitude: number;
   longitude: number;
+  /** Bairro do ponto — `null` quando o Nominatim não devolve nenhum. */
+  neighborhood: string | null;
+  /** Cidade do ponto — `null` quando o Nominatim não devolve nenhuma. */
+  city: string | null;
 };
 
 type NominatimAddress = Partial<
-  Record<'road' | 'pedestrian' | 'footway' | 'house_number' | 'city' | 'town' | 'village' | 'municipality', string>
+  Record<
+    | 'road'
+    | 'pedestrian'
+    | 'footway'
+    | 'house_number'
+    | 'suburb'
+    | 'neighbourhood'
+    | 'city_district'
+    | 'quarter'
+    | 'city'
+    | 'town'
+    | 'village'
+    | 'municipality',
+    string
+  >
 >;
 
 type NominatimResult = {
@@ -70,11 +88,17 @@ function toShortLabel(result: NominatimResult): string {
 }
 
 function toSuggestion(result: NominatimResult): AddressSuggestion {
+  const address = result.address ?? {};
   return {
     label: result.display_name,
     shortLabel: toShortLabel(result),
     latitude: Number(result.lat),
     longitude: Number(result.lon),
+    // A chave muda conforme o lugar (`suburb` em Porto Alegre, `neighbourhood`
+    // em outras cidades), por isso a cadeia inteira e não só a primeira.
+    neighborhood:
+      address.suburb ?? address.neighbourhood ?? address.city_district ?? address.quarter ?? null,
+    city: address.city ?? address.town ?? address.municipality ?? address.village ?? null,
   };
 }
 
