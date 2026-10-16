@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import { endpoints } from '@/constants/api';
 import type { UserEventItem, UserEventsPage, UserEventsTab, UserEventsTabs } from '@/types/user';
@@ -38,7 +39,12 @@ function toTabState(tab: StoredTab | null): UserEventsTabState | null {
   };
 }
 
-export function useUserEvents(userId: string | undefined) {
+type Options = {
+  /** Recarrega a cada volta ao foco; o primeiro foco não conta, a carga inicial já sai da montagem. */
+  reloadOnFocus?: boolean;
+};
+
+export function useUserEvents(userId: string | undefined, { reloadOnFocus = false }: Options = {}) {
   const [loaded, setLoaded] = useState<StoredTabs | null>(null);
   // Cópia síncrona de `loaded`: o "Ver mais" precisa do cursor atual da aba
   // antes de o React renderizar de novo.
@@ -66,6 +72,20 @@ export function useUserEvents(userId: string | undefined) {
   const load = useCallback(async () => {
     const requestId = ++latestRequest.current;
     loadingMoreTabs.current.clear();
+    // O "Ver mais" em voo foi invalidado e não limpa a própria aba: sem isto,
+    // uma recarga que falhasse deixaria o botão carregando para sempre.
+    const current = loadedRef.current;
+    if (current && TABS.some((tab) => current.tabs[tab]?.loadingMore)) {
+      store({
+        id: current.id,
+        tabs: Object.fromEntries(
+          TABS.map((tab) => {
+            const tabState = current.tabs[tab];
+            return [tab, tabState ? { ...tabState, loadingMore: false } : null];
+          }),
+        ) as StoredTabs['tabs'],
+      });
+    }
 
     if (!userId) {
       setLoadedId(userId);
@@ -128,11 +148,32 @@ export function useUserEvents(userId: string | undefined) {
     }
   }, [updateTab, userId]);
 
-  // Sem recarregar no foco: as páginas já anexadas seriam descartadas. A lista
-  // recarrega quando o id muda e no "Tentar de novo".
+  // Por padrão, sem recarregar no foco: as páginas já anexadas seriam
+  // descartadas. A lista recarrega quando o id muda e no "Tentar de novo".
   useEffect(() => {
     void load();
   }, [load]);
+
+  // O callback do foco não pode depender do `load`, que muda com o id: a
+  // troca de id dispararia o foco de novo, além da carga da montagem.
+  const latestLoad = useRef(load);
+  const latestUserId = useRef(userId);
+  useEffect(() => {
+    latestLoad.current = load;
+    latestUserId.current = userId;
+  }, [load, userId]);
+  const hasFocused = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!reloadOnFocus) return;
+      if (!hasFocused.current) {
+        hasFocused.current = true;
+        return;
+      }
+      if (latestUserId.current) void latestLoad.current();
+    }, [reloadOnFocus]),
+  );
 
   const isStale = loadedId !== userId;
   const visible = loaded && loaded.id === userId ? loaded.tabs : null;

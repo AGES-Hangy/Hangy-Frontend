@@ -1,6 +1,7 @@
 import type { Ref } from 'react';
 import type { View } from 'react-native';
 
+import type { EventState } from '@/components/EventCard/types';
 import type { UserEventItem } from '@/types/user';
 
 export type ProfileEventListProps = {
@@ -14,4 +15,6 @@ export type ProfileEventListProps = {
   isLoadingMore: boolean;
   onLoadMore: () => void;
   loadMoreButtonRef: Ref<View>;
+  /** Selo dos cards da aba (ex.: `Confirmed` em Confirmados). Padrão: sem selo. */
+  cardState?: EventState;
 };

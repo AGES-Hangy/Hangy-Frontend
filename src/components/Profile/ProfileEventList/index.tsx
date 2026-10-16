@@ -31,6 +31,7 @@ export function ProfileEventList({
   isLoadingMore,
   onLoadMore,
   loadMoreButtonRef,
+  cardState,
 }: ProfileEventListProps) {
   if (items === null && !loadFailed) return <ProfileEventListSkeleton />;
 
@@ -49,6 +50,7 @@ export function ProfileEventList({
             <EventCard
               key={item.event_id}
               variant="Compact"
+              state={cardState}
               event={toEventCardEvent(item)}
               onPress={() => router.push(`/EventDetail?id=${item.event_id}`)}
             />
