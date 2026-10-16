@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
@@ -18,6 +18,7 @@ import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useBusinessFollow } from '@/hooks/useBusinessFollow';
 import { useConnections } from '@/hooks/useConnections';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
@@ -65,6 +66,8 @@ function goBack() {
 
 export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  // Em paralelo com o perfil e os eventos: a visita não espera o `/users/me`.
+  const { user, isLoading: isLoadingViewer } = useCurrentUser();
   const { profile, isLoading, error, reload, patchProfile } = useUserProfile(id);
   const {
     tabs: eventTabs,
@@ -84,8 +87,11 @@ export default function UserProfile() {
   // Ligado ao fechar o diálogo; consumido quando o botão volta a aceitar foco.
   const returnFocusPending = useRef(false);
 
+  // Se o `GET /users/me` falhar, `user` fica nulo e a tela segue como visita.
+  const isOwnProfile = user !== null && id === user.userId;
   const isUnavailable = error?.kind === 'unavailable';
-  const visibleProfile = isUnavailable ? null : profile;
+  // Até saber quem está logado, o perfil não aparece: o id pode ser o próprio.
+  const visibleProfile = isUnavailable || isLoadingViewer || isOwnProfile ? null : profile;
   const activeEventsTab: PersonEventsTab = visibleProfile?.user_type === 'BUSINESS' ? 'created' : personEventsTab;
   const activeEvents = eventTabs ? eventTabs[activeEventsTab] : null;
   const events = eventTabs ? (activeEvents?.items ?? []) : null;
@@ -257,7 +263,11 @@ export default function UserProfile() {
     if (result === 'unavailable') void reload();
   }, [closeUnfollowDialog, patchProfile, reload, unfollow]);
 
-  if (isUnavailable) {
+  if (isOwnProfile) return <Redirect href="/Profile" />;
+
+  // O erro também espera quem está logado: com o id próprio, a tela vira o
+  // redirect, não o erro.
+  if (isUnavailable && !isLoadingViewer) {
     return (
       <View style={styles.stateScreen}>
         <EmptyState
@@ -274,7 +284,7 @@ export default function UserProfile() {
   }
 
   if (!visibleProfile) {
-    if (error) {
+    if (error && !isLoadingViewer) {
       return (
         <View style={styles.stateScreen}>
           <EmptyState
