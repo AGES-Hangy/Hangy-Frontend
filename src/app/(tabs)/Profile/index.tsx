@@ -12,6 +12,7 @@ import { ProfileHeader } from '@/components/Profile/ProfileHeader';
 import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
 import { ProfilePhotoGrid } from '@/components/Profile/ProfilePhotoGrid';
 import { ProfileTabs } from '@/components/ProfileTabs';
+import { SectionHeader } from '@/components/SectionHeader';
 import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMyPhotos } from '@/hooks/useMyPhotos';
@@ -22,6 +23,7 @@ import { useProfilePhotosLoadMore } from '@/hooks/useProfilePhotosLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { useUserEvents } from '@/hooks/useUserEvents';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import type { UserEventsTab } from '@/types/user';
@@ -67,7 +69,7 @@ export default function Profile() {
 
   const { user, error: userError, refetch: refetchUser } = useCurrentUser();
   // Só a pessoa física tem `GET /users/me/profile`; o estabelecimento fica no
-  // placeholder até a etapa do perfil comercial.
+  // `BusinessOwnProfile`, mais abaixo.
   const isPersonalProfile = isOwnProfile && user?.userType === 'PERSONAL';
   const { profile, counts, error: profileError, reload: reloadProfile } = useMyProfile({
     enabled: isPersonalProfile,
@@ -110,6 +112,8 @@ export default function Profile() {
     });
   const { addToast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // A barra é uma só por tela: o `BusinessOwnProfile` devolve o nome para o título.
+  const [businessName, setBusinessName] = useState<string | null>(null);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -146,9 +150,9 @@ export default function Profile() {
     isOwnProfile
       ? {
           variant: 'Profile',
-          // Numa conta de estabelecimento o título é o nome do estabelecimento
-          // em vez de "Meu perfil" — trocar assim que existir o usuário logado.
-          title: 'Meu perfil',
+          // Numa conta de estabelecimento o título é o nome do estabelecimento.
+          // O do perfil recarrega no foco; o do `/users/me` só vale até ele chegar.
+          title: user?.userType === 'BUSINESS' ? businessName || user.name || 'Meu perfil' : 'Meu perfil',
           // Raiz de aba: não veio de lugar nenhum, então não tem voltar.
           showBack: false,
         }
@@ -329,6 +333,18 @@ export default function Profile() {
     );
   }
 
+  if (isOwnProfile && user?.userType === 'BUSINESS') {
+    return (
+      <BusinessOwnProfile
+        userId={user.userId}
+        isOffline={isOffline}
+        logoutButton={logoutButton}
+        onEditProfile={openEditProfile}
+        onNameChange={setBusinessName}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.text}>{isOwnProfile ? 'Profile' : name}</Text>
@@ -354,6 +370,139 @@ export default function Profile() {
           style={styles.logout}
         />
       )}
+    </View>
+  );
+}
+
+/**
+ * Perfil comercial próprio. Os hooks só montam para a conta de estabelecimento:
+ * o cabeçalho vem do perfil público (`name` e `description` são os comerciais)
+ * e, como os eventos, recarrega no foco.
+ */
+function BusinessOwnProfile({
+  userId,
+  isOffline,
+  logoutButton,
+  onEditProfile,
+  onNameChange,
+}: {
+  userId: string;
+  isOffline: boolean;
+  logoutButton: ReactNode;
+  onEditProfile: () => void;
+  onNameChange: (name: string | null) => void;
+}) {
+  const { profile, isLoading: isLoadingProfile, error: profileError, reload: reloadProfile } = useUserProfile(userId);
+  const {
+    tabs: eventTabs,
+    isLoading: isLoadingEvents,
+    error: eventsError,
+    reload: reloadEvents,
+    loadMore,
+  } = useUserEvents(userId, { reloadOnFocus: true });
+  const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
+  const { addToast } = useToast();
+
+  const name = profile?.name?.trim() || null;
+  useEffect(() => {
+    onNameChange(name);
+    return () => onNameChange(null);
+  }, [name, onNameChange]);
+
+  // Mesmo aviso de recarga do perfil pessoal, com duas fontes em vez de três.
+  const feedbackKey = useRef<string | null>(null);
+
+  const retryProfile = useCallback(() => {
+    feedbackKey.current = null;
+    void reloadProfile();
+  }, [reloadProfile]);
+
+  const retryEvents = useCallback(() => {
+    feedbackKey.current = null;
+    void reloadEvents();
+  }, [reloadEvents]);
+
+  const failed = useRef({ profile: false, events: false });
+  useEffect(() => {
+    failed.current = { profile: profileError !== null, events: eventsError !== null };
+  }, [eventsError, profileError]);
+
+  const retryFailed = useCallback(() => {
+    feedbackKey.current = null;
+    if (failed.current.profile) void reloadProfile();
+    if (failed.current.events) void reloadEvents();
+  }, [reloadEvents, reloadProfile]);
+
+  const reloadFailure =
+    profile && profileError ? profileError : profile && eventTabs && eventsError ? eventsError : null;
+
+  // As duas recargas limpam o erro ao começar; só uma resposta sem erro libera
+  // um novo aviso.
+  useEffect(() => {
+    if (!profileError && !eventsError && !isLoadingProfile && !isLoadingEvents) {
+      feedbackKey.current = null;
+    }
+  }, [eventsError, isLoadingEvents, isLoadingProfile, profileError]);
+
+  useEffect(() => {
+    if (!reloadFailure || feedbackKey.current === reloadFailure.kind) return;
+    feedbackKey.current = reloadFailure.kind;
+
+    if (reloadFailure.kind === 'timeout' || reloadFailure.kind === 'server') {
+      addToast({ type: 'error', message: reloadFailure.message, actionLabel: 'Tentar de novo', onAction: retryFailed });
+    } else if (!isOffline) {
+      addToast({ type: 'error', message: reloadFailure.message });
+    }
+  }, [addToast, isOffline, reloadFailure, retryFailed]);
+
+  if (!profile) {
+    return profileError ? (
+      <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} offline={isOffline} />
+    ) : (
+      <ProfileSkeleton offline={isOffline} />
+    );
+  }
+
+  // Só Seguidores: Eventos e Fotos do frame não têm fonte.
+  // `connections_count` até a task 281 trazer o `followers_count`.
+  const followers = profile.connections_count;
+  const createdEvents = eventTabs ? eventTabs.created : null;
+
+  return (
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.content, isOffline && styles.contentOffline]}>
+        <ProfileHeader
+          photoUrl={profile.photo_url}
+          avatarVariant="Store"
+          stats={[{ value: followers, label: followers === 1 ? 'Seguidor' : 'Seguidores' }]}
+          name={name}
+          description={profile.description?.trim() || null}
+          tags={profile.tags}
+          actions={<Button label="Editar perfil" variant="Secondary" onPress={onEditProfile} style={styles.fullWidth} />}
+        />
+
+        {/* Sem Galeria (não há rota de fotos dos eventos do estabelecimento) e
+            sem Seguidores (tasks 282/283): sobra uma seção só, e o título vira
+            barra de abas quando Seguidores entrar. */}
+        <View style={styles.sectionTitle}>
+          <SectionHeader title="Eventos" />
+        </View>
+
+        <ProfileEventList
+          items={eventTabs ? (createdEvents?.items ?? []) : null}
+          loadFailed={eventsError !== null}
+          onRetry={retryEvents}
+          empty={EMPTY_OWN_EVENTS.created}
+          hasMore={createdEvents?.hasMore ?? false}
+          isLoadingMore={createdEvents?.loadingMore ?? false}
+          onLoadMore={() => handleLoadMore('created')}
+          loadMoreButtonRef={loadMoreButtonRef}
+        />
+
+        {/* No Figma, "Sair da conta" fica no Editar perfil; aqui é o único logout do app por enquanto. */}
+        <View style={styles.logoutRow}>{logoutButton}</View>
+      </ScrollView>
+      {isOffline && <OfflineBanner />}
     </View>
   );
 }
@@ -431,6 +580,9 @@ const styles = StyleSheet.create({
   // O `ProfileTabs` ocupa 100% do contêiner: a margem lateral vem de fora,
   // como o "TabsWrap" dos frames.
   tabsWrap: {
+    paddingHorizontal: spacing[16],
+  },
+  sectionTitle: {
     paddingHorizontal: spacing[16],
   },
   logoutRow: {

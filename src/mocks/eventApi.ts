@@ -128,6 +128,15 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `own-events-flaky` | Como em `full`                                       | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
  * | `photos-grow`      | 45 na 1ª carga; 46 (uma nova no topo) a partir da 2ª | Como em `full`                                       | 45 fotos na 1ª chamada; 46 a partir da 2ª                                              |
  *
+ * Com `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`, o perfil comercial lê o
+ * `GET /users/me` (o id da conta é `me`), que ganha os campos do perfil público:
+ * 1204 seguidores (0 em `empty`). As abas do dono são `history` e `created`, como
+ * as de quem visita. `profile-error` e `profile-flaky` contam a partir da 2ª
+ * chamada do `GET /users/me` (a 1ª é a do `useCurrentUser`): `500` sempre, ou
+ * depois da 2ª. Limitações do contador: Editar perfil só em `full` (o
+ * `useCurrentUser` dele também chama o `GET /users/me` e entra na conta); e ele
+ * depende da ordem das chamadas ao `/users/me`, rever no D6.
+ *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
  * (modo avião).
@@ -749,6 +758,22 @@ function contadoresDoDono() {
   };
 }
 
+/**
+ * Campos do perfil público (`GET /users/{id}`) da conta de estabelecimento,
+ * lidos do mesmo `perfil.estabelecimento` e das mesmas tags que o Editar perfil
+ * grava, para a volta da edição mostrar o dado novo.
+ */
+function perfilPublicoDoEstabelecimento() {
+  return {
+    description: perfil.estabelecimento.description,
+    photo_url: null,
+    tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
+    connections_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
+    connection_status: null,
+    is_following: false,
+  };
+}
+
 async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
   if (userId === 'missing' || db.usuariosIndisponiveis.includes(userId)) {
     throw new MockApiError(404, 'User not found');
@@ -1005,6 +1030,21 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     const { connections_count, counts } = contadoresDoDono();
     return { profile: { ...resposta.profile, connections_count }, counts } as T;
   }
+  // Em conta de estabelecimento, o id do mock é `me`: o `GET /users/{id próprio}`
+  // do perfil comercial cai no `GET /users/me` do PR #62 (TID072), que ganha por
+  // cima os campos do perfil público. A primeira chamada é sempre a do
+  // `useCurrentUser`; os cenários de erro valem a partir da seguinte.
+  if (respostaDePerfil && partes.join('/') === 'users/me' && method === 'GET' && MOCK_USER_TYPE === 'BUSINESS') {
+    const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
+    db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
+    if (cenarioPerfilProprio === 'profile-error' && chamadas > 1) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    if (cenarioPerfilProprio === 'profile-flaky' && chamadas > 2) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    return { ...(respostaDePerfil.resposta as Record<string, unknown>), ...perfilPublicoDoEstabelecimento() } as T;
+  }
   if (respostaDePerfil) return respostaDePerfil.resposta as T;
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
@@ -1144,7 +1184,8 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       const tab = params.get('tab');
       const cursor = params.get('cursor');
       const limite = Number(params.get('limit') ?? LIMITE_PADRAO_DE_EVENTOS);
-      const abasPermitidas = ehDono ? ABAS_DO_DONO : ABAS_DE_VISITANTE;
+      // O estabelecimento dono recebe as mesmas abas de quem visita, como no backend.
+      const abasPermitidas = ehDono && MOCK_USER_TYPE === 'PERSONAL' ? ABAS_DO_DONO : ABAS_DE_VISITANTE;
       if ((tab === null) !== (cursor === null)) throw new MockApiError(400, 'Invalid tab');
       if (tab !== null && !abasPermitidas.some((aba) => aba === tab)) throw new MockApiError(400, 'Invalid tab');
       if (!Number.isInteger(limite) || limite < 1 || limite > 100 || (cursor !== null && !/^\d+$/.test(cursor))) {
