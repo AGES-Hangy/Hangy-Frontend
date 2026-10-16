@@ -20,6 +20,11 @@ export type ProfileTabsProps<Value extends string = string> = {
   onChange: (value: Value) => void;
   /** Aparência do componente. Padrão: `segmented`. */
   variant?: ProfileTabsVariant;
+  /**
+   * Nome do grupo de abas para o leitor de tela. Obrigatório na prática quando
+   * a tela tem mais de uma barra, para distinguir uma da outra.
+   */
+  accessibilityLabel?: string;
   /** Permite apenas ajustes de posicionamento no contêiner. */
   style?: StyleProp<ViewStyle>;
 };

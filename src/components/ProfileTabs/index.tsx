@@ -23,6 +23,7 @@ export function ProfileTabs<Value extends string>({
   value,
   onChange,
   variant = 'segmented',
+  accessibilityLabel,
   style,
 }: ProfileTabsProps<Value>) {
   const isListHeader = variant === 'listHeader';
@@ -35,18 +36,25 @@ export function ProfileTabs<Value extends string>({
         style,
       ]}
       accessibilityRole="tablist"
+      accessibilityLabel={accessibilityLabel}
     >
       {items.map((tab) => {
         const isSelected = tab.value === value;
-        const isDisabled = isSelected || tab.disabled;
 
         return (
           <Pressable
             key={tab.value}
-            onPress={() => onChange(tab.value)}
-            disabled={isDisabled}
+            // A aba ativa continua habilitada e focável: tocar nela não faz nada,
+            // mas desabilitá-la a anunciava como indisponível e a tirava do Tab.
+            onPress={() => {
+              if (!isSelected) onChange(tab.value);
+            }}
+            disabled={tab.disabled}
             accessibilityRole="tab"
             accessibilityState={{ selected: isSelected, disabled: tab.disabled }}
+            // O react-native-web não lê o `accessibilityState`: sem isto, a aba
+            // ativa não sai com `aria-selected` na Web.
+            aria-selected={isSelected}
             style={({ pressed }) => [
               styles.tab,
               isListHeader ? styles.listHeaderTab : styles.segmentedTab,
