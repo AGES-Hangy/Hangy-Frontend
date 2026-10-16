@@ -7,18 +7,47 @@ import { router } from 'expo-router';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { ProfileEventList } from '@/components/Profile/ProfileEventList';
 import { ProfileHeader } from '@/components/Profile/ProfileHeader';
 import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
+import { ProfileTabs } from '@/components/ProfileTabs';
 import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMyProfile } from '@/hooks/useMyProfile';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
+import { useUserEvents } from '@/hooks/useUserEvents';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
+import type { UserEventsTab } from '@/types/user';
 import { removeToken } from '@/utils/auth';
 import type { LoadError } from '@/utils/apiErrors';
+
+type OwnProfileTab = 'history' | 'events';
+type OwnEventsSubTab = Extract<UserEventsTab, 'created' | 'interests' | 'confirmed'>;
+
+const OWN_PROFILE_TABS = [
+  { value: 'history', label: 'Histórico' },
+  { value: 'events', label: 'Eventos' },
+] as const satisfies ReadonlyArray<{ value: OwnProfileTab; label: string }>;
+
+const OWN_EVENTS_SUBTABS = [
+  { value: 'created', label: 'Criados' },
+  { value: 'interests', label: 'Interesses' },
+  { value: 'confirmed', label: 'Confirmados' },
+] as const satisfies ReadonlyArray<{ value: OwnEventsSubTab; label: string }>;
+
+const EMPTY_OWN_EVENTS: Record<UserEventsTab, { title: string; text: string }> = {
+  history: { title: 'Nenhum evento no histórico', text: 'Os eventos que já aconteceram aparecem aqui.' },
+  created: { title: 'Nenhum evento criado', text: 'Os eventos que você criar aparecem aqui.' },
+  interests: { title: 'Nenhum evento salvo', text: 'Os eventos que você marcar como interesse aparecem aqui.' },
+  confirmed: {
+    title: 'Nenhuma presença confirmada',
+    text: 'Os eventos em que você confirmar presença aparecem aqui.',
+  },
+};
 
 export default function Profile() {
   // Sem `userId` é o perfil próprio; com, é o de outra pessoa ou de um
@@ -34,8 +63,20 @@ export default function Profile() {
   const { profile, counts, error: profileError, reload: reloadProfile } = useMyProfile({
     enabled: isPersonalProfile,
   });
+  // Ações em outras telas (criar, confirmar, favoritar) mudam as abas, e os
+  // contadores não cobrem criar nem favoritar: a lista também recarrega no foco.
+  const {
+    tabs: eventTabs,
+    isLoading: isLoadingEvents,
+    error: eventsError,
+    reload: reloadEvents,
+    loadMore,
+  } = useUserEvents(isPersonalProfile ? user?.userId : undefined, { reloadOnFocus: true });
+  const [ownTab, setOwnTab] = useState<OwnProfileTab>('events');
+  const [eventsSubTab, setEventsSubTab] = useState<OwnEventsSubTab>('created');
   const { unregisterDevice } = useUnregisterDevice();
   const { isOffline } = useNetworkStatus();
+  const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
   const { addToast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -83,22 +124,43 @@ export default function Profile() {
     void reloadProfile();
   }, [reloadProfile]);
 
-  const reloadFailure = profile && profileError ? profileError : null;
+  const retryEvents = useCallback(() => {
+    feedbackKey.current = null;
+    void reloadEvents();
+  }, [reloadEvents]);
 
+  // O toast guarda o `retryFailed` de quando apareceu: o que falhou é lido no
+  // toque, e só isso recarrega.
+  const failed = useRef({ profile: false, events: false });
   useEffect(() => {
-    if (!profileError) feedbackKey.current = null;
-  }, [profileError]);
+    failed.current = { profile: profileError !== null, events: eventsError !== null };
+  }, [eventsError, profileError]);
+
+  const retryFailed = useCallback(() => {
+    feedbackKey.current = null;
+    if (failed.current.profile) void reloadProfile();
+    if (failed.current.events) void reloadEvents();
+  }, [reloadEvents, reloadProfile]);
+
+  const reloadFailure =
+    profile && profileError ? profileError : profile && eventTabs && eventsError ? eventsError : null;
+
+  // A recarga dos eventos limpa o erro ao começar; só uma resposta sem erro
+  // libera um novo aviso.
+  useEffect(() => {
+    if (!profileError && !eventsError && !isLoadingEvents) feedbackKey.current = null;
+  }, [eventsError, isLoadingEvents, profileError]);
 
   useEffect(() => {
     if (!reloadFailure || feedbackKey.current === reloadFailure.kind) return;
     feedbackKey.current = reloadFailure.kind;
 
     if (reloadFailure.kind === 'timeout' || reloadFailure.kind === 'server') {
-      addToast({ type: 'error', message: reloadFailure.message, actionLabel: 'Tentar de novo', onAction: retryProfile });
+      addToast({ type: 'error', message: reloadFailure.message, actionLabel: 'Tentar de novo', onAction: retryFailed });
     } else if (!isOffline) {
       addToast({ type: 'error', message: reloadFailure.message });
     }
-  }, [addToast, isOffline, reloadFailure, retryProfile]);
+  }, [addToast, isOffline, reloadFailure, retryFailed]);
 
   const logoutButton = (
     <Button
@@ -128,6 +190,8 @@ export default function Profile() {
     }
 
     const eventsCount = counts.confirmed + counts.past;
+    const activeEventsTab: UserEventsTab = ownTab === 'history' ? 'history' : eventsSubTab;
+    const activeEvents = eventTabs ? eventTabs[activeEventsTab] : null;
 
     return (
       <View style={styles.screen}>
@@ -146,6 +210,32 @@ export default function Profile() {
             actions={
               <Button label="Editar perfil" variant="Secondary" onPress={openEditProfile} style={styles.fullWidth} />
             }
+          />
+
+          <View style={styles.tabsWrap}>
+            <ProfileTabs items={OWN_PROFILE_TABS} value={ownTab} onChange={setOwnTab} />
+          </View>
+          {ownTab === 'events' && (
+            <View style={styles.tabsWrap}>
+              <ProfileTabs
+                items={OWN_EVENTS_SUBTABS}
+                value={eventsSubTab}
+                onChange={setEventsSubTab}
+                variant="listHeader"
+              />
+            </View>
+          )}
+
+          <ProfileEventList
+            items={eventTabs ? (activeEvents?.items ?? []) : null}
+            loadFailed={eventsError !== null}
+            onRetry={retryEvents}
+            empty={EMPTY_OWN_EVENTS[activeEventsTab]}
+            hasMore={activeEvents?.hasMore ?? false}
+            isLoadingMore={activeEvents?.loadingMore ?? false}
+            onLoadMore={() => handleLoadMore(activeEventsTab)}
+            loadMoreButtonRef={loadMoreButtonRef}
+            cardState={activeEventsTab === 'confirmed' ? 'Confirmed' : undefined}
           />
 
           {/* No Figma, "Sair da conta" fica no Editar perfil; aqui é o único logout do app por enquanto. */}
@@ -254,6 +344,11 @@ const styles = StyleSheet.create({
   // Mesmo respiro de `UserProfile`: o `OfflineBanner` é absoluto e cobriria o topo.
   contentOffline: {
     paddingTop: spacing[64],
+  },
+  // O `ProfileTabs` ocupa 100% do contêiner: a margem lateral vem de fora,
+  // como o "TabsWrap" dos frames.
+  tabsWrap: {
+    paddingHorizontal: spacing[16],
   },
   logoutRow: {
     paddingTop: spacing[16],

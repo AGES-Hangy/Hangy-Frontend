@@ -117,14 +117,15 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o valor
  * exige reiniciar o Metro (sem precisar de `-c`).
  *
- * | Valor           | Fotos                                               | Eventos do dono                                      | Contadores (`GET /users/me/profile`)                                                   |
- * | --------------- | --------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
- * | `full` (padrão) | 45 fotos, em duas páginas com o `limit` padrão (30) | Criados 4, Interesses 2, Confirmados 2, Histórico 25 | 134 conexões, 25 encerrados, 2 confirmados, 45 fotos                                   |
- * | `empty`         | Lista vazia                                         | Abas vazias                                          | Zerados                                                                                |
- * | `error`         | `500` na primeira página                            | `500` na primeira carga                              | Como em `full`                                                                         |
- * | `error-page`    | Primeira página OK, `500` na seguinte               | Primeira carga OK, `500` no "Ver mais"               | Como em `full`                                                                         |
- * | `profile-error` | Como em `full`                                      | Como em `full`                                       | `500` sempre, também na leitura do Editar perfil                                       |
- * | `profile-flaky` | Como em `full`                                      | Como em `full`                                       | 1ª chamada como em `full`, depois `500`; a leitura do Editar perfil conta como chamada |
+ * | Valor              | Fotos                                               | Eventos do dono                                      | Contadores (`GET /users/me/profile`)                                                   |
+ * | ------------------ | --------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
+ * | `full` (padrão)    | 45 fotos, em duas páginas com o `limit` padrão (30) | Criados 4, Interesses 2, Confirmados 2, Histórico 25 | 134 conexões, 25 encerrados, 2 confirmados, 45 fotos                                   |
+ * | `empty`            | Lista vazia                                         | Abas vazias                                          | Zerados                                                                                |
+ * | `error`            | `500` na primeira página                            | `500` na primeira carga                              | Como em `full`                                                                         |
+ * | `error-page`       | Primeira página OK, `500` na seguinte               | Primeira carga OK, `500` no "Ver mais"               | Como em `full`                                                                         |
+ * | `profile-error`    | Como em `full`                                      | Como em `full`                                       | `500` sempre, também na leitura do Editar perfil                                       |
+ * | `profile-flaky`    | Como em `full`                                      | Como em `full`                                       | 1ª chamada como em `full`, depois `500`; a leitura do Editar perfil conta como chamada |
+ * | `own-events-flaky` | Como em `full`                                      | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -134,8 +135,23 @@ import { API_TIMEOUT_MS } from '@/constants/api';
 /** Latência de mentira, para os estados de carregamento aparecerem de verdade. */
 const MOCK_LATENCY_MS = 600;
 
-type CenarioPerfilProprio = 'full' | 'empty' | 'error' | 'error-page' | 'profile-error' | 'profile-flaky';
-const CENARIOS_PERFIL_PROPRIO: readonly string[] = ['full', 'empty', 'error', 'error-page', 'profile-error', 'profile-flaky'];
+type CenarioPerfilProprio =
+  | 'full'
+  | 'empty'
+  | 'error'
+  | 'error-page'
+  | 'profile-error'
+  | 'profile-flaky'
+  | 'own-events-flaky';
+const CENARIOS_PERFIL_PROPRIO: readonly string[] = [
+  'full',
+  'empty',
+  'error',
+  'error-page',
+  'profile-error',
+  'profile-flaky',
+  'own-events-flaky',
+];
 const valorDoCenarioPerfilProprio = process.env.EXPO_PUBLIC_MOCK_OWN_PROFILE;
 const cenarioPerfilProprio: CenarioPerfilProprio =
   valorDoCenarioPerfilProprio && CENARIOS_PERFIL_PROPRIO.includes(valorDoCenarioPerfilProprio)
@@ -665,6 +681,8 @@ const EVENTOS_CONFIRMADOS_DO_DONO: UserEventItem[] = [
 ];
 
 const TOTAL_DO_HISTORICO_DO_DONO = 25;
+/** Tempo do "Ver mais" em `own-events-flaky`: dá para sair e voltar à aba no meio dele. */
+const VER_MAIS_LENTO_MS = 3000;
 const ABAS_DE_VISITANTE: readonly UserEventsTab[] = ['history', 'created'];
 const ABAS_DO_DONO: readonly UserEventsTab[] = ['history', 'created', 'interests', 'confirmed'];
 
@@ -1110,6 +1128,16 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       }
       if (ehDono && cenarioPerfilProprio === 'error-page' && cursor !== null) {
         throw new MockApiError(500, 'Internal server error');
+      }
+      // A recarga por foco falha com um "Ver mais" ainda em voo.
+      if (ehDono && cenarioPerfilProprio === 'own-events-flaky') {
+        if (cursor !== null) {
+          await wait(VER_MAIS_LENTO_MS);
+        } else {
+          const chamadas = (db.chamadasDeUsuario['eventos-do-dono'] ?? 0) + 1;
+          db.chamadasDeUsuario['eventos-do-dono'] = chamadas;
+          if (chamadas > 1) throw new MockApiError(500, 'Internal server error');
+        }
       }
 
       const eventos = (aba: UserEventsTab) => {
