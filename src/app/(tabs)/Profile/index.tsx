@@ -464,8 +464,8 @@ function BusinessOwnProfile({
   }
 
   // Só Seguidores: Eventos e Fotos do frame não têm fonte.
-  // `connections_count` até a task 281 trazer o `followers_count`.
-  const followers = profile.connections_count;
+  // `connections_count` até a task 281 [BE] trazer o `followers_count`.
+  const followers = profile.followers_count ?? profile.connections_count;
   const createdEvents = eventTabs ? eventTabs.created : null;
 
   return (

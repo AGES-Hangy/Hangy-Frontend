@@ -24,6 +24,7 @@ import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import type { ProfilePatch } from '@/hooks/useUserProfile';
 import type { UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
 
 /**
@@ -34,6 +35,18 @@ const MODAL_FADE_OUT_MS = 350;
 
 function displayName(profile: UserProfileData | null) {
   return profile?.name?.trim() || null;
+}
+
+/** Seguidores do estabelecimento: `connections_count` até a task 281 [BE] trazer o `followers_count`. */
+function followersOf(profile: UserProfileData) {
+  return profile.followers_count ?? profile.connections_count;
+}
+
+/** Muda os seguidores no mesmo campo de onde `followersOf` lê. */
+function followersPatch(profile: UserProfileData, delta: number): ProfilePatch {
+  return typeof profile.followers_count === 'number'
+    ? { followers_count: profile.followers_count + delta }
+    : { connections_count: profile.connections_count + delta };
 }
 
 type PersonEventsTab = Extract<UserEventsTab, 'history' | 'created'>;
@@ -194,14 +207,14 @@ export default function UserProfile() {
   const handleFollow = useCallback(async () => {
     const target = profileRef.current;
     if (!target) return;
-    const previous = patchProfile({ is_following: true, connections_count: target.connections_count + 1 });
+    const previous = patchProfile({ is_following: true, ...followersPatch(target, 1) });
     if (!previous) return;
 
     const result = await follow(target.id);
     if (result === 'done') {
       const current = profileRef.current;
       if (current && !current.is_following) {
-        patchProfile({ is_following: true, connections_count: current.connections_count + 1 });
+        patchProfile({ is_following: true, ...followersPatch(current, 1) });
       }
       const businessName = displayName(profileRef.current ?? target);
       addToast({
@@ -247,14 +260,14 @@ export default function UserProfile() {
     closeUnfollowDialog();
     const target = profileRef.current;
     if (!target) return;
-    const previous = patchProfile({ is_following: false, connections_count: target.connections_count - 1 });
+    const previous = patchProfile({ is_following: false, ...followersPatch(target, -1) });
     if (!previous) return;
 
     const result = await unfollow(target.id);
     if (result === 'done') {
       const current = profileRef.current;
       if (current && current.is_following) {
-        patchProfile({ is_following: false, connections_count: current.connections_count - 1 });
+        patchProfile({ is_following: false, ...followersPatch(current, -1) });
       }
       return;
     }
@@ -317,7 +330,7 @@ export default function UserProfile() {
     : canConnect
       ? handleConnect
       : undefined;
-  const count = visibleProfile.connections_count;
+  const count = isBusiness ? followersOf(visibleProfile) : visibleProfile.connections_count;
   const singular = count === 1;
   const stats = [
     {
