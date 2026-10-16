@@ -162,7 +162,7 @@ export default function Profile() {
           action: {
             icon: 'flag',
             accessibilityLabel: 'Denunciar perfil',
-            // A US11.1 pluga o fluxo de denúncia aqui.
+            // A task 090 [FE] (US11.1) pluga o fluxo de denúncia aqui.
             onPress: () => {},
           },
         },
