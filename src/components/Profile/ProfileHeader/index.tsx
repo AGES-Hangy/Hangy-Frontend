@@ -22,14 +22,18 @@ export function ProfileHeader({
   avatarVariant,
   stats,
   name,
+  focusRef,
   description,
   tags,
   actions,
 }: ProfileHeaderProps) {
   const avatarSource = photoUrl ? { uri: photoUrl } : undefined;
+  const attachFocus = (node: View | Text | null) => {
+    if (focusRef) focusRef.current = node;
+  };
 
   return (
-    <View style={styles.header}>
+    <View ref={name ? undefined : attachFocus} style={styles.header}>
       <View style={styles.top}>
         {/* Decorativo: o nome vem logo abaixo e o leitor de tela não precisa anunciar a foto. */}
         {avatarVariant === 'Store' ? (
@@ -65,7 +69,7 @@ export function ProfileHeader({
       {(name || description) && (
         <View style={styles.identity}>
           {name && (
-            <Text style={styles.name} accessibilityRole="header">
+            <Text ref={attachFocus} style={styles.name} accessibilityRole="header">
               {name}
             </Text>
           )}
