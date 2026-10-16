@@ -606,14 +606,11 @@ function perfilDaConexao(connectionId: string) {
   return perfil.connection_id === connectionId ? perfil : null;
 }
 
-/** Seguidores nos dois campos, como na task 281 [BE]; sem ela, só no `connections_count`. */
+/** Seguidores no `followers_count` da task 281 [BE]; sem ela, no `connections_count`. */
 function mudancaDeSeguidores(estabelecimento: UserProfile, delta: number): RelacaoDoUsuario {
-  return {
-    connections_count: estabelecimento.connections_count + delta,
-    ...(typeof estabelecimento.followers_count === 'number' && {
-      followers_count: estabelecimento.followers_count + delta,
-    }),
-  };
+  return typeof estabelecimento.followers_count === 'number'
+    ? { followers_count: estabelecimento.followers_count + delta }
+    : { connections_count: estabelecimento.connections_count + delta };
 }
 
 function atualizarRelacao(userId: string, mudanca: RelacaoDoUsuario) {
@@ -675,6 +672,9 @@ function perfilInicial(userId: string): UserProfile {
     connection_direction:
       connectionStatus === 'PENDING' ? (SOLICITACOES_RECEBIDAS.has(cenario) ? 'RECEIVED' : 'SENT') : null,
     followers_count: ehEstabelecimento ? perfil.connections_count : null,
+    // Estabelecimento não se conecta: zerado, a tela que ler os seguidores do
+    // campo errado mostra 0.
+    ...(ehEstabelecimento && { connections_count: 0 }),
   };
 }
 
@@ -856,7 +856,7 @@ function perfilPublicoDoEstabelecimento() {
     description: perfil.estabelecimento.description,
     photo_url: null,
     tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
-    connections_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
+    connections_count: 0,
     followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
     connection_status: null,
     connection_id: null,

@@ -8,7 +8,7 @@ import { describeProfileLoadError } from '@/utils/apiErrors';
 import type { LoadError } from '@/utils/apiErrors';
 
 export type ProfilePatch = Partial<
-  Pick<UserProfile, 'connection_status' | 'is_following' | 'connections_count'>
+  Pick<UserProfile, 'connection_status' | 'is_following' | 'connections_count' | 'followers_count'>
 >;
 
 type LoadedProfile = { id: string; profile: UserProfile } | null;
