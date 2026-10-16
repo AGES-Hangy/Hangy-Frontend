@@ -134,6 +134,7 @@ export default function UserProfile() {
   useTopAppBar({
     variant: 'Profile',
     title: name ?? 'Perfil',
+    // A task 090 [FE] (US11.1) pluga o fluxo de denúncia aqui.
     action: visibleProfile
       ? { icon: 'flag', accessibilityLabel: 'Denunciar perfil', disabled: true, onPress: () => {} }
       : undefined,

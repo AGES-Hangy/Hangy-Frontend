@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
@@ -60,17 +59,12 @@ const EMPTY_GALLERY = {
   text: 'Você ainda não adicionou fotos aos eventos de que participou.',
 };
 
+/** Perfil próprio. O de outra pessoa ou de um estabelecimento fica em `/UserProfile?id=`. */
 export default function Profile() {
-  // Sem `userId` é o perfil próprio; com, é o de outra pessoa ou de um
-  // estabelecimento. O nome vem por parâmetro por enquanto — quando existir a
-  // API de perfil, sai de um hook em `src/hooks/` no lugar disto.
-  const { userId, name } = useLocalSearchParams<{ userId?: string; name?: string }>();
-  const isOwnProfile = !userId;
-
   const { user, error: userError, refetch: refetchUser } = useCurrentUser();
   // Só a pessoa física tem `GET /users/me/profile`; o estabelecimento fica no
   // `BusinessOwnProfile`, mais abaixo.
-  const isPersonalProfile = isOwnProfile && user?.userType === 'PERSONAL';
+  const isPersonalProfile = user?.userType === 'PERSONAL';
   const { profile, counts, error: profileError, reload: reloadProfile } = useMyProfile({
     enabled: isPersonalProfile,
   });
@@ -146,27 +140,14 @@ export default function Profile() {
     router.push({ pathname: '/EditProfile', params: user ? { userId: user.userId } : {} });
   }
 
-  useTopAppBar(
-    isOwnProfile
-      ? {
-          variant: 'Profile',
-          // Numa conta de estabelecimento o título é o nome do estabelecimento.
-          // O do perfil recarrega no foco; o do `/users/me` só vale até ele chegar.
-          title: user?.userType === 'BUSINESS' ? businessName || user.name || 'Meu perfil' : 'Meu perfil',
-          // Raiz de aba: não veio de lugar nenhum, então não tem voltar.
-          showBack: false,
-        }
-      : {
-          variant: 'Profile',
-          title: name ?? 'Perfil',
-          action: {
-            icon: 'flag',
-            accessibilityLabel: 'Denunciar perfil',
-            // A task 090 [FE] (US11.1) pluga o fluxo de denúncia aqui.
-            onPress: () => {},
-          },
-        },
-  );
+  useTopAppBar({
+    variant: 'Profile',
+    // Numa conta de estabelecimento o título é o nome do estabelecimento.
+    // O do perfil recarrega no foco; o do `/users/me` só vale até ele chegar.
+    title: user?.userType === 'BUSINESS' ? businessName || user.name || 'Meu perfil' : 'Meu perfil',
+    // Raiz de aba: não veio de lugar nenhum, então não tem voltar.
+    showBack: false,
+  });
 
   // Tipo do último erro de recarga já avisado: cada volta ao foco gera um erro
   // novo, e sem a chave a mesma falha seria avisada a cada retorno à aba.
@@ -239,7 +220,7 @@ export default function Profile() {
     />
   );
 
-  if (isOwnProfile && !user) {
+  if (!user) {
     return userError ? (
       <LoadErrorState error={userError} onRetry={refetchUser} logoutButton={logoutButton} offline={isOffline} />
     ) : (
@@ -247,7 +228,7 @@ export default function Profile() {
     );
   }
 
-  if (isPersonalProfile) {
+  if (user.userType === 'PERSONAL') {
     if (!profile || !counts) {
       return profileError ? (
         <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} offline={isOffline} />
@@ -333,7 +314,7 @@ export default function Profile() {
     );
   }
 
-  if (isOwnProfile && user?.userType === 'BUSINESS') {
+  if (user.userType === 'BUSINESS') {
     return (
       <BusinessOwnProfile
         userId={user.userId}
@@ -345,33 +326,9 @@ export default function Profile() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.text}>{isOwnProfile ? 'Profile' : name}</Text>
-      {isOwnProfile && (
-        <Button
-          label="Editar perfil"
-          variant="Secondary"
-          // A mesma rota para pessoa física e estabelecimento: a variante sai
-          // do tipo da conta logada, dentro da tela.
-          onPress={() =>
-            router.push({ pathname: '/EditProfile', params: user ? { userId: user.userId } : {} })
-          }
-          style={styles.logout}
-        />
-      )}
-      {isOwnProfile && (
-        <Button
-          label="Sair"
-          variant="Secondary"
-          onPress={handleLogout}
-          isLoading={isLoggingOut}
-          accessibilityLabel="Sair da conta"
-          style={styles.logout}
-        />
-      )}
-    </View>
-  );
+  // Um tipo de conta novo precisa do seu perfil aqui: sem ele, isto não compila.
+  const _exhaustive: never = user.userType;
+  return _exhaustive;
 }
 
 /**
@@ -545,20 +502,6 @@ function LoadErrorState({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.action.primary,
-  },
-  text: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.action.secondary,
-  },
-  logout: {
-    marginTop: spacing[24],
-  },
   screen: {
     flex: 1,
     backgroundColor: colors.surface.card,
