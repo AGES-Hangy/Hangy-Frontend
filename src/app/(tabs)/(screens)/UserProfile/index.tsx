@@ -37,6 +37,13 @@ function displayName(profile: UserProfileData | null) {
   return profile?.name?.trim() || null;
 }
 
+function firstName(name: string | null) {
+  return name ? name.split(/\s+/)[0] : null;
+}
+
+/** Diálogos de confirmação do botão de relacionamento: um aberto por vez. */
+type RelationshipDialog = 'unfollow' | 'cancel' | 'undo';
+
 /** Seguidores do estabelecimento: `connections_count` até a task 281 [BE] trazer o `followers_count`. */
 function followersOf(profile: UserProfileData) {
   return profile.followers_count ?? profile.connections_count;
@@ -68,7 +75,7 @@ function visibilityNotice(profileName: string | null, isBusiness: boolean) {
       : 'Você vê apenas os eventos públicos deste estabelecimento.';
   }
   return profileName
-    ? `Você vê apenas os eventos públicos que ${profileName.split(/\s+/)[0]} criou.`
+    ? `Você vê apenas os eventos públicos que ${firstName(profileName)} criou.`
     : 'Você vê apenas os eventos públicos criados por este perfil.';
 }
 
@@ -93,9 +100,10 @@ export default function UserProfile() {
   const { isOffline } = useNetworkStatus();
   const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
   const { addToast } = useToast();
-  const { connect, isLoading: isConnecting } = useConnections();
+  const { connect, remove: removeConnection, isLoading: isConnectionPending } = useConnections();
   const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
-  const [isUnfollowDialogOpen, setIsUnfollowDialogOpen] = useState(false);
+  const isRelationshipPending = isConnectionPending || isFollowPending;
+  const [openDialog, setOpenDialog] = useState<RelationshipDialog | null>(null);
   const relationshipButtonRef = useRef<View>(null);
   // Ligado ao fechar o diálogo; consumido quando o botão volta a aceitar foco.
   const returnFocusPending = useRef(false);
@@ -178,11 +186,10 @@ export default function UserProfile() {
 
     const result = await connect(target.id);
     if (result.kind === 'sent') {
-      // Um recarregamento no foco durante a requisição pode ter trazido o
-      // estado de antes do pedido.
-      if (profileRef.current?.connection_status !== 'PENDING') {
-        patchProfile({ connection_status: 'PENDING' });
-      }
+      // Também cobre um recarregamento no foco durante a requisição, que pode
+      // ter trazido o estado de antes do pedido. Com o id, dá para cancelar
+      // sem recarregar.
+      patchProfile({ connection_status: 'PENDING', connection_id: result.connectionId, connection_direction: 'SENT' });
       addToast({ type: 'success', message: 'Solicitação de conexão enviada.' });
       return;
     }
@@ -201,7 +208,7 @@ export default function UserProfile() {
   // Sem perfil na tela (ex.: virou indisponível) o diálogo fecha, para não
   // reaparecer sozinho se o perfil voltar.
   useEffect(() => {
-    if (!visibleProfile) setIsUnfollowDialogOpen(false);
+    if (!visibleProfile) setOpenDialog(null);
   }, [visibleProfile]);
 
   const handleFollow = useCallback(async () => {
@@ -228,15 +235,15 @@ export default function UserProfile() {
     if (result === 'unavailable') void reload();
   }, [addToast, follow, patchProfile, reload]);
 
-  const closeUnfollowDialog = useCallback(() => {
+  const closeDialog = useCallback(() => {
     returnFocusPending.current = true;
-    setIsUnfollowDialogOpen(false);
+    setOpenDialog(null);
   }, []);
 
   // Com o botão ocupado (confirmando) ele não aceita foco: a devolução espera
   // a requisição terminar.
   useEffect(() => {
-    if (isUnfollowDialogOpen || isFollowPending || !returnFocusPending.current) return;
+    if (openDialog || isRelationshipPending || !returnFocusPending.current) return;
 
     if (Platform.OS === 'web') {
       returnFocusPending.current = false;
@@ -254,10 +261,10 @@ export default function UserProfile() {
       if (button) AccessibilityInfo.sendAccessibilityEvent(button, 'focus');
     }, MODAL_FADE_OUT_MS);
     return () => clearTimeout(timer);
-  }, [isFollowPending, isUnfollowDialogOpen]);
+  }, [isRelationshipPending, openDialog]);
 
   const handleUnfollow = useCallback(async () => {
-    closeUnfollowDialog();
+    closeDialog();
     const target = profileRef.current;
     if (!target) return;
     const previous = patchProfile({ is_following: false, ...followersPatch(target, -1) });
@@ -274,7 +281,47 @@ export default function UserProfile() {
 
     patchProfile(previous);
     if (result === 'unavailable') void reload();
-  }, [closeUnfollowDialog, patchProfile, reload, unfollow]);
+  }, [closeDialog, patchProfile, reload, unfollow]);
+
+  // A conexão mudou do outro lado (respondida, cancelada ou desfeita): o
+  // recarregamento traz o estado real, sem voltar ao de antes do toque.
+  const reloadAfterStaleConnection = useCallback(() => {
+    void reload();
+    addToast({ type: 'info', message: 'Essa conexão mudou. O perfil foi atualizado.' });
+  }, [addToast, reload]);
+
+  // Cancelar a solicitação enviada e desfazer a conexão são o mesmo `DELETE`.
+  const handleRemoveConnection = useCallback(async () => {
+    closeDialog();
+    const target = profileRef.current;
+    const connectionId = target?.connection_id;
+    if (!target || !connectionId) return;
+    const wasConnected = target.connection_status === 'CONFIRMED';
+    const removed = (profile: UserProfileData): ProfilePatch => ({
+      connection_status: null,
+      connection_id: null,
+      connection_direction: null,
+      ...(wasConnected && { connections_count: profile.connections_count - 1 }),
+    });
+    const previous = patchProfile(removed(target));
+    if (!previous) return;
+
+    const result = await removeConnection(connectionId);
+    // No `gone` a conexão já não existia: o que a pessoa pediu já vale.
+    if (result === 'done' || result === 'gone') {
+      const current = profileRef.current;
+      if (current && current.connection_id === connectionId) patchProfile(removed(current));
+      addToast({ type: 'success', message: wasConnected ? 'Conexão desfeita.' : 'Solicitação cancelada.' });
+      return;
+    }
+
+    if (result === 'stale') {
+      reloadAfterStaleConnection();
+      return;
+    }
+
+    patchProfile(previous);
+  }, [addToast, closeDialog, patchProfile, reloadAfterStaleConnection, removeConnection]);
 
   if (isOwnProfile) return <Redirect href="/Profile" />;
 
@@ -322,14 +369,30 @@ export default function UserProfile() {
   }
 
   const isBusiness = visibleProfile.user_type === 'BUSINESS';
-  const canConnect = !isBusiness && visibleProfile.connection_status === null;
+  const { connection_status: connectionStatus, connection_id: connectionId } = visibleProfile;
+  // Sem `connection_id` (backend de antes da task 281 [BE]), "Solicitação
+  // enviada" e "Conectados" continuam sem ação.
+  const personAction =
+    connectionStatus === null
+      ? handleConnect
+      : connectionStatus === 'PENDING' && visibleProfile.connection_direction === 'SENT' && connectionId
+        ? () => setOpenDialog('cancel')
+        : connectionStatus === 'CONFIRMED' && connectionId
+          ? () => setOpenDialog('undo')
+          : undefined;
   const relationshipAction = isBusiness
     ? visibleProfile.is_following
-      ? () => setIsUnfollowDialogOpen(true)
+      ? () => setOpenDialog('unfollow')
       : handleFollow
-    : canConnect
-      ? handleConnect
-      : undefined;
+    : personAction;
+  // Com ação, o nome diz o que o toque faz; começa pelo rótulo visível (WCAG 2.5.3).
+  const relationshipLabel =
+    !isBusiness && personAction && connectionStatus === 'PENDING'
+      ? 'Solicitação enviada, cancelar solicitação'
+      : !isBusiness && personAction && connectionStatus === 'CONFIRMED'
+        ? 'Conectados, desfazer conexão'
+        : undefined;
+  const personFirstName = firstName(name);
   const count = isBusiness ? followersOf(visibleProfile) : visibleProfile.connections_count;
   const singular = count === 1;
   const stats = [
@@ -358,8 +421,9 @@ export default function UserProfile() {
                 connectionStatus={visibleProfile.connection_status}
                 isFollowing={visibleProfile.is_following}
                 onPress={relationshipAction}
+                accessibilityLabel={relationshipLabel}
                 disabled={isOffline}
-                isLoading={isConnecting || isFollowPending}
+                isLoading={isRelationshipPending}
                 style={styles.relationshipButton}
               />
             ) : null
@@ -398,13 +462,43 @@ export default function UserProfile() {
       </ScrollView>
 
       <Dialog
-        visible={isUnfollowDialogOpen && Boolean(visibleProfile)}
+        visible={openDialog === 'unfollow'}
         variant="SendRequest"
         title={name ? `Deixar de seguir ${name}?` : 'Deixar de seguir este estabelecimento?'}
         description="Você pode voltar a seguir quando quiser."
         confirmLabel="Deixar de seguir"
         onConfirm={() => void handleUnfollow()}
-        onCancel={closeUnfollowDialog}
+        onCancel={closeDialog}
+      />
+
+      <Dialog
+        visible={openDialog === 'cancel'}
+        variant="SendRequest"
+        title={
+          personFirstName
+            ? `Cancelar a solicitação para ${personFirstName}?`
+            : 'Cancelar a solicitação de conexão?'
+        }
+        description={
+          personFirstName
+            ? `A solicitação de conexão para ${personFirstName} será cancelada. Você pode enviar outra depois.`
+            : 'A solicitação de conexão será cancelada. Você pode enviar outra depois.'
+        }
+        confirmLabel="Cancelar solicitação"
+        onConfirm={() => void handleRemoveConnection()}
+        onCancel={closeDialog}
+      />
+
+      {/* Destrutivo: o `LeaveEvent` só empresta a aparência. */}
+      <Dialog
+        visible={openDialog === 'undo'}
+        variant="LeaveEvent"
+        title={personFirstName ? `Desfazer a conexão com ${personFirstName}?` : 'Desfazer a conexão?'}
+        description="Vocês deixam de estar conectados e a outra pessoa não é avisada. Para se conectar de novo, um de vocês precisa enviar uma nova solicitação."
+        confirmLabel="Desfazer conexão"
+        cancelLabel="Cancelar"
+        onConfirm={() => void handleRemoveConnection()}
+        onCancel={closeDialog}
       />
 
       {isOffline && <OfflineBanner />}

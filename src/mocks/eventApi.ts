@@ -130,7 +130,9 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `answer-gone`      | Solicitação recebida         | Responder: `404`, o GET seguinte vem sem conexão   |
  * | `cancel-boom`      | Solicitação enviada          | Cancelar: `500`                                    |
  * | `undo-boom`        | Conectada                    | Desfazer: `500`                                    |
+ * | `cancel-gone`      | Solicitação enviada          | Cancelar: `404`, o GET seguinte vem sem conexão    |
  * | `undo-gone`        | Conectada                    | Desfazer: `404`, o GET seguinte vem sem conexão    |
+ * | `undo-forbidden`   | Conectada                    | Desfazer: `403`, o GET seguinte vem sem conexão    |
  * | `pending-legacy`   | Solicitação enviada, sem 281 | Nenhuma                                            |
  * | `connected-legacy` | Conectada, sem 281           | Nenhuma                                            |
  * | `business-legacy`  | Estabelecimento, sem 281     | Seguir: `204`, +1                                  |
@@ -579,9 +581,9 @@ const SEGUIDORES_INICIAIS = 1204;
 /** Contadores no singular, para conferir "1 Conexão" e "1 Seguidor". */
 const CONTAGEM_INICIAL: Record<string, number> = { 'one-connection': 1, 'one-follower': 1 };
 
-const SOLICITACOES_ENVIADAS = new Set(['pending', 'cancel-boom', 'pending-legacy']);
+const SOLICITACOES_ENVIADAS = new Set(['pending', 'cancel-boom', 'cancel-gone', 'pending-legacy']);
 const SOLICITACOES_RECEBIDAS = new Set(['received', 'answer-boom', 'answer-conflict', 'answer-gone']);
-const CONECTADOS = new Set(['connected', 'undo-boom', 'undo-gone', 'connected-legacy']);
+const CONECTADOS = new Set(['connected', 'undo-boom', 'undo-gone', 'undo-forbidden', 'connected-legacy']);
 /** Sem os campos da task 281 [BE], como o backend de antes dela. */
 const SEM_CAMPOS_DA_281 = new Set(['pending-legacy', 'connected-legacy', 'business-legacy']);
 const SUFIXO_SEM_NOME = '-noname';
@@ -1407,10 +1409,15 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
 
     if (userId === 'cancel-boom' || userId === 'undo-boom') throw new MockApiError(500, 'Internal server error');
     const conexoesDepois = pessoa.connections_count - (pessoa.connection_status === 'CONFIRMED' ? 1 : 0);
-    // A outra pessoa já desfez a conexão.
-    if (userId === 'undo-gone') {
+    // A outra pessoa já cancelou ou desfez.
+    if (userId === 'undo-gone' || userId === 'cancel-gone') {
       atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
       throw new MockApiError(404, 'Connection not found');
+    }
+    // A conexão deixou de ser entre os dois; o GET seguinte vem sem conexão.
+    if (userId === 'undo-forbidden') {
+      atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
+      throw new MockApiError(403, 'Not part of this connection');
     }
     atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
     return undefined as T;
