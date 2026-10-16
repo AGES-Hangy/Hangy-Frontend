@@ -29,7 +29,7 @@ const toManageEvent: RouteBuilder = ({ event_id }) =>
   nonEmpty(event_id) ? { pathname: '/ManageEvent', params: { id: event_id } } : null;
 
 const toProfile: RouteBuilder = ({ user_id }) =>
-  nonEmpty(user_id) ? { pathname: '/Profile', params: { userId: user_id } } : null;
+  nonEmpty(user_id) ? { pathname: '/UserProfile', params: { id: user_id } } : null;
 
 const ROUTE_BY_TYPE: Record<NotificationType, RouteBuilder> = {
   EVENT_PARTICIPATION_REQUEST: toManageEvent,
