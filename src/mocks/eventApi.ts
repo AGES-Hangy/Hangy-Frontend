@@ -132,10 +132,19 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `GET /users/me` (o id da conta é `me`), que ganha os campos do perfil público:
  * 1204 seguidores (0 em `empty`). As abas do dono são `history` e `created`, como
  * as de quem visita. `profile-error` e `profile-flaky` contam a partir da 2ª
- * chamada do `GET /users/me` (a 1ª é a do `useCurrentUser`): `500` sempre, ou
- * depois da 2ª. Limitações do contador: Editar perfil só em `full` (o
- * `useCurrentUser` dele também chama o `GET /users/me` e entra na conta); e ele
- * depende da ordem das chamadas ao `/users/me`, rever no D6.
+ * chamada do `GET /users/me` (supõe que a 1ª é a do `useCurrentUser` do Perfil):
+ * `500` sempre, ou depois da 2ª. Editar perfil só em `full` (o `useCurrentUser`
+ * dele também chama o `GET /users/me` e entra na conta).
+ *
+ * Os contadores não sabem quem chamou: `GET /users/me` e `GET /users/{id
+ * próprio}` são o mesmo caminho, e o `/UserProfile` também chama o
+ * `GET /users/me` (`useCurrentUser`); com o id próprio, chama ainda o
+ * `GET /users/me/events` antes de redirecionar para o Perfil. Com
+ * `profile-error`, `profile-flaky` ou `own-events-flaky`, recarregar a página
+ * (zera os contadores) e abrir o Perfil antes de qualquer `/UserProfile`. O
+ * `/UserProfile?id=me` não combina com esses três cenários: ele gasta a 1ª carga
+ * dos eventos do dono e, em conta de estabelecimento, as duas primeiras chamadas
+ * do `GET /users/me`.
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -1032,8 +1041,9 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   }
   // Em conta de estabelecimento, o id do mock é `me`: o `GET /users/{id próprio}`
   // do perfil comercial cai no `GET /users/me` do PR #62 (TID072), que ganha por
-  // cima os campos do perfil público. A primeira chamada é sempre a do
-  // `useCurrentUser`; os cenários de erro valem a partir da seguinte.
+  // cima os campos do perfil público. Os cenários de erro valem a partir da
+  // segunda chamada: supõem que a primeira é a do `useCurrentUser` do Perfil
+  // (ordem e limitações no comentário do topo).
   if (respostaDePerfil && partes.join('/') === 'users/me' && method === 'GET' && MOCK_USER_TYPE === 'BUSINESS') {
     const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
     db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
