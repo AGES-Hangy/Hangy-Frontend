@@ -348,12 +348,9 @@ export default function UserProfile() {
             <SectionHeader title="Eventos" />
           </View>
         ) : (
-          <ProfileTabs
-            items={PERSON_EVENTS_TABS}
-            value={personEventsTab}
-            onChange={setPersonEventsTab}
-            style={styles.tabs}
-          />
+          <View style={styles.tabsWrap}>
+            <ProfileTabs items={PERSON_EVENTS_TABS} value={personEventsTab} onChange={setPersonEventsTab} />
+          </View>
         )}
 
         {activeEventsTab === 'created' && (
@@ -423,8 +420,10 @@ const styles = StyleSheet.create({
   relationshipButton: {
     alignSelf: 'stretch',
   },
-  tabs: {
-    marginHorizontal: spacing[16],
+  // O `ProfileTabs` ocupa 100% do contêiner: a margem lateral vem de fora,
+  // como o "TabsWrap" dos frames.
+  tabsWrap: {
+    paddingHorizontal: spacing[16],
   },
   sectionTitle: {
     paddingHorizontal: spacing[16],
