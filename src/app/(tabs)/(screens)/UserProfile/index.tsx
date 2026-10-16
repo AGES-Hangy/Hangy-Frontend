@@ -177,7 +177,7 @@ export default function UserProfile() {
     if (!previous) return;
 
     const result = await connect(target.id);
-    if (result === 'sent') {
+    if (result.kind === 'sent') {
       // Um recarregamento no foco durante a requisição pode ter trazido o
       // estado de antes do pedido.
       if (profileRef.current?.connection_status !== 'PENDING') {
@@ -189,13 +189,13 @@ export default function UserProfile() {
 
     // No 409 o servidor já tem um vínculo: o recarregamento traz o estado real,
     // sem passar de volta por "Conectar".
-    if (result === 'conflict') {
+    if (result.kind === 'conflict') {
       void reload();
       return;
     }
 
     patchProfile(previous);
-    if (result === 'unavailable') void reload();
+    if (result.kind === 'unavailable') void reload();
   }, [addToast, connect, patchProfile, reload]);
 
   // Sem perfil na tela (ex.: virou indisponível) o diálogo fecha, para não
