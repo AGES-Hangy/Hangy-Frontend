@@ -117,15 +117,16 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o valor
  * exige reiniciar o Metro (sem precisar de `-c`).
  *
- * | Valor              | Fotos                                               | Eventos do dono                                      | Contadores (`GET /users/me/profile`)                                                   |
- * | ------------------ | --------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
- * | `full` (padrão)    | 45 fotos, em duas páginas com o `limit` padrão (30) | Criados 4, Interesses 2, Confirmados 2, Histórico 25 | 134 conexões, 25 encerrados, 2 confirmados, 45 fotos                                   |
- * | `empty`            | Lista vazia                                         | Abas vazias                                          | Zerados                                                                                |
- * | `error`            | `500` na primeira página                            | `500` na primeira carga                              | Como em `full`                                                                         |
- * | `error-page`       | Primeira página OK, `500` na seguinte               | Primeira carga OK, `500` no "Ver mais"               | Como em `full`                                                                         |
- * | `profile-error`    | Como em `full`                                      | Como em `full`                                       | `500` sempre, também na leitura do Editar perfil                                       |
- * | `profile-flaky`    | Como em `full`                                      | Como em `full`                                       | 1ª chamada como em `full`, depois `500`; a leitura do Editar perfil conta como chamada |
- * | `own-events-flaky` | Como em `full`                                      | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
+ * | Valor              | Fotos                                                | Eventos do dono                                      | Contadores (`GET /users/me/profile`)                                                   |
+ * | ------------------ | ---------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
+ * | `full` (padrão)    | 45 fotos, em duas páginas com o `limit` padrão (30)  | Criados 4, Interesses 2, Confirmados 2, Histórico 25 | 134 conexões, 25 encerrados, 2 confirmados, 45 fotos                                   |
+ * | `empty`            | Lista vazia                                          | Abas vazias                                          | Zerados                                                                                |
+ * | `error`            | `500` na primeira página                             | `500` na primeira carga                              | Como em `full`                                                                         |
+ * | `error-page`       | Primeira página OK, `500` na seguinte                | Primeira carga OK, `500` no "Ver mais"               | Como em `full`                                                                         |
+ * | `profile-error`    | Como em `full`                                       | Como em `full`                                       | `500` sempre, também na leitura do Editar perfil                                       |
+ * | `profile-flaky`    | Como em `full`                                       | Como em `full`                                       | 1ª chamada como em `full`, depois `500`; a leitura do Editar perfil conta como chamada |
+ * | `own-events-flaky` | Como em `full`                                       | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
+ * | `photos-grow`      | 45 na 1ª carga; 46 (uma nova no topo) a partir da 2ª | Como em `full`                                       | 45 fotos na 1ª chamada; 46 a partir da 2ª                                              |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
@@ -142,7 +143,8 @@ type CenarioPerfilProprio =
   | 'error-page'
   | 'profile-error'
   | 'profile-flaky'
-  | 'own-events-flaky';
+  | 'own-events-flaky'
+  | 'photos-grow';
 const CENARIOS_PERFIL_PROPRIO: readonly string[] = [
   'full',
   'empty',
@@ -151,6 +153,7 @@ const CENARIOS_PERFIL_PROPRIO: readonly string[] = [
   'profile-error',
   'profile-flaky',
   'own-events-flaky',
+  'photos-grow',
 ];
 const valorDoCenarioPerfilProprio = process.env.EXPO_PUBLIC_MOCK_OWN_PROFILE;
 const cenarioPerfilProprio: CenarioPerfilProprio =
@@ -586,15 +589,37 @@ const EVENTOS_DAS_FOTOS = [
   { id: 'corrida-orla', title: 'Corrida na Orla' },
 ];
 
+/**
+ * Em `photos-grow`, a lista e o contador ganham uma foto a partir da segunda
+ * chamada de cada rota, como se a pessoa tivesse publicado uma foto em outra tela.
+ */
+function cresceuAFoto(rota: 'fotos' | 'contadores') {
+  return cenarioPerfilProprio === 'photos-grow' && (db.chamadasDeUsuario[`photos-grow:${rota}`] ?? 0) > 1;
+}
+
+function contarChamadaDoPhotosGrow(rota: 'fotos' | 'contadores') {
+  if (cenarioPerfilProprio !== 'photos-grow') return;
+  const chave = `photos-grow:${rota}`;
+  db.chamadasDeUsuario[chave] = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+}
+
 function fotosDoPerfilProprio(): UserPhoto[] {
   if (cenarioPerfilProprio === 'empty') return [];
   const maisRecente = Date.UTC(2026, 9, 10, 18);
-  return Array.from({ length: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO }, (_, indice) => ({
+  const fotos = Array.from({ length: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO }, (_, indice) => ({
     photo_id: `foto-${indice + 1}`,
     photo_url: `https://picsum.photos/seed/hangy-foto-${indice + 1}/600/600`,
     event: EVENTOS_DAS_FOTOS[indice % EVENTOS_DAS_FOTOS.length],
     created_at: new Date(maisRecente - indice * 60 * 60 * 1000).toISOString(),
   }));
+  if (!cresceuAFoto('fotos')) return fotos;
+  const nova = {
+    photo_id: 'foto-nova',
+    photo_url: 'https://picsum.photos/seed/hangy-foto-nova/600/600',
+    event: EVENTOS_DAS_FOTOS[0],
+    created_at: new Date(maisRecente + 60 * 60 * 1000).toISOString(),
+  };
+  return [nova, ...fotos];
 }
 
 const EVENTOS_CRIADOS_DO_DONO: UserEventItem[] = [
@@ -719,7 +744,7 @@ function contadoresDoDono() {
     counts: {
       past: TOTAL_DO_HISTORICO_DO_DONO,
       confirmed: EVENTOS_CONFIRMADOS_DO_DONO.length,
-      photos: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO,
+      photos: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO + (cresceuAFoto('contadores') ? 1 : 0),
     },
   };
 }
@@ -975,6 +1000,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       db.chamadasDeUsuario['perfil-proprio'] = chamadas;
       if (chamadas > 1) throw new MockApiError(500, 'Internal server error');
     }
+    contarChamadaDoPhotosGrow('contadores');
     const resposta = respostaDePerfil.resposta as PersonalProfileResponse;
     const { connections_count, counts } = contadoresDoDono();
     return { profile: { ...resposta.profile, connections_count }, counts } as T;
@@ -1088,6 +1114,8 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       throw new MockApiError(400, 'Invalid pagination parameters');
     }
 
+    // Só a primeira página conta: o "Ver mais" continua a mesma lista.
+    if (!cursor) contarChamadaDoPhotosGrow('fotos');
     const todas = fotosDoPerfilProprio();
     const items = todas.slice(inicio, inicio + limite);
     const fim = inicio + items.length;
