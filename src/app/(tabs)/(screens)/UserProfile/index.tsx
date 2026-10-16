@@ -349,7 +349,12 @@ export default function UserProfile() {
           </View>
         ) : (
           <View style={styles.tabsWrap}>
-            <ProfileTabs items={PERSON_EVENTS_TABS} value={personEventsTab} onChange={setPersonEventsTab} />
+            <ProfileTabs
+              items={PERSON_EVENTS_TABS}
+              value={personEventsTab}
+              onChange={setPersonEventsTab}
+              accessibilityLabel="Seções do perfil"
+            />
           </View>
         )}
 

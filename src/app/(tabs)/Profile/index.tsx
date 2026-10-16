@@ -276,7 +276,12 @@ export default function Profile() {
           />
 
           <View style={styles.tabsWrap}>
-            <ProfileTabs items={OWN_PROFILE_TABS} value={ownTab} onChange={selectOwnTab} />
+            <ProfileTabs
+              items={OWN_PROFILE_TABS}
+              value={ownTab}
+              onChange={selectOwnTab}
+              accessibilityLabel="Seções do perfil"
+            />
           </View>
           {ownTab === 'events' && (
             <View style={styles.tabsWrap}>
@@ -285,6 +290,7 @@ export default function Profile() {
                 value={eventsSubTab}
                 onChange={setEventsSubTab}
                 variant="listHeader"
+                accessibilityLabel="Tipos de evento"
               />
             </View>
           )}
