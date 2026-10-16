@@ -10,12 +10,15 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { ProfileEventList } from '@/components/Profile/ProfileEventList';
 import { ProfileHeader } from '@/components/Profile/ProfileHeader';
 import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
+import { ProfilePhotoGrid } from '@/components/Profile/ProfilePhotoGrid';
 import { ProfileTabs } from '@/components/ProfileTabs';
 import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useMyPhotos } from '@/hooks/useMyPhotos';
 import { useMyProfile } from '@/hooks/useMyProfile';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
+import { useProfilePhotosLoadMore } from '@/hooks/useProfilePhotosLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { useUserEvents } from '@/hooks/useUserEvents';
@@ -25,12 +28,13 @@ import type { UserEventsTab } from '@/types/user';
 import { removeToken } from '@/utils/auth';
 import type { LoadError } from '@/utils/apiErrors';
 
-type OwnProfileTab = 'history' | 'events';
+type OwnProfileTab = 'history' | 'events' | 'gallery';
 type OwnEventsSubTab = Extract<UserEventsTab, 'created' | 'interests' | 'confirmed'>;
 
 const OWN_PROFILE_TABS = [
   { value: 'history', label: 'Histórico' },
   { value: 'events', label: 'Eventos' },
+  { value: 'gallery', label: 'Galeria' },
 ] as const satisfies ReadonlyArray<{ value: OwnProfileTab; label: string }>;
 
 const OWN_EVENTS_SUBTABS = [
@@ -47,6 +51,11 @@ const EMPTY_OWN_EVENTS: Record<UserEventsTab, { title: string; text: string }> =
     title: 'Nenhuma presença confirmada',
     text: 'Os eventos em que você confirmar presença aparecem aqui.',
   },
+};
+
+const EMPTY_GALLERY = {
+  title: 'Nenhuma foto ainda',
+  text: 'Você ainda não adicionou fotos aos eventos de que participou.',
 };
 
 export default function Profile() {
@@ -74,9 +83,31 @@ export default function Profile() {
   } = useUserEvents(isPersonalProfile ? user?.userId : undefined, { reloadOnFocus: true });
   const [ownTab, setOwnTab] = useState<OwnProfileTab>('events');
   const [eventsSubTab, setEventsSubTab] = useState<OwnEventsSubTab>('created');
+  // As fotos só carregam na primeira vez que a Galeria abre, e continuam
+  // carregadas ao trocar de aba.
+  const [hasOpenedGallery, setHasOpenedGallery] = useState(false);
+  const {
+    photos,
+    isLoading: isLoadingPhotos,
+    error: photosError,
+    hasMore: hasMorePhotos,
+    isLoadingMore: isLoadingMorePhotos,
+    loadMoreError: photosLoadMoreError,
+    loadMore: loadMorePhotos,
+    reload: reloadPhotos,
+  } = useMyPhotos({ enabled: isPersonalProfile && hasOpenedGallery });
   const { unregisterDevice } = useUnregisterDevice();
   const { isOffline } = useNetworkStatus();
   const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
+  const { loadMoreButtonRef: loadMorePhotosButtonRef, handleLoadMore: handleLoadMorePhotos } =
+    useProfilePhotosLoadMore({
+      photos,
+      hasMore: hasMorePhotos,
+      isLoadingMore: isLoadingMorePhotos,
+      loadMoreError: photosLoadMoreError,
+      loadMore: loadMorePhotos,
+      isOffline,
+    });
   const { addToast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -88,6 +119,24 @@ export default function Profile() {
     await removeToken();
     router.replace('/Login');
   }
+
+  function selectOwnTab(tab: OwnProfileTab) {
+    setOwnTab(tab);
+    if (tab === 'gallery') setHasOpenedGallery(true);
+  }
+
+  // Sem recarga das fotos no foco: a recarga do perfil traz o contador, e só a
+  // mudança dele recarrega a Galeria já aberta.
+  const photosCount = counts?.photos;
+  const hasPhotos = photos !== null;
+  const lastPhotosCount = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const previous = lastPhotosCount.current;
+    lastPhotosCount.current = photosCount;
+    if (hasPhotos && previous !== undefined && photosCount !== undefined && previous !== photosCount) {
+      void reloadPhotos();
+    }
+  }, [hasPhotos, photosCount, reloadPhotos]);
 
   function openEditProfile() {
     router.push({ pathname: '/EditProfile', params: user ? { userId: user.userId } : {} });
@@ -129,27 +178,41 @@ export default function Profile() {
     void reloadEvents();
   }, [reloadEvents]);
 
+  const retryPhotos = useCallback(() => {
+    feedbackKey.current = null;
+    void reloadPhotos();
+  }, [reloadPhotos]);
+
   // O toast guarda o `retryFailed` de quando apareceu: o que falhou é lido no
   // toque, e só isso recarrega.
-  const failed = useRef({ profile: false, events: false });
+  const failed = useRef({ profile: false, events: false, photos: false });
   useEffect(() => {
-    failed.current = { profile: profileError !== null, events: eventsError !== null };
-  }, [eventsError, profileError]);
+    failed.current = { profile: profileError !== null, events: eventsError !== null, photos: photosError !== null };
+  }, [eventsError, photosError, profileError]);
 
   const retryFailed = useCallback(() => {
     feedbackKey.current = null;
     if (failed.current.profile) void reloadProfile();
     if (failed.current.events) void reloadEvents();
-  }, [reloadEvents, reloadProfile]);
+    if (failed.current.photos) void reloadPhotos();
+  }, [reloadEvents, reloadPhotos, reloadProfile]);
 
   const reloadFailure =
-    profile && profileError ? profileError : profile && eventTabs && eventsError ? eventsError : null;
+    profile && profileError
+      ? profileError
+      : profile && eventTabs && eventsError
+        ? eventsError
+        : profile && photos && photosError
+          ? photosError
+          : null;
 
-  // A recarga dos eventos limpa o erro ao começar; só uma resposta sem erro
-  // libera um novo aviso.
+  // As recargas de eventos e fotos limpam o erro ao começar; só uma resposta
+  // sem erro libera um novo aviso.
   useEffect(() => {
-    if (!profileError && !eventsError && !isLoadingEvents) feedbackKey.current = null;
-  }, [eventsError, isLoadingEvents, profileError]);
+    if (!profileError && !eventsError && !photosError && !isLoadingEvents && !isLoadingPhotos) {
+      feedbackKey.current = null;
+    }
+  }, [eventsError, isLoadingEvents, isLoadingPhotos, photosError, profileError]);
 
   useEffect(() => {
     if (!reloadFailure || feedbackKey.current === reloadFailure.kind) return;
@@ -213,7 +276,7 @@ export default function Profile() {
           />
 
           <View style={styles.tabsWrap}>
-            <ProfileTabs items={OWN_PROFILE_TABS} value={ownTab} onChange={setOwnTab} />
+            <ProfileTabs items={OWN_PROFILE_TABS} value={ownTab} onChange={selectOwnTab} />
           </View>
           {ownTab === 'events' && (
             <View style={styles.tabsWrap}>
@@ -226,17 +289,31 @@ export default function Profile() {
             </View>
           )}
 
-          <ProfileEventList
-            items={eventTabs ? (activeEvents?.items ?? []) : null}
-            loadFailed={eventsError !== null}
-            onRetry={retryEvents}
-            empty={EMPTY_OWN_EVENTS[activeEventsTab]}
-            hasMore={activeEvents?.hasMore ?? false}
-            isLoadingMore={activeEvents?.loadingMore ?? false}
-            onLoadMore={() => handleLoadMore(activeEventsTab)}
-            loadMoreButtonRef={loadMoreButtonRef}
-            cardState={activeEventsTab === 'confirmed' ? 'Confirmed' : undefined}
-          />
+          {ownTab === 'gallery' ? (
+            <ProfilePhotoGrid
+              photos={photos}
+              loadFailed={photosError !== null}
+              onRetry={retryPhotos}
+              total={counts.photos}
+              empty={EMPTY_GALLERY}
+              hasMore={hasMorePhotos}
+              isLoadingMore={isLoadingMorePhotos}
+              onLoadMore={handleLoadMorePhotos}
+              loadMoreButtonRef={loadMorePhotosButtonRef}
+            />
+          ) : (
+            <ProfileEventList
+              items={eventTabs ? (activeEvents?.items ?? []) : null}
+              loadFailed={eventsError !== null}
+              onRetry={retryEvents}
+              empty={EMPTY_OWN_EVENTS[activeEventsTab]}
+              hasMore={activeEvents?.hasMore ?? false}
+              isLoadingMore={activeEvents?.loadingMore ?? false}
+              onLoadMore={() => handleLoadMore(activeEventsTab)}
+              loadMoreButtonRef={loadMoreButtonRef}
+              cardState={activeEventsTab === 'confirmed' ? 'Confirmed' : undefined}
+            />
+          )}
 
           {/* No Figma, "Sair da conta" fica no Editar perfil; aqui é o único logout do app por enquanto. */}
           <View style={styles.logoutRow}>{logoutButton}</View>
