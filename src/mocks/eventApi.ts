@@ -7,6 +7,7 @@ import type {
 } from '@/types/event';
 import type { PersonalProfileResponse } from '@/types/profile';
 import type {
+  ConnectionAnswerResult,
   ConnectionRequestResult,
   UserEventItem,
   UserEventsPage,
@@ -85,7 +86,8 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `null`. Com `tab` e `cursor` vem só a continuação daquela aba. Com o id da
  * conta logada (`me`), vêm as quatro abas do dono, com privados (veja abaixo).
  *
- * Conectar (`POST /connections`), seguir (`POST`/`DELETE
+ * Conectar (`POST /connections`), responder (`PATCH /connections/{id}`),
+ * cancelar ou desfazer (`DELETE /connections/{id}`), seguir (`POST`/`DELETE
  * /businesses/{id}/follow`) e bloquear (`POST /users/{id}/block`) alteram o
  * estado do mock, então o GET seguinte já devolve o resultado da ação.
  * Recarregar o app (ou `resetMock`) desfaz tudo. Bloquear qualquer outro perfil
@@ -111,6 +113,27 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `block-already`    | Sem conexão                  | Bloquear: `409`, o GET seguinte vem `404`   |
  * | `block-gone`       | Sem conexão                  | Bloquear: `404`, o GET seguinte vem `404`   |
  * | `block-boom`       | Sem conexão                  | Bloquear: `500`                             |
+ *
+ * O perfil traz os campos da task 281 [BE] (`connection_id`,
+ * `connection_direction` e, no estabelecimento, `followers_count`), menos nos
+ * cenários `-legacy`, que imitam o backend de antes dela. Conectar devolve o
+ * `connection_id` e passa a PENDING enviada (`SENT`). O sufixo `-noname` tira o
+ * nome de qualquer cenário (`pending-noname`).
+ *
+ * | `user_id`          | Perfil                       | Ação                                               |
+ * | ------------------ | ---------------------------- | -------------------------------------------------- |
+ * | `pending`          | Solicitação enviada          | Cancelar: `204`, volta a sem conexão               |
+ * | `connected`        | Conectada, 8 conexões        | Desfazer: `204`, sem conexão, −1                   |
+ * | `received`         | Solicitação recebida         | Confirmar: `200`, conectada, +1; recusar: `200`    |
+ * | `answer-boom`      | Solicitação recebida         | Responder: `500`                                   |
+ * | `answer-conflict`  | Solicitação recebida         | Responder: `409`, o GET seguinte vem conectada     |
+ * | `answer-gone`      | Solicitação recebida         | Responder: `404`, o GET seguinte vem sem conexão   |
+ * | `cancel-boom`      | Solicitação enviada          | Cancelar: `500`                                    |
+ * | `undo-boom`        | Conectada                    | Desfazer: `500`                                    |
+ * | `undo-gone`        | Conectada                    | Desfazer: `404`, o GET seguinte vem sem conexão    |
+ * | `pending-legacy`   | Solicitação enviada, sem 281 | Nenhuma                                            |
+ * | `connected-legacy` | Conectada, sem 281           | Nenhuma                                            |
+ * | `business-legacy`  | Estabelecimento, sem 281     | Seguir: `204`, +1                                  |
  *
  * Perfil próprio (`GET /users/me/photos`, `GET /users/me/events` e os
  * contadores de `GET /users/me/profile`): o cenário vem de
@@ -530,7 +553,15 @@ function paginaDeEventos(eventos: UserEventItem[], cursor: string | null, limite
 }
 
 type RelacaoDoUsuario = Partial<
-  Pick<UserProfile, 'connection_status' | 'is_following' | 'connections_count'>
+  Pick<
+    UserProfile,
+    | 'connection_status'
+    | 'connection_id'
+    | 'connection_direction'
+    | 'is_following'
+    | 'connections_count'
+    | 'followers_count'
+  >
 >;
 
 const ESTABELECIMENTOS = new Set([
@@ -541,17 +572,48 @@ const ESTABELECIMENTOS = new Set([
   'follow-gone',
   'unfollow-gone',
   'one-follower',
+  'business-legacy',
 ]);
 const SEGUIDOS_DE_INICIO = new Set(['following', 'following-boom', 'unfollow-gone']);
 const SEGUIDORES_INICIAIS = 1204;
 /** Contadores no singular, para conferir "1 Conexão" e "1 Seguidor". */
 const CONTAGEM_INICIAL: Record<string, number> = { 'one-connection': 1, 'one-follower': 1 };
 
-function statusDeConexaoInicial(userId: string): UserProfile['connection_status'] {
-  if (userId === 'pending') return 'PENDING';
-  if (userId === 'connected') return 'CONFIRMED';
-  if (userId === 'rejected') return 'REJECTED';
+const SOLICITACOES_ENVIADAS = new Set(['pending', 'cancel-boom', 'pending-legacy']);
+const SOLICITACOES_RECEBIDAS = new Set(['received', 'answer-boom', 'answer-conflict', 'answer-gone']);
+const CONECTADOS = new Set(['connected', 'undo-boom', 'undo-gone', 'connected-legacy']);
+/** Sem os campos da task 281 [BE], como o backend de antes dela. */
+const SEM_CAMPOS_DA_281 = new Set(['pending-legacy', 'connected-legacy', 'business-legacy']);
+const SUFIXO_SEM_NOME = '-noname';
+const SEM_CONEXAO: RelacaoDoUsuario = { connection_status: null, connection_id: null, connection_direction: null };
+
+function statusDeConexaoInicial(cenario: string): UserProfile['connection_status'] {
+  if (SOLICITACOES_ENVIADAS.has(cenario) || SOLICITACOES_RECEBIDAS.has(cenario)) return 'PENDING';
+  if (CONECTADOS.has(cenario)) return 'CONFIRMED';
+  if (cenario === 'rejected') return 'REJECTED';
   return null;
+}
+
+/** O id da conexão leva o do perfil, para o `PATCH` e o `DELETE` acharem a relação. */
+function idDaConexao(userId: string) {
+  return `conexao-${userId}`;
+}
+
+function perfilDaConexao(connectionId: string) {
+  const prefixo = idDaConexao('');
+  if (!connectionId.startsWith(prefixo)) return null;
+  const perfil = perfilVisitado(connectionId.slice(prefixo.length));
+  return perfil.connection_id === connectionId ? perfil : null;
+}
+
+/** Seguidores nos dois campos, como na task 281 [BE]; sem ela, só no `connections_count`. */
+function mudancaDeSeguidores(estabelecimento: UserProfile, delta: number): RelacaoDoUsuario {
+  return {
+    connections_count: estabelecimento.connections_count + delta,
+    ...(typeof estabelecimento.followers_count === 'number' && {
+      followers_count: estabelecimento.followers_count + delta,
+    }),
+  };
 }
 
 function atualizarRelacao(userId: string, mudanca: RelacaoDoUsuario) {
@@ -572,18 +634,25 @@ function perfilInicial(userId: string): UserProfile {
       photo_url: null,
       tags: [],
       connection_status: null,
+      connection_id: null,
+      connection_direction: null,
+      followers_count: null,
       is_following: false,
       connections_count: 0,
     };
   }
 
-  const ehEstabelecimento = ESTABELECIMENTOS.has(userId);
-  const segue = SEGUIDOS_DE_INICIO.has(userId);
+  // O cenário sem o sufixo: `pending-noname` se comporta como `pending`.
+  const semNome = userId.endsWith(SUFIXO_SEM_NOME);
+  const cenario = semNome ? userId.slice(0, -SUFIXO_SEM_NOME.length) : userId;
+  const ehEstabelecimento = ESTABELECIMENTOS.has(cenario);
+  const segue = SEGUIDOS_DE_INICIO.has(cenario);
+  const connectionStatus = ehEstabelecimento ? null : statusDeConexaoInicial(cenario);
 
-  return {
+  const perfil: UserProfile = {
     id: userId,
     user_type: ehEstabelecimento ? 'BUSINESS' : 'PERSONAL',
-    name: ehEstabelecimento ? 'DRY Moments' : 'Bruno Lima',
+    name: semNome ? null : ehEstabelecimento ? 'DRY Moments' : 'Bruno Lima',
     description: ehEstabelecimento
       ? 'Bar e eventos na Cidade Baixa.'
       : 'Futebol aos sábados e trilha quando dá.',
@@ -592,10 +661,20 @@ function perfilInicial(userId: string): UserProfile {
       { id: 't1', name: 'Esportes' },
       { id: 't2', name: 'Futebol' },
     ],
-    connection_status: ehEstabelecimento ? null : statusDeConexaoInicial(userId),
+    connection_status: connectionStatus,
     is_following: segue,
     connections_count:
-      CONTAGEM_INICIAL[userId] ?? (ehEstabelecimento ? SEGUIDORES_INICIAIS + (segue ? 1 : 0) : 8),
+      CONTAGEM_INICIAL[cenario] ?? (ehEstabelecimento ? SEGUIDORES_INICIAIS + (segue ? 1 : 0) : 8),
+  };
+  if (SEM_CAMPOS_DA_281.has(cenario)) return perfil;
+
+  const temConexao = connectionStatus === 'PENDING' || connectionStatus === 'CONFIRMED';
+  return {
+    ...perfil,
+    connection_id: temConexao ? idDaConexao(userId) : null,
+    connection_direction:
+      connectionStatus === 'PENDING' ? (SOLICITACOES_RECEBIDAS.has(cenario) ? 'RECEIVED' : 'SENT') : null,
+    followers_count: ehEstabelecimento ? perfil.connections_count : null,
   };
 }
 
@@ -778,7 +857,10 @@ function perfilPublicoDoEstabelecimento() {
     photo_url: null,
     tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
     connections_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
+    followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
     connection_status: null,
+    connection_id: null,
+    connection_direction: null,
     is_following: false,
   };
 }
@@ -1251,23 +1333,87 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       db.usuariosIndisponiveis.push(receiverId);
       throw new MockApiError(404, 'User not found');
     }
+    const enviada: RelacaoDoUsuario = {
+      connection_status: 'PENDING',
+      connection_id: idDaConexao(receiverId),
+      connection_direction: 'SENT',
+    };
     if (receiverId === 'connect-conflict') {
-      atualizarRelacao(receiverId, { connection_status: 'PENDING' });
+      atualizarRelacao(receiverId, enviada);
       throw new MockApiError(409, 'Connection already exists');
     }
     if (destinatario.connection_status !== null) {
       throw new MockApiError(409, 'Connection already exists');
     }
 
-    atualizarRelacao(receiverId, { connection_status: 'PENDING' });
+    atualizarRelacao(receiverId, enviada);
     const resultado: ConnectionRequestResult = {
-      connection_id: `conexao-${receiverId}`,
+      connection_id: idDaConexao(receiverId),
       requester_id: 'usuario-logado',
       receiver_id: receiverId,
       status: 'PENDING',
       created_at: new Date().toISOString(),
     };
     return resultado as T;
+  }
+
+  // Tasks 230 e 231 [BE]. No `PATCH`, a ordem dos erros é a do service do
+  // backend (404, 403, 409); como o mock não guarda quem recebeu depois da
+  // resposta, o 409 de solicitação já respondida só sai em `answer-conflict`.
+  if (partes[0] === 'connections' && partes.length === 2 && (method === 'PATCH' || method === 'DELETE')) {
+    const connectionId = partes[1] ?? '';
+    const pessoa = perfilDaConexao(connectionId);
+    if (!pessoa) throw new MockApiError(404, 'Connection not found');
+    const userId = pessoa.id;
+
+    if (method === 'PATCH') {
+      const body = init.body ? JSON.parse(String(init.body)) : {};
+      if (body.status !== 'CONFIRMED' && body.status !== 'REJECTED') {
+        throw new MockApiError(422, 'Invalid connection status');
+      }
+      if (pessoa.connection_direction !== 'RECEIVED') throw new MockApiError(403, 'Only the receiver can answer');
+      if (userId === 'answer-boom') throw new MockApiError(500, 'Internal server error');
+      // Respondida em outro lugar (ex.: Notificações) antes deste pedido chegar.
+      if (userId === 'answer-conflict') {
+        atualizarRelacao(userId, {
+          connection_status: 'CONFIRMED',
+          connection_direction: null,
+          connections_count: pessoa.connections_count + 1,
+        });
+        throw new MockApiError(409, 'Connection already answered');
+      }
+      // A outra pessoa cancelou a solicitação antes da resposta.
+      if (userId === 'answer-gone') {
+        atualizarRelacao(userId, SEM_CONEXAO);
+        throw new MockApiError(404, 'Connection not found');
+      }
+
+      atualizarRelacao(
+        userId,
+        body.status === 'CONFIRMED'
+          ? { connection_status: 'CONFIRMED', connection_direction: null, connections_count: pessoa.connections_count + 1 }
+          : // Sem `connection_id` na recusa, como na task 281 [BE].
+            { connection_status: 'REJECTED', connection_id: null, connection_direction: null },
+      );
+      const resultado: ConnectionAnswerResult = {
+        connection_id: connectionId,
+        requester_id: userId,
+        receiver_id: 'usuario-logado',
+        status: body.status,
+        updated_at: new Date().toISOString(),
+      };
+      return resultado as T;
+    }
+
+    if (userId === 'cancel-boom' || userId === 'undo-boom') throw new MockApiError(500, 'Internal server error');
+    const conexoesDepois = pessoa.connections_count - (pessoa.connection_status === 'CONFIRMED' ? 1 : 0);
+    // A outra pessoa já desfez a conexão.
+    if (userId === 'undo-gone') {
+      atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
+      throw new MockApiError(404, 'Connection not found');
+    }
+    atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
+    return undefined as T;
   }
 
   if (partes[0] === 'users' && partes[2] === 'block' && partes.length === 3 && method === 'POST') {
@@ -1299,10 +1445,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
         throw new MockApiError(404, 'Business not found');
       }
       if (!estabelecimento.is_following) {
-        atualizarRelacao(businessId, {
-          is_following: true,
-          connections_count: estabelecimento.connections_count + 1,
-        });
+        atualizarRelacao(businessId, { is_following: true, ...mudancaDeSeguidores(estabelecimento, 1) });
       }
       return undefined as T;
     }
@@ -1315,10 +1458,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
         throw new MockApiError(404, 'Business not found');
       }
       if (estabelecimento.is_following) {
-        atualizarRelacao(businessId, {
-          is_following: false,
-          connections_count: estabelecimento.connections_count - 1,
-        });
+        atualizarRelacao(businessId, { is_following: false, ...mudancaDeSeguidores(estabelecimento, -1) });
       }
       return undefined as T;
     }
