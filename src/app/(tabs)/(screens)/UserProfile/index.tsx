@@ -25,7 +25,7 @@ import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import type { ProfilePatch } from '@/hooks/useUserProfile';
-import type { UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
+import type { ConnectionAnswerResult, UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
 
 /**
  * Espera o fade de saída do `Modal` antes de mover o foco do leitor de tela:
@@ -100,12 +100,20 @@ export default function UserProfile() {
   const { isOffline } = useNetworkStatus();
   const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
   const { addToast } = useToast();
-  const { connect, remove: removeConnection, isLoading: isConnectionPending } = useConnections();
+  const {
+    connect,
+    answer: answerConnection,
+    remove: removeConnection,
+    isLoading: isConnectionPending,
+  } = useConnections();
   const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
   const isRelationshipPending = isConnectionPending || isFollowPending;
   const [openDialog, setOpenDialog] = useState<RelationshipDialog | null>(null);
   const relationshipButtonRef = useRef<View>(null);
-  // Ligado ao fechar o diálogo; consumido quando o botão volta a aceitar foco.
+  // O nome ou, sem nome, o cabeçalho: o destino do foco quando o botão some.
+  const headerFocusRef = useRef<View | Text>(null);
+  // Ligado ao fechar o diálogo ou ao responder; consumido quando o botão volta
+  // a aceitar foco.
   const returnFocusPending = useRef(false);
 
   // Se o `GET /users/me` falhar, `user` fica nulo e a tela segue como visita.
@@ -241,24 +249,34 @@ export default function UserProfile() {
   }, []);
 
   // Com o botão ocupado (confirmando) ele não aceita foco: a devolução espera
-  // a requisição terminar.
+  // a requisição terminar. Sem o botão (a recusa o esconde), o foco vai para o
+  // nome do perfil ou, sem nome, para o cabeçalho.
   useEffect(() => {
     if (openDialog || isRelationshipPending || !returnFocusPending.current) return;
 
     if (Platform.OS === 'web') {
       returnFocusPending.current = false;
       // Ao cancelar, o `Modal` da Web já devolve o foco; ao confirmar, o botão
-      // estava desabilitado e o foco caiu no `body`.
+      // estava desabilitado, e ao responder, o botão tocado saiu da tela: nos
+      // dois casos o foco caiu no `body`.
       if (typeof document !== 'undefined' && document.activeElement === document.body) {
-        relationshipButtonRef.current?.focus();
+        const button = relationshipButtonRef.current;
+        const header = headerFocusRef.current;
+        if (button) button.focus();
+        else if (header) {
+          // O nome e o cabeçalho não são focáveis: `-1` aceita o foco sem entrar
+          // na ordem do Tab.
+          (header as unknown as HTMLElement).setAttribute('tabindex', '-1');
+          header.focus();
+        }
       }
       return;
     }
 
     const timer = setTimeout(() => {
       returnFocusPending.current = false;
-      const button = relationshipButtonRef.current;
-      if (button) AccessibilityInfo.sendAccessibilityEvent(button, 'focus');
+      const target = relationshipButtonRef.current ?? headerFocusRef.current;
+      if (target) AccessibilityInfo.sendAccessibilityEvent(target, 'focus');
     }, MODAL_FADE_OUT_MS);
     return () => clearTimeout(timer);
   }, [isRelationshipPending, openDialog]);
@@ -289,6 +307,45 @@ export default function UserProfile() {
     void reload();
     addToast({ type: 'info', message: 'Essa conexão mudou. O perfil foi atualizado.' });
   }, [addToast, reload]);
+
+  const handleAnswer = useCallback(async (status: ConnectionAnswerResult['status']) => {
+    const target = profileRef.current;
+    const connectionId = target?.connection_id;
+    if (!target || !connectionId || target.connection_direction !== 'RECEIVED') return;
+    const confirmed = status === 'CONFIRMED';
+    // Sem `connection_id` na recusa, como na task 281 [BE].
+    const answered = (profile: UserProfileData): ProfilePatch =>
+      confirmed
+        ? { connection_status: 'CONFIRMED', connection_direction: null, connections_count: profile.connections_count + 1 }
+        : { connection_status: 'REJECTED', connection_id: null, connection_direction: null };
+    const previous = patchProfile(answered(target));
+    if (!previous) return;
+    // O botão tocado sai da tela com a mudança: o foco é devolvido no fim.
+    returnFocusPending.current = true;
+
+    const result = await answerConnection(connectionId, status);
+    if (result === 'done') {
+      const current = profileRef.current;
+      if (current && current.connection_status === 'PENDING') patchProfile(answered(current));
+      const requesterFirstName = firstName(displayName(profileRef.current ?? target));
+      addToast({
+        type: 'success',
+        message: !confirmed
+          ? 'Solicitação recusada.'
+          : requesterFirstName
+            ? `Agora você e ${requesterFirstName} estão conectados.`
+            : 'Agora vocês estão conectados.',
+      });
+      return;
+    }
+
+    if (result === 'stale') {
+      reloadAfterStaleConnection();
+      return;
+    }
+
+    patchProfile(previous);
+  }, [addToast, answerConnection, patchProfile, reloadAfterStaleConnection]);
 
   // Cancelar a solicitação enviada e desfazer a conexão são o mesmo `DELETE`.
   const handleRemoveConnection = useCallback(async () => {
@@ -410,6 +467,7 @@ export default function UserProfile() {
           avatarVariant={isBusiness ? 'Store' : 'User'}
           stats={stats}
           name={name}
+          focusRef={headerFocusRef}
           description={description}
           tags={visibleProfile.tags}
           actions={
@@ -419,8 +477,15 @@ export default function UserProfile() {
                 ref={relationshipButtonRef}
                 userType={visibleProfile.user_type}
                 connectionStatus={visibleProfile.connection_status}
+                connectionDirection={visibleProfile.connection_direction}
                 isFollowing={visibleProfile.is_following}
                 onPress={relationshipAction}
+                onAnswer={connectionId ? (status) => void handleAnswer(status) : undefined}
+                requestText={
+                  personFirstName
+                    ? `${personFirstName} quer se conectar com você.`
+                    : 'Este perfil quer se conectar com você.'
+                }
                 accessibilityLabel={relationshipLabel}
                 disabled={isOffline}
                 isLoading={isRelationshipPending}
