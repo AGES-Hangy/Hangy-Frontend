@@ -2,6 +2,9 @@ import type { EventPrivacy, ParticipationStatus, UserType } from '@/types/event'
 
 export type ConnectionStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
 
+/** Quem pediu a conexão pendente, visto por quem está logado. */
+export type ConnectionDirection = 'SENT' | 'RECEIVED';
+
 export interface UserTag {
   id: string;
   name: string;
@@ -19,6 +22,16 @@ export interface UserProfile {
    * entre quem visita e o perfil.
    */
   connection_status: ConnectionStatus | null;
+  /*
+   * Os três campos abaixo vêm do contrato da task 281 [BE], ainda sem
+   * implementação: até ela entrar, a API não os devolve.
+   */
+  /** Só em `PENDING` e `CONFIRMED`; `null` sem conexão e em `REJECTED`. */
+  connection_id?: string | null;
+  /** Só em `PENDING`. */
+  connection_direction?: ConnectionDirection | null;
+  /** Só se aplica a `BUSINESS`; `null` em pessoa. */
+  followers_count?: number | null;
   /** Só se aplica a `BUSINESS`. */
   is_following: boolean;
   connections_count: number;
@@ -30,6 +43,15 @@ export interface ConnectionRequestResult {
   receiver_id: string;
   status: ConnectionStatus;
   created_at: string;
+}
+
+/** Resposta de `PATCH /connections/{connection_id}`, pelo contrato da task 230 [BE]. */
+export interface ConnectionAnswerResult {
+  connection_id: string;
+  requester_id: string;
+  receiver_id: string;
+  status: Extract<ConnectionStatus, 'CONFIRMED' | 'REJECTED'>;
+  updated_at: string;
 }
 
 export interface UserEventItem {

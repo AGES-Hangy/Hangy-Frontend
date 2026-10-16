@@ -95,6 +95,8 @@ export const endpoints = {
     return `/users/${encodeURIComponent(userId)}/events${query ? `?${query}` : ''}`;
   },
   connectionRequests: () => '/connections',
+  /** `PATCH` responde a uma solicitação recebida (task 230 [BE]); `DELETE` cancela ou desfaz (task 231 [BE]). */
+  connection: (connectionId: string) => `/connections/${encodeURIComponent(connectionId)}`,
   businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
   userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
   myPhotos: (options?: { limit?: number; cursor?: string | null }) => {
