@@ -12,6 +12,8 @@ export type RelationshipButtonProps = {
   /** Só vale para `BUSINESS`. */
   isFollowing: boolean;
   onPress?: () => void;
+  /** Padrão: o rótulo do estado. Quando o toque tem ação, diga qual, começando pelo rótulo. */
+  accessibilityLabel?: string;
   disabled?: boolean;
   isLoading?: boolean;
   /** Escape hatch de layout (ex.: `{ alignSelf: 'stretch' }`). Não use para cor, raio ou tipografia. */

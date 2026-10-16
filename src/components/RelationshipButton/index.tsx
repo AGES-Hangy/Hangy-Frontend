@@ -29,6 +29,7 @@ export function RelationshipButton({
   connectionStatus,
   isFollowing,
   onPress,
+  accessibilityLabel,
   disabled = false,
   isLoading = false,
   style,
@@ -43,6 +44,7 @@ export function RelationshipButton({
       variant={variant}
       size="LG"
       onPress={onPress}
+      accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       isLoading={isLoading}
       style={style}
