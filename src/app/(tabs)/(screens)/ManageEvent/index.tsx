@@ -236,9 +236,7 @@ export default function ManageEvent() {
                 <ParticipantRow
                   key={person.participant_id}
                   name={person.user.name ?? 'Usuário'}
-                  onPress={() =>
-                    router.push(`/Profile?userId=${person.user.id}&name=${person.user.name ?? 'Usuário'}`)
-                  }
+                  onPress={() => router.push({ pathname: '/UserProfile', params: { id: person.user.id } })}
                   onRemove={
                     !canManage || isLocked
                       ? undefined

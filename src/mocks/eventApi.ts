@@ -5,6 +5,18 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
+import type { PersonalProfileResponse } from '@/types/profile';
+import type {
+  ConnectionAnswerResult,
+  ConnectionRequestResult,
+  UserEventItem,
+  UserEventsPage,
+  UserEventsTab,
+  UserEventsTabs,
+  UserPhoto,
+  UserProfile,
+} from '@/types/user';
+import { API_TIMEOUT_MS } from '@/constants/api';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
@@ -17,6 +29,9 @@ import type {
  * Também cobre `GET /terms/current` (task 212 [BE], também não subiu) pelo
  * mesmo motivo — não é um endpoint de evento, mas é só mais um backend que
  * falta, e criar um segundo arquivo/dispatcher pra um caso só seria over-engineering.
+ *
+ * Pelo mesmo motivo cobre `GET /users/{id}` e `GET /users/{id}/events` (tasks
+ * 075 e 228 [BE]), usados pelo perfil de outro usuário.
  *
  * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
  * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
@@ -40,10 +55,154 @@ import type {
  * | `forbidden` | `403` nos pendentes: só a seção de confirmados aparece    |
  * | `full`      | `409 Event is full` ao aprovar                           |
  * | `finished`  | `409 Event already finished` ao cancelar                 |
+ *
+ * Nas rotas de usuário, o `user_id` escolhe o cenário (`/UserProfile?id=pending`):
+ *
+ * | `user_id`          | Perfil                                    | Eventos                |
+ * | ------------------ | ----------------------------------------- | ---------------------- |
+ * | qualquer           | Pessoa sem conexão (Conectar)             | 3 por aba              |
+ * | `pending`          | Pessoa com solicitação enviada            | 3 por aba              |
+ * | `connected`        | Pessoa conectada                          | 3 por aba              |
+ * | `business`         | Estabelecimento sem seguir                | 3 por aba              |
+ * | `following`        | Estabelecimento seguido                   | 3 por aba              |
+ * | `minimal`          | Sem nome, bio, foto e tags                | Abas vazias            |
+ * | `events-boom`      | Pessoa sem conexão                        | `500`                  |
+ * | `many-events`      | Pessoa sem conexão                        | 45 por aba, 3 páginas  |
+ * | `events-page-boom` | Pessoa sem conexão                        | 45 por aba, 2ª: `500`  |
+ * | `events-flaky`     | Pessoa sem conexão                        | 1ª: `500`, depois 45   |
+ * | `long-flaky`       | Perfil: 1ª chamada OK, depois `500`       | 45 por aba             |
+ * | `missing`          | `404 User not found`                      | `404`                  |
+ * | `boom`             | `500`                                     | `500`                  |
+ * | `offline`          | Falha de rede                             | Falha de rede          |
+ * | `slow`             | Timeout, após `API_TIMEOUT_MS`            | Timeout                |
+ * | `flaky`            | 1ª chamada OK, depois `500`               | Idem                   |
+ * | `flaky-slow`       | 1ª chamada OK, depois timeout             | Idem                   |
+ *
+ * `flaky` e `flaky-slow` contam as chamadas por rota; recarregar o app (ou
+ * `resetMock`) zera a contagem.
+ *
+ * `GET /users/{id}/events` devolve as abas de quem visita, `history` (encerrados)
+ * e `created` (criados e não encerrados), com `interests` e `confirmed` em
+ * `null`. Com `tab` e `cursor` vem só a continuação daquela aba. Com o id da
+ * conta logada (`me`), vêm as quatro abas do dono, com privados (veja abaixo).
+ *
+ * Conectar (`POST /connections`), responder (`PATCH /connections/{id}`),
+ * cancelar ou desfazer (`DELETE /connections/{id}`), seguir (`POST`/`DELETE
+ * /businesses/{id}/follow`) e bloquear (`POST /users/{id}/block`) alteram o
+ * estado do mock, então o GET seguinte já devolve o resultado da ação.
+ * Recarregar o app (ou `resetMock`) desfaz tudo. Bloquear qualquer outro perfil
+ * responde `204`, e o GET seguinte vem `404`.
+ *
+ * | `user_id`          | Perfil                       | Ação                                        |
+ * | ------------------ | ---------------------------- | ------------------------------------------- |
+ * | qualquer pessoa    | Sem conexão                  | Conectar: `201`, passa a PENDING            |
+ * | `pending`          | Solicitação enviada          | Conectar: `409`                             |
+ * | `connected`        | Conectada                    | Conectar: `409`                             |
+ * | `rejected`         | `REJECTED`                   | Conectar: `409`                             |
+ * | `connect-conflict` | Sem conexão                  | Conectar: `409`, o GET seguinte vem PENDING |
+ * | `connect-boom`     | Sem conexão                  | Conectar: `500`                             |
+ * | `connect-gone`     | Sem conexão                  | Conectar: `404`, o GET seguinte vem `404`   |
+ * | `business`         | Sem seguir, 1204 seguidores  | Seguir: `204`, +1                           |
+ * | `following`        | Seguindo, 1205 seguidores    | Deixar de seguir: `204`, −1                 |
+ * | `business-boom`    | Sem seguir, 1204 seguidores  | Seguir: `500`                               |
+ * | `following-boom`   | Seguindo, 1205 seguidores    | Deixar de seguir: `500`                     |
+ * | `follow-gone`      | Sem seguir, 1204 seguidores  | Seguir: `404`, o GET seguinte vem `404`     |
+ * | `unfollow-gone`    | Seguindo, 1205 seguidores    | Deixar de seguir: `404`, GET seguinte `404` |
+ * | `one-connection`   | Sem conexão, 1 conexão       | Conectar: `201`, passa a PENDING            |
+ * | `one-follower`     | Sem seguir, 1 seguidor       | Seguir: `204`, +1                           |
+ * | `block-already`    | Sem conexão                  | Bloquear: `409`, o GET seguinte vem `404`   |
+ * | `block-gone`       | Sem conexão                  | Bloquear: `404`, o GET seguinte vem `404`   |
+ * | `block-boom`       | Sem conexão                  | Bloquear: `500`                             |
+ *
+ * O perfil traz os campos da task 281 [BE] (`connection_id`,
+ * `connection_direction` e, no estabelecimento, `followers_count`), menos nos
+ * cenários `-legacy`, que imitam o backend de antes dela. Conectar devolve o
+ * `connection_id` e passa a PENDING enviada (`SENT`). O sufixo `-noname` tira o
+ * nome de qualquer cenário (`pending-noname`).
+ *
+ * | `user_id`          | Perfil                       | Ação                                               |
+ * | ------------------ | ---------------------------- | -------------------------------------------------- |
+ * | `pending`          | Solicitação enviada          | Cancelar: `204`, volta a sem conexão               |
+ * | `connected`        | Conectada, 8 conexões        | Desfazer: `204`, sem conexão, −1                   |
+ * | `received`         | Solicitação recebida         | Confirmar: `200`, conectada, +1; recusar: `200`    |
+ * | `answer-boom`      | Solicitação recebida         | Responder: `500`                                   |
+ * | `answer-conflict`  | Solicitação recebida         | Responder: `409`, o GET seguinte vem conectada     |
+ * | `answer-gone`      | Solicitação recebida         | Responder: `404`, o GET seguinte vem sem conexão   |
+ * | `cancel-boom`      | Solicitação enviada          | Cancelar: `500`                                    |
+ * | `undo-boom`        | Conectada                    | Desfazer: `500`                                    |
+ * | `cancel-gone`      | Solicitação enviada          | Cancelar: `404`, o GET seguinte vem sem conexão    |
+ * | `undo-gone`        | Conectada                    | Desfazer: `404`, o GET seguinte vem sem conexão    |
+ * | `undo-forbidden`   | Conectada                    | Desfazer: `403`, o GET seguinte vem sem conexão    |
+ * | `pending-legacy`   | Solicitação enviada, sem 281 | Nenhuma                                            |
+ * | `connected-legacy` | Conectada, sem 281           | Nenhuma                                            |
+ * | `business-legacy`  | Estabelecimento, sem 281     | Seguir: `204`, +1                                  |
+ *
+ * Perfil próprio (`GET /users/me/photos`, `GET /users/me/events` e os
+ * contadores de `GET /users/me/profile`): o cenário vem de
+ * `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o valor
+ * exige reiniciar o Metro (sem precisar de `-c`).
+ *
+ * | Valor              | Fotos                                                | Eventos do dono                                      | Contadores (`GET /users/me/profile`)                                                   |
+ * | ------------------ | ---------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
+ * | `full` (padrão)    | 45 fotos, em duas páginas com o `limit` padrão (30)  | Criados 4, Interesses 2, Confirmados 2, Histórico 25 | 134 conexões, 25 encerrados, 2 confirmados, 45 fotos                                   |
+ * | `empty`            | Lista vazia                                          | Abas vazias                                          | Zerados                                                                                |
+ * | `error`            | `500` na primeira página                             | `500` na primeira carga                              | Como em `full`                                                                         |
+ * | `error-page`       | Primeira página OK, `500` na seguinte                | Primeira carga OK, `500` no "Ver mais"               | Como em `full`                                                                         |
+ * | `profile-error`    | Como em `full`                                       | Como em `full`                                       | `500` sempre, também na leitura do Editar perfil                                       |
+ * | `profile-flaky`    | Como em `full`                                       | Como em `full`                                       | 1ª chamada como em `full`, depois `500`; a leitura do Editar perfil conta como chamada |
+ * | `own-events-flaky` | Como em `full`                                       | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
+ * | `photos-grow`      | 45 na 1ª carga; 46 (uma nova no topo) a partir da 2ª | Como em `full`                                       | 45 fotos na 1ª chamada; 46 a partir da 2ª                                              |
+ *
+ * Com `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`, o perfil comercial lê o
+ * `GET /users/me` (o id da conta é `me`), que ganha os campos do perfil público:
+ * 1204 seguidores (0 em `empty`). As abas do dono são `history` e `created`, como
+ * as de quem visita. `profile-error` e `profile-flaky` contam a partir da 2ª
+ * chamada do `GET /users/me` (supõe que a 1ª é a do `useCurrentUser` do Perfil):
+ * `500` sempre, ou depois da 2ª. Editar perfil só em `full` (o `useCurrentUser`
+ * dele também chama o `GET /users/me` e entra na conta).
+ *
+ * Os contadores não sabem quem chamou: `GET /users/me` e `GET /users/{id
+ * próprio}` são o mesmo caminho, e o `/UserProfile` também chama o
+ * `GET /users/me` (`useCurrentUser`); com o id próprio, chama ainda o
+ * `GET /users/me/events` antes de redirecionar para o Perfil. Com
+ * `profile-error`, `profile-flaky` ou `own-events-flaky`, recarregar a página
+ * (zera os contadores) e abrir o Perfil antes de qualquer `/UserProfile`. O
+ * `/UserProfile?id=me` não combina com esses três cenários: ele gasta a 1ª carga
+ * dos eventos do dono e, em conta de estabelecimento, as duas primeiras chamadas
+ * do `GET /users/me`.
+ *
+ * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
+ * botão de relacionamento desabilitado dependem do estado real da rede
+ * (modo avião).
  */
 
 /** Latência de mentira, para os estados de carregamento aparecerem de verdade. */
 const MOCK_LATENCY_MS = 600;
+
+type CenarioPerfilProprio =
+  | 'full'
+  | 'empty'
+  | 'error'
+  | 'error-page'
+  | 'profile-error'
+  | 'profile-flaky'
+  | 'own-events-flaky'
+  | 'photos-grow';
+const CENARIOS_PERFIL_PROPRIO: readonly string[] = [
+  'full',
+  'empty',
+  'error',
+  'error-page',
+  'profile-error',
+  'profile-flaky',
+  'own-events-flaky',
+  'photos-grow',
+];
+const valorDoCenarioPerfilProprio = process.env.EXPO_PUBLIC_MOCK_OWN_PROFILE;
+const cenarioPerfilProprio: CenarioPerfilProprio =
+  valorDoCenarioPerfilProprio && CENARIOS_PERFIL_PROPRIO.includes(valorDoCenarioPerfilProprio)
+    ? (valorDoCenarioPerfilProprio as CenarioPerfilProprio)
+    : 'full';
 
 const wait = (ms = MOCK_LATENCY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -73,6 +232,21 @@ class MockNetworkError extends Error {
 
   constructor() {
     super('network');
+    this.name = 'ApiError';
+  }
+
+  is() {
+    return false;
+  }
+}
+
+class MockTimeoutError extends Error {
+  readonly kind = 'timeout' as const;
+  readonly status = null;
+  readonly detail = null;
+
+  constructor() {
+    super('timeout');
     this.name = 'ApiError';
   }
 
@@ -119,6 +293,9 @@ function estadoInicial() {
       pessoa('p12', 'Antonio Prado', 'PENDING', horasAtras(5)),
     ],
     cancelled: false,
+    chamadasDeUsuario: {} as Record<string, number>,
+    relacoesDeUsuario: {} as Record<string, RelacaoDoUsuario>,
+    usuariosIndisponiveis: [] as string[],
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -281,6 +458,453 @@ function compartilhar(eventId: string): EventShare {
     location_name: evento.location_name ?? '',
     cover_photo_url: evento.cover_photo_url,
   };
+}
+
+const EVENTOS_CRIADOS_DO_USUARIO: UserEventItem[] = [
+  {
+    event_id: 'guest',
+    title: 'Futebol na PUC',
+    event_date: '2026-10-30T19:00:00Z',
+    location_name: 'DRY Moments',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-evento/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'pelada-parcao',
+    title: 'Pelada no Parcão',
+    event_date: '2026-11-08T13:00:00Z',
+    location_name: 'Parcão',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-parcao/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'corrida-orla',
+    title: 'Corrida na Orla',
+    event_date: '2026-11-15T10:00:00Z',
+    location_name: 'Orla do Guaíba',
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const EVENTOS_PASSADOS_DO_USUARIO: UserEventItem[] = [
+  {
+    event_id: 'trilha-morro',
+    title: 'Trilha no Morro do Osso',
+    event_date: '2026-09-20T12:00:00Z',
+    location_name: 'Morro do Osso',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-trilha/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'brunch-moinhos',
+    title: 'Brunch no Moinhos',
+    event_date: '2026-08-30T14:00:00Z',
+    location_name: 'Moinhos de Vento',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-brunch/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'cinema-casa',
+    title: 'Cinema na Casa de Cultura',
+    event_date: '2026-07-12T22:00:00Z',
+    location_name: 'Casa de Cultura Mario Quintana',
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const LIMITE_PADRAO_DE_EVENTOS = 20;
+const TOTAL_DE_EVENTOS_NA_PAGINACAO = 45;
+const UM_DIA_MS = 24 * 60 * 60 * 1000;
+const COM_MUITOS_EVENTOS = new Set(['many-events', 'events-page-boom', 'events-flaky', 'long-flaky']);
+
+type AbaDeVisitante = 'history' | 'created';
+
+function muitosEventos(aba: AbaDeVisitante): UserEventItem[] {
+  const primeiro = aba === 'created' ? Date.UTC(2026, 10, 1, 19) : Date.UTC(2026, 8, 30, 19);
+  const passo = aba === 'created' ? UM_DIA_MS : -UM_DIA_MS;
+  return Array.from({ length: TOTAL_DE_EVENTOS_NA_PAGINACAO }, (_, indice) => ({
+    event_id: `${aba}-${indice + 1}`,
+    title: `${aba === 'created' ? 'Evento criado' : 'Evento passado'} ${indice + 1}`,
+    event_date: new Date(primeiro + indice * passo).toISOString(),
+    location_name: 'Porto Alegre',
+    cover_photo_url: `https://picsum.photos/seed/hangy-${aba}-${indice + 1}/900/600`,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  }));
+}
+
+function eventosDaAba(userId: string, aba: AbaDeVisitante): UserEventItem[] {
+  if (userId === 'minimal') return [];
+  if (COM_MUITOS_EVENTOS.has(userId)) return muitosEventos(aba);
+  return aba === 'created' ? EVENTOS_CRIADOS_DO_USUARIO : EVENTOS_PASSADOS_DO_USUARIO;
+}
+
+function paginaDeEventos(eventos: UserEventItem[], cursor: string | null, limite: number): UserEventsPage {
+  const inicio = cursor ? Number(cursor) : 0;
+  const items = eventos.slice(inicio, inicio + limite);
+  const fim = inicio + items.length;
+  return { items, next_cursor: fim < eventos.length ? String(fim) : null };
+}
+
+type RelacaoDoUsuario = Partial<
+  Pick<
+    UserProfile,
+    | 'connection_status'
+    | 'connection_id'
+    | 'connection_direction'
+    | 'is_following'
+    | 'connections_count'
+    | 'followers_count'
+  >
+>;
+
+const ESTABELECIMENTOS = new Set([
+  'business',
+  'following',
+  'business-boom',
+  'following-boom',
+  'follow-gone',
+  'unfollow-gone',
+  'one-follower',
+  'business-legacy',
+]);
+const SEGUIDOS_DE_INICIO = new Set(['following', 'following-boom', 'unfollow-gone']);
+const SEGUIDORES_INICIAIS = 1204;
+/** Contadores no singular, para conferir "1 Conexão" e "1 Seguidor". */
+const CONTAGEM_INICIAL: Record<string, number> = { 'one-connection': 1, 'one-follower': 1 };
+
+const SOLICITACOES_ENVIADAS = new Set(['pending', 'cancel-boom', 'cancel-gone', 'pending-legacy']);
+const SOLICITACOES_RECEBIDAS = new Set(['received', 'answer-boom', 'answer-conflict', 'answer-gone']);
+const CONECTADOS = new Set(['connected', 'undo-boom', 'undo-gone', 'undo-forbidden', 'connected-legacy']);
+/** Sem os campos da task 281 [BE], como o backend de antes dela. */
+const SEM_CAMPOS_DA_281 = new Set(['pending-legacy', 'connected-legacy', 'business-legacy']);
+const SUFIXO_SEM_NOME = '-noname';
+const SEM_CONEXAO: RelacaoDoUsuario = { connection_status: null, connection_id: null, connection_direction: null };
+
+function statusDeConexaoInicial(cenario: string): UserProfile['connection_status'] {
+  if (SOLICITACOES_ENVIADAS.has(cenario) || SOLICITACOES_RECEBIDAS.has(cenario)) return 'PENDING';
+  if (CONECTADOS.has(cenario)) return 'CONFIRMED';
+  if (cenario === 'rejected') return 'REJECTED';
+  return null;
+}
+
+/** O id da conexão leva o do perfil, para o `PATCH` e o `DELETE` acharem a relação. */
+function idDaConexao(userId: string) {
+  return `conexao-${userId}`;
+}
+
+function perfilDaConexao(connectionId: string) {
+  const prefixo = idDaConexao('');
+  if (!connectionId.startsWith(prefixo)) return null;
+  const perfil = perfilVisitado(connectionId.slice(prefixo.length));
+  return perfil.connection_id === connectionId ? perfil : null;
+}
+
+/** Seguidores no `followers_count` da task 281 [BE]; sem ela, no `connections_count`. */
+function mudancaDeSeguidores(estabelecimento: UserProfile, delta: number): RelacaoDoUsuario {
+  return typeof estabelecimento.followers_count === 'number'
+    ? { followers_count: estabelecimento.followers_count + delta }
+    : { connections_count: estabelecimento.connections_count + delta };
+}
+
+function atualizarRelacao(userId: string, mudanca: RelacaoDoUsuario) {
+  db.relacoesDeUsuario[userId] = { ...db.relacoesDeUsuario[userId], ...mudanca };
+}
+
+function perfilVisitado(userId: string): UserProfile {
+  return { ...perfilInicial(userId), ...db.relacoesDeUsuario[userId] };
+}
+
+function perfilInicial(userId: string): UserProfile {
+  if (userId === 'minimal') {
+    return {
+      id: userId,
+      user_type: 'PERSONAL',
+      name: null,
+      description: null,
+      photo_url: null,
+      tags: [],
+      connection_status: null,
+      connection_id: null,
+      connection_direction: null,
+      followers_count: null,
+      is_following: false,
+      connections_count: 0,
+    };
+  }
+
+  // O cenário sem o sufixo: `pending-noname` se comporta como `pending`.
+  const semNome = userId.endsWith(SUFIXO_SEM_NOME);
+  const cenario = semNome ? userId.slice(0, -SUFIXO_SEM_NOME.length) : userId;
+  const ehEstabelecimento = ESTABELECIMENTOS.has(cenario);
+  const segue = SEGUIDOS_DE_INICIO.has(cenario);
+  const connectionStatus = ehEstabelecimento ? null : statusDeConexaoInicial(cenario);
+
+  const perfil: UserProfile = {
+    id: userId,
+    user_type: ehEstabelecimento ? 'BUSINESS' : 'PERSONAL',
+    name: semNome ? null : ehEstabelecimento ? 'DRY Moments' : 'Bruno Lima',
+    description: ehEstabelecimento
+      ? 'Bar e eventos na Cidade Baixa.'
+      : 'Futebol aos sábados e trilha quando dá.',
+    photo_url: 'https://picsum.photos/seed/hangy-perfil/300/300',
+    tags: [
+      { id: 't1', name: 'Esportes' },
+      { id: 't2', name: 'Futebol' },
+    ],
+    connection_status: connectionStatus,
+    is_following: segue,
+    connections_count:
+      CONTAGEM_INICIAL[cenario] ?? (ehEstabelecimento ? SEGUIDORES_INICIAIS + (segue ? 1 : 0) : 8),
+  };
+  if (SEM_CAMPOS_DA_281.has(cenario)) return perfil;
+
+  const temConexao = connectionStatus === 'PENDING' || connectionStatus === 'CONFIRMED';
+  return {
+    ...perfil,
+    connection_id: temConexao ? idDaConexao(userId) : null,
+    connection_direction:
+      connectionStatus === 'PENDING' ? (SOLICITACOES_RECEBIDAS.has(cenario) ? 'RECEIVED' : 'SENT') : null,
+    followers_count: ehEstabelecimento ? perfil.connections_count : null,
+    // Estabelecimento não se conecta: zerado, a tela que ler os seguidores do
+    // campo errado mostra 0.
+    ...(ehEstabelecimento && { connections_count: 0 }),
+  };
+}
+
+const TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO = 45;
+const LIMITE_PADRAO_DE_FOTOS = 30;
+const EVENTOS_DAS_FOTOS = [
+  { id: 'guest', title: 'Futebol na PUC' },
+  { id: 'pelada-parcao', title: 'Pelada no Parcão' },
+  { id: 'corrida-orla', title: 'Corrida na Orla' },
+];
+
+/**
+ * Em `photos-grow`, a lista e o contador ganham uma foto a partir da segunda
+ * chamada de cada rota, como se a pessoa tivesse publicado uma foto em outra tela.
+ */
+function cresceuAFoto(rota: 'fotos' | 'contadores') {
+  return cenarioPerfilProprio === 'photos-grow' && (db.chamadasDeUsuario[`photos-grow:${rota}`] ?? 0) > 1;
+}
+
+function contarChamadaDoPhotosGrow(rota: 'fotos' | 'contadores') {
+  if (cenarioPerfilProprio !== 'photos-grow') return;
+  const chave = `photos-grow:${rota}`;
+  db.chamadasDeUsuario[chave] = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+}
+
+function fotosDoPerfilProprio(): UserPhoto[] {
+  if (cenarioPerfilProprio === 'empty') return [];
+  const maisRecente = Date.UTC(2026, 9, 10, 18);
+  const fotos = Array.from({ length: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO }, (_, indice) => ({
+    photo_id: `foto-${indice + 1}`,
+    photo_url: `https://picsum.photos/seed/hangy-foto-${indice + 1}/600/600`,
+    event: EVENTOS_DAS_FOTOS[indice % EVENTOS_DAS_FOTOS.length],
+    created_at: new Date(maisRecente - indice * 60 * 60 * 1000).toISOString(),
+  }));
+  if (!cresceuAFoto('fotos')) return fotos;
+  const nova = {
+    photo_id: 'foto-nova',
+    photo_url: 'https://picsum.photos/seed/hangy-foto-nova/600/600',
+    event: EVENTOS_DAS_FOTOS[0],
+    created_at: new Date(maisRecente + 60 * 60 * 1000).toISOString(),
+  };
+  return [nova, ...fotos];
+}
+
+const EVENTOS_CRIADOS_DO_DONO: UserEventItem[] = [
+  {
+    event_id: 'por-do-sol-cais',
+    title: 'Pôr do sol no Cais',
+    event_date: '2026-11-16T19:00:00Z',
+    location_name: 'Cais do Porto',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-cais/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'futebol-orla',
+    title: 'Futebol na Orla',
+    event_date: '2026-11-17T13:00:00Z',
+    location_name: 'Orla do Guaíba',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-futebol/900/600',
+    privacy: 'INVITE_ONLY',
+    participation_status: null,
+  },
+  {
+    event_id: 'noite-amigos',
+    title: 'Noite com os Amigos',
+    event_date: '2026-11-22T00:00:00Z',
+    location_name: 'Av. Soledade',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-noite/900/600',
+    privacy: 'PRIVATE',
+    participation_status: null,
+  },
+  // Rascunho: o `UserEventOutput` não tem `event_status`, então ele chega
+  // igual aos outros.
+  {
+    event_id: 'churrasco-rascunho',
+    title: 'Churrasco de fim de ano',
+    event_date: '2026-12-20T15:00:00Z',
+    location_name: null,
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const EVENTOS_DE_INTERESSE_DO_DONO: UserEventItem[] = [
+  {
+    event_id: 'samba-cidade-baixa',
+    title: 'Roda de samba na Cidade Baixa',
+    event_date: '2026-11-20T22:00:00Z',
+    location_name: 'Cidade Baixa',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-samba/900/600',
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+  {
+    event_id: 'brique-redencao',
+    title: 'Brique da Redenção',
+    event_date: '2026-11-29T13:00:00Z',
+    location_name: 'Parque Farroupilha',
+    cover_photo_url: null,
+    privacy: 'PUBLIC',
+    participation_status: null,
+  },
+];
+
+const EVENTOS_CONFIRMADOS_DO_DONO: UserEventItem[] = [
+  {
+    event_id: 'private-confirmed',
+    title: 'Jantar no Bom Fim',
+    event_date: '2026-11-18T23:00:00Z',
+    location_name: 'Bom Fim',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-jantar/900/600',
+    privacy: 'PRIVATE',
+    participation_status: 'CONFIRMED',
+  },
+  {
+    event_id: 'trilha-itapua',
+    title: 'Trilha em Itapuã',
+    event_date: '2026-12-05T11:00:00Z',
+    location_name: 'Parque de Itapuã',
+    cover_photo_url: 'https://picsum.photos/seed/hangy-itapua/900/600',
+    privacy: 'PUBLIC',
+    participation_status: 'CONFIRMED',
+  },
+];
+
+const TOTAL_DO_HISTORICO_DO_DONO = 25;
+/** Tempo do "Ver mais" em `own-events-flaky`: dá para sair e voltar à aba no meio dele. */
+const VER_MAIS_LENTO_MS = 3000;
+const ABAS_DE_VISITANTE: readonly UserEventsTab[] = ['history', 'created'];
+const ABAS_DO_DONO: readonly UserEventsTab[] = ['history', 'created', 'interests', 'confirmed'];
+
+/** Encerrados, alternando os que o dono criou e os que confirmou, com as três privacidades. */
+function historicoDoDono(): UserEventItem[] {
+  const privacidades = ['PUBLIC', 'PRIVATE', 'INVITE_ONLY'] as const;
+  const maisRecente = Date.UTC(2026, 9, 10, 19);
+  return Array.from({ length: TOTAL_DO_HISTORICO_DO_DONO }, (_, indice) => ({
+    event_id: `encerrado-${indice + 1}`,
+    title: `Evento encerrado ${indice + 1}`,
+    event_date: new Date(maisRecente - indice * 3 * UM_DIA_MS).toISOString(),
+    location_name: 'Porto Alegre',
+    cover_photo_url: `https://picsum.photos/seed/hangy-encerrado-${indice + 1}/900/600`,
+    privacy: privacidades[indice % privacidades.length],
+    participation_status: indice % 2 === 0 ? null : 'CONFIRMED',
+  }));
+}
+
+function eventosDoDono(aba: UserEventsTab): UserEventItem[] {
+  if (cenarioPerfilProprio === 'empty') return [];
+  if (aba === 'history') return historicoDoDono();
+  if (aba === 'created') return EVENTOS_CRIADOS_DO_DONO;
+  if (aba === 'interests') return EVENTOS_DE_INTERESSE_DO_DONO;
+  return EVENTOS_CONFIRMADOS_DO_DONO;
+}
+
+/** Contadores de `GET /users/me/profile` coerentes com as abas e as fotos do dono. */
+function contadoresDoDono() {
+  if (cenarioPerfilProprio === 'empty') {
+    return { connections_count: 0, counts: { past: 0, confirmed: 0, photos: 0 } };
+  }
+  return {
+    connections_count: 134,
+    counts: {
+      past: TOTAL_DO_HISTORICO_DO_DONO,
+      confirmed: EVENTOS_CONFIRMADOS_DO_DONO.length,
+      photos: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO + (cresceuAFoto('contadores') ? 1 : 0),
+    },
+  };
+}
+
+/**
+ * Campos do perfil público (`GET /users/{id}`) da conta de estabelecimento,
+ * lidos do mesmo `perfil.estabelecimento` e das mesmas tags que o Editar perfil
+ * grava, para a volta da edição mostrar o dado novo.
+ */
+function perfilPublicoDoEstabelecimento() {
+  return {
+    description: perfil.estabelecimento.description,
+    photo_url: null,
+    tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
+    connections_count: 0,
+    followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
+    connection_status: null,
+    connection_id: null,
+    connection_direction: null,
+    is_following: false,
+  };
+}
+
+async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
+  if (userId === 'missing' || db.usuariosIndisponiveis.includes(userId)) {
+    throw new MockApiError(404, 'User not found');
+  }
+  if (userId === 'boom') throw new MockApiError(500, 'Internal server error');
+  if (userId === 'offline') throw new MockNetworkError();
+  if (userId === 'slow') {
+    await wait(API_TIMEOUT_MS);
+    throw new MockTimeoutError();
+  }
+
+  // Só o perfil falha: o "Tentar de novo" do toast não pode recarregar a lista
+  // longa que já está na tela.
+  if (userId === 'long-flaky' && rota === 'perfil') {
+    const chave = `${rota}:${userId}`;
+    const chamadas = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+    db.chamadasDeUsuario[chave] = chamadas;
+    if (chamadas > 1) throw new MockApiError(500, 'Internal server error');
+  }
+
+  // Só a primeira carga dos eventos falha, para testar o "Tentar de novo" da seção.
+  if (userId === 'events-flaky' && rota === 'eventos') {
+    const chave = `${rota}:${userId}`;
+    const chamadas = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+    db.chamadasDeUsuario[chave] = chamadas;
+    if (chamadas === 1) throw new MockApiError(500, 'Internal server error');
+  }
+
+  if (userId === 'flaky' || userId === 'flaky-slow') {
+    const chave = `${rota}:${userId}`;
+    const chamadas = (db.chamadasDeUsuario[chave] ?? 0) + 1;
+    db.chamadasDeUsuario[chave] = chamadas;
+    if (chamadas === 1) return;
+
+    if (userId === 'flaky') throw new MockApiError(500, 'Internal server error');
+    await wait(API_TIMEOUT_MS);
+    throw new MockTimeoutError();
+  }
 }
 
 /**
@@ -485,6 +1109,36 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const eventId = partes[1] ?? '';
 
   const respostaDePerfil = resolverPerfil(partes, method, init);
+  // Por cima da resposta do PR #62 (TID072), que vem zerada: os contadores
+  // seguem `EXPO_PUBLIC_MOCK_OWN_PROFILE`, como as abas e as fotos do dono.
+  if (respostaDePerfil && partes.join('/') === 'users/me/profile' && method === 'GET') {
+    if (cenarioPerfilProprio === 'profile-error') throw new MockApiError(500, 'Internal server error');
+    if (cenarioPerfilProprio === 'profile-flaky') {
+      const chamadas = (db.chamadasDeUsuario['perfil-proprio'] ?? 0) + 1;
+      db.chamadasDeUsuario['perfil-proprio'] = chamadas;
+      if (chamadas > 1) throw new MockApiError(500, 'Internal server error');
+    }
+    contarChamadaDoPhotosGrow('contadores');
+    const resposta = respostaDePerfil.resposta as PersonalProfileResponse;
+    const { connections_count, counts } = contadoresDoDono();
+    return { profile: { ...resposta.profile, connections_count }, counts } as T;
+  }
+  // Em conta de estabelecimento, o id do mock é `me`: o `GET /users/{id próprio}`
+  // do perfil comercial cai no `GET /users/me` do PR #62 (TID072), que ganha por
+  // cima os campos do perfil público. Os cenários de erro valem a partir da
+  // segunda chamada: supõem que a primeira é a do `useCurrentUser` do Perfil
+  // (ordem e limitações no comentário do topo).
+  if (respostaDePerfil && partes.join('/') === 'users/me' && method === 'GET' && MOCK_USER_TYPE === 'BUSINESS') {
+    const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
+    db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
+    if (cenarioPerfilProprio === 'profile-error' && chamadas > 1) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    if (cenarioPerfilProprio === 'profile-flaky' && chamadas > 2) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    return { ...(respostaDePerfil.resposta as Record<string, unknown>), ...perfilPublicoDoEstabelecimento() } as T;
+  }
   if (respostaDePerfil) return respostaDePerfil.resposta as T;
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
@@ -580,6 +1234,241 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     return { ...alvo, status: body.status } as T;
+  }
+
+  if (partes[0] === 'users' && partes[1] === 'me' && partes[2] === 'photos' && partes.length === 3 && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const cursor = params.get('cursor');
+    if (cenarioPerfilProprio === 'error' && !cursor) throw new MockApiError(500, 'Internal server error');
+    if (cenarioPerfilProprio === 'error-page' && cursor) throw new MockApiError(500, 'Internal server error');
+
+    const limite = Number(params.get('limit') ?? LIMITE_PADRAO_DE_FOTOS);
+    const inicio = cursor ? Number(cursor) : 0;
+    if (!Number.isInteger(limite) || limite < 1 || limite > 100 || !Number.isInteger(inicio) || inicio < 0) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+
+    // Só a primeira página conta: o "Ver mais" continua a mesma lista.
+    if (!cursor) contarChamadaDoPhotosGrow('fotos');
+    const todas = fotosDoPerfilProprio();
+    const items = todas.slice(inicio, inicio + limite);
+    const fim = inicio + items.length;
+    return { items, next_cursor: fim < todas.length ? String(fim) : null } as T;
+  }
+
+  // `me` é o usuário logado, não um perfil visitado: fica fora destas regras,
+  // menos nas abas de eventos, em que é o dono.
+  const ehAbasDoDono = partes[1] === 'me' && partes[2] === 'events' && partes.length === 3;
+  if (partes[0] === 'users' && (partes[1] !== 'me' || ehAbasDoDono) && method === 'GET') {
+    const userId = partes[1] ?? '';
+
+    if (partes.length === 2) {
+      await erroDoUsuario(userId, 'perfil');
+      return perfilVisitado(userId) as T;
+    }
+
+    if (partes.length === 3 && partes[2] === 'events') {
+      const ehDono = userId === 'me';
+      if (!ehDono) {
+        await erroDoUsuario(userId, 'eventos');
+        if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
+      }
+
+      const params = new URLSearchParams(path.split('?')[1] ?? '');
+      const tab = params.get('tab');
+      const cursor = params.get('cursor');
+      const limite = Number(params.get('limit') ?? LIMITE_PADRAO_DE_EVENTOS);
+      // O estabelecimento dono recebe as mesmas abas de quem visita, como no backend.
+      const abasPermitidas = ehDono && MOCK_USER_TYPE === 'PERSONAL' ? ABAS_DO_DONO : ABAS_DE_VISITANTE;
+      if ((tab === null) !== (cursor === null)) throw new MockApiError(400, 'Invalid tab');
+      if (tab !== null && !abasPermitidas.some((aba) => aba === tab)) throw new MockApiError(400, 'Invalid tab');
+      if (!Number.isInteger(limite) || limite < 1 || limite > 100 || (cursor !== null && !/^\d+$/.test(cursor))) {
+        throw new MockApiError(400, 'Invalid pagination parameters');
+      }
+      if (userId === 'events-page-boom' && cursor !== null) throw new MockApiError(500, 'Internal server error');
+      if (ehDono && cenarioPerfilProprio === 'error' && cursor === null) {
+        throw new MockApiError(500, 'Internal server error');
+      }
+      if (ehDono && cenarioPerfilProprio === 'error-page' && cursor !== null) {
+        throw new MockApiError(500, 'Internal server error');
+      }
+      // A recarga por foco falha com um "Ver mais" ainda em voo.
+      if (ehDono && cenarioPerfilProprio === 'own-events-flaky') {
+        if (cursor !== null) {
+          await wait(VER_MAIS_LENTO_MS);
+        } else {
+          const chamadas = (db.chamadasDeUsuario['eventos-do-dono'] ?? 0) + 1;
+          db.chamadasDeUsuario['eventos-do-dono'] = chamadas;
+          if (chamadas > 1) throw new MockApiError(500, 'Internal server error');
+        }
+      }
+
+      const eventos = (aba: UserEventsTab) => {
+        if (ehDono) return eventosDoDono(aba);
+        return aba === 'history' || aba === 'created' ? eventosDaAba(userId, aba) : [];
+      };
+      const pagina = (aba: UserEventsTab) =>
+        abasPermitidas.includes(aba) && (tab === null || tab === aba)
+          ? paginaDeEventos(eventos(aba), cursor, limite)
+          : null;
+      const abas: UserEventsTabs = {
+        history: pagina('history'),
+        created: pagina('created'),
+        interests: pagina('interests'),
+        confirmed: pagina('confirmed'),
+      };
+      return abas as T;
+    }
+  }
+
+  if (partes[0] === 'connections' && partes.length === 1 && method === 'POST') {
+    const body = init.body ? JSON.parse(String(init.body)) : {};
+    const receiverId: string = body.receiver_id ?? '';
+    const destinatario = perfilVisitado(receiverId);
+
+    // Estabelecimento cai no mesmo 404 de inexistente, como no backend.
+    if (db.usuariosIndisponiveis.includes(receiverId) || destinatario.user_type === 'BUSINESS') {
+      throw new MockApiError(404, 'User not found');
+    }
+    if (receiverId === 'connect-boom') throw new MockApiError(500, 'Internal server error');
+    if (receiverId === 'connect-gone') {
+      db.usuariosIndisponiveis.push(receiverId);
+      throw new MockApiError(404, 'User not found');
+    }
+    const enviada: RelacaoDoUsuario = {
+      connection_status: 'PENDING',
+      connection_id: idDaConexao(receiverId),
+      connection_direction: 'SENT',
+    };
+    if (receiverId === 'connect-conflict') {
+      atualizarRelacao(receiverId, enviada);
+      throw new MockApiError(409, 'Connection already exists');
+    }
+    if (destinatario.connection_status !== null) {
+      throw new MockApiError(409, 'Connection already exists');
+    }
+
+    atualizarRelacao(receiverId, enviada);
+    const resultado: ConnectionRequestResult = {
+      connection_id: idDaConexao(receiverId),
+      requester_id: 'usuario-logado',
+      receiver_id: receiverId,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
+    };
+    return resultado as T;
+  }
+
+  // Tasks 230 e 231 [BE]. No `PATCH`, a ordem dos erros é a do service do
+  // backend (404, 403, 409); como o mock não guarda quem recebeu depois da
+  // resposta, o 409 de solicitação já respondida só sai em `answer-conflict`.
+  if (partes[0] === 'connections' && partes.length === 2 && (method === 'PATCH' || method === 'DELETE')) {
+    const connectionId = partes[1] ?? '';
+    const pessoa = perfilDaConexao(connectionId);
+    if (!pessoa) throw new MockApiError(404, 'Connection not found');
+    const userId = pessoa.id;
+
+    if (method === 'PATCH') {
+      const body = init.body ? JSON.parse(String(init.body)) : {};
+      if (body.status !== 'CONFIRMED' && body.status !== 'REJECTED') {
+        throw new MockApiError(422, 'Invalid connection status');
+      }
+      if (pessoa.connection_direction !== 'RECEIVED') throw new MockApiError(403, 'Only the receiver can answer');
+      if (userId === 'answer-boom') throw new MockApiError(500, 'Internal server error');
+      // Respondida em outro lugar (ex.: Notificações) antes deste pedido chegar.
+      if (userId === 'answer-conflict') {
+        atualizarRelacao(userId, {
+          connection_status: 'CONFIRMED',
+          connection_direction: null,
+          connections_count: pessoa.connections_count + 1,
+        });
+        throw new MockApiError(409, 'Connection already answered');
+      }
+      // A outra pessoa cancelou a solicitação antes da resposta.
+      if (userId === 'answer-gone') {
+        atualizarRelacao(userId, SEM_CONEXAO);
+        throw new MockApiError(404, 'Connection not found');
+      }
+
+      atualizarRelacao(
+        userId,
+        body.status === 'CONFIRMED'
+          ? { connection_status: 'CONFIRMED', connection_direction: null, connections_count: pessoa.connections_count + 1 }
+          : // Sem `connection_id` na recusa, como na task 281 [BE].
+            { connection_status: 'REJECTED', connection_id: null, connection_direction: null },
+      );
+      const resultado: ConnectionAnswerResult = {
+        connection_id: connectionId,
+        requester_id: userId,
+        receiver_id: 'usuario-logado',
+        status: body.status,
+        updated_at: new Date().toISOString(),
+      };
+      return resultado as T;
+    }
+
+    if (userId === 'cancel-boom' || userId === 'undo-boom') throw new MockApiError(500, 'Internal server error');
+    const conexoesDepois = pessoa.connections_count - (pessoa.connection_status === 'CONFIRMED' ? 1 : 0);
+    // A outra pessoa já cancelou ou desfez.
+    if (userId === 'undo-gone' || userId === 'cancel-gone') {
+      atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
+      throw new MockApiError(404, 'Connection not found');
+    }
+    // A conexão deixou de ser entre os dois; o GET seguinte vem sem conexão.
+    if (userId === 'undo-forbidden') {
+      atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
+      throw new MockApiError(403, 'Not part of this connection');
+    }
+    atualizarRelacao(userId, { ...SEM_CONEXAO, connections_count: conexoesDepois });
+    return undefined as T;
+  }
+
+  if (partes[0] === 'users' && partes[2] === 'block' && partes.length === 3 && method === 'POST') {
+    const userId = partes[1] ?? '';
+    if (userId === 'block-boom') throw new MockApiError(500, 'Internal server error');
+    if (userId === 'block-gone' || db.usuariosIndisponiveis.includes(userId)) {
+      db.usuariosIndisponiveis.push(userId);
+      throw new MockApiError(404, 'User not found');
+    }
+
+    db.usuariosIndisponiveis.push(userId);
+    if (userId === 'block-already') throw new MockApiError(409, 'User already blocked');
+    return undefined as T;
+  }
+
+  if (partes[0] === 'businesses' && partes[2] === 'follow' && partes.length === 3) {
+    const businessId = partes[1] ?? '';
+    if (db.usuariosIndisponiveis.includes(businessId)) {
+      throw new MockApiError(404, 'Business not found');
+    }
+    const estabelecimento = perfilVisitado(businessId);
+    const ehEstabelecimento = estabelecimento.user_type === 'BUSINESS';
+
+    if (method === 'POST') {
+      if (!ehEstabelecimento) throw new MockApiError(403, 'Target is not a business profile');
+      if (businessId === 'business-boom') throw new MockApiError(500, 'Internal server error');
+      if (businessId === 'follow-gone') {
+        db.usuariosIndisponiveis.push(businessId);
+        throw new MockApiError(404, 'Business not found');
+      }
+      if (!estabelecimento.is_following) {
+        atualizarRelacao(businessId, { is_following: true, ...mudancaDeSeguidores(estabelecimento, 1) });
+      }
+      return undefined as T;
+    }
+
+    if (method === 'DELETE') {
+      if (!ehEstabelecimento) throw new MockApiError(404, 'Business not found');
+      if (businessId === 'following-boom') throw new MockApiError(500, 'Internal server error');
+      if (businessId === 'unfollow-gone') {
+        db.usuariosIndisponiveis.push(businessId);
+        throw new MockApiError(404, 'Business not found');
+      }
+      if (estabelecimento.is_following) {
+        atualizarRelacao(businessId, { is_following: false, ...mudancaDeSeguidores(estabelecimento, -1) });
+      }
+      return undefined as T;
+    }
   }
 
   throw new MockApiError(404, 'Not found');
