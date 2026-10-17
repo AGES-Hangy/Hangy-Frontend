@@ -28,6 +28,13 @@ const USER_HALO_BORDER_WIDTH = 1;
 const USER_DOT_SIZE = 18;
 const USER_DOT_BORDER_WIDTH = 3;
 const MIN_TOUCH_SIZE = 44;
+const LOCK_BADGE_SIZE = 20;
+const LOCK_BADGE_BORDER_WIDTH = 2;
+const LOCK_ICON_SIZE = 12;
+// Centro do selo: ponto a 45° na borda da cabeça do pin (círculo de raio 30
+// centrado em 30,30 no viewBox de PIN_PATH), no canto superior direito.
+const LOCK_BADGE_CENTER_X = 30 + 30 * Math.SQRT1_2;
+const LOCK_BADGE_CENTER_Y = 30 - 30 * Math.SQRT1_2;
 const ABSOLUTE_FILL = {
   position: 'absolute' as const,
   top: 0,
@@ -58,6 +65,14 @@ const PIN_METRICS: Record<'Default' | 'Unselected' | 'Selected', PinMetrics> = {
 
 const PIN_COLORS: Record<'Default' | 'Unselected' | 'Selected', string> = {
   Default: colors.action.primary,
+  Unselected: palette.neutral[400],
+  Selected: palette.primary[700],
+};
+
+// MapPin/LockBadge: palette/primary/700; em Unselected acompanha o
+// esmaecimento do pin (palette/neutral/400).
+const LOCK_BADGE_COLORS: Record<'Default' | 'Unselected' | 'Selected', string> = {
+  Default: palette.primary[700],
   Unselected: palette.neutral[400],
   Selected: palette.primary[700],
 };
@@ -102,14 +117,22 @@ const USER_DOT_SHADOW = {
   elevation: layout.mapPinShadows.userLoc.offsetY,
 } as const;
 
-function getAccessibilityLabel(state: MapPinState, count?: number) {
+function getAccessibilityLabel(
+  state: MapPinState,
+  count?: number,
+  isApproximate?: boolean,
+) {
+  const event = isApproximate
+    ? 'Evento privado, local aproximado'
+    : 'Evento no mapa';
+
   switch (state) {
     case 'Default':
-      return 'Evento no mapa';
+      return event;
     case 'Unselected':
-      return 'Evento no mapa, não selecionado';
+      return `${event}, não selecionado`;
     case 'Selected':
-      return 'Evento no mapa, selecionado';
+      return `${event}, selecionado`;
     case 'Cluster':
       return `Grupo com ${count} eventos`;
     case 'UserLocation':
@@ -120,9 +143,11 @@ function getAccessibilityLabel(state: MapPinState, count?: number) {
 function EventPin({
   state,
   uri,
+  isApproximate = false,
 }: {
   state: 'Default' | 'Unselected' | 'Selected';
   uri?: string;
+  isApproximate?: boolean;
 }) {
   const [loadedUri, setLoadedUri] = useState<string>();
   const filterId = `map-pin-shadow-${useId().replace(/:/g, '')}`;
@@ -133,13 +158,25 @@ function EventPin({
   const photoSize = EVENT_PHOTO_SIZE * scale;
   const isUnselected = state === 'Unselected';
 
+  // O selo faz parte do marker: a área que ele ultrapassa fica reservada no
+  // tamanho do container, senão é cortada. A sobra lateral entra dos dois
+  // lados para a ponta do pin continuar no centro da base (âncora 0.5, 1).
+  const baseWidth = haloSize || width;
+  const baseHeight = height + inset;
+  const badgeLeft = inset + LOCK_BADGE_CENTER_X * scale - LOCK_BADGE_SIZE / 2;
+  const badgeTop = inset + LOCK_BADGE_CENTER_Y * scale - LOCK_BADGE_SIZE / 2;
+  const outsetX = isApproximate
+    ? Math.max(0, badgeLeft + LOCK_BADGE_SIZE - baseWidth)
+    : 0;
+  const outsetTop = isApproximate ? Math.max(0, -badgeTop) : 0;
+
   return (
     <View
       style={[
         styles.pinContainer,
         {
-          width: haloSize || width,
-          height: height + inset,
+          width: baseWidth + outsetX * 2,
+          height: baseHeight + outsetTop,
         },
       ]}
       pointerEvents="none"
@@ -151,6 +188,8 @@ function EventPin({
             {
               width: haloSize,
               height: haloSize,
+              left: outsetX,
+              top: outsetTop,
               borderRadius: radius.full,
             },
           ]}
@@ -162,8 +201,8 @@ function EventPin({
           {
             width,
             height,
-            left: inset,
-            top: inset,
+            left: inset + outsetX,
+            top: inset + outsetTop,
           },
         ]}
       >
@@ -254,6 +293,24 @@ function EventPin({
           </View>
         </View>
       </View>
+      {isApproximate && (
+        <View
+          style={[
+            styles.lockBadge,
+            {
+              left: badgeLeft + outsetX,
+              top: badgeTop + outsetTop,
+              backgroundColor: LOCK_BADGE_COLORS[state],
+            },
+          ]}
+        >
+          <Icon
+            name="lock"
+            size={LOCK_ICON_SIZE}
+            color={colors.text.inverse}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -285,9 +342,14 @@ function UserLocationPin() {
 
 export function MapPin(props: MapPinProps) {
   const state = props.state ?? 'Default';
+  const isApproximate =
+    props.state !== 'Cluster' && props.state !== 'UserLocation'
+      ? props.isApproximate
+      : undefined;
   const accessibilityLabel = getAccessibilityLabel(
     props.state === 'Cluster' ? 'Cluster' : state,
     props.state === 'Cluster' ? props.count : undefined,
+    isApproximate,
   );
   const minDimension =
     state === 'Cluster'
@@ -302,7 +364,13 @@ export function MapPin(props: MapPinProps) {
   } else if (props.state === 'UserLocation') {
     content = <UserLocationPin />;
   } else {
-    content = <EventPin state={props.state ?? 'Default'} uri={props.uri} />;
+    content = (
+      <EventPin
+        state={props.state ?? 'Default'}
+        uri={props.uri}
+        isApproximate={isApproximate}
+      />
+    );
   }
 
   if (props.onPress) {
@@ -346,6 +414,16 @@ const styles = StyleSheet.create({
   pin: {
     position: 'absolute',
     alignItems: 'center',
+  },
+  lockBadge: {
+    position: 'absolute',
+    width: LOCK_BADGE_SIZE,
+    height: LOCK_BADGE_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: LOCK_BADGE_BORDER_WIDTH,
+    borderColor: colors.surface.card,
+    borderRadius: radius.full,
   },
   photoFrame: {
     position: 'absolute',
