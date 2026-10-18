@@ -1,4 +1,4 @@
-import { ApiError } from '@/utils/http';
+import { ApiError, UploadCancelledError } from '@/utils/http';
 
 /**
  * Tradução dos erros da API para o que a tela mostra.
@@ -168,6 +168,28 @@ export function describeActionError(error: unknown): ActionError {
   }
 
   return GENERIC_ACTION_ERROR;
+}
+
+/** Falha no envio de um arquivo. O texto fica com quem chama. */
+export type UploadErrorKind = 'invalid-file' | 'connection' | 'failed';
+
+/**
+ * `null` quando não há o que mostrar: o usuário cancelou, ou foi 401, que o
+ * `apiUpload` já entregou ao tratamento global de sessão expirada.
+ */
+export function classifyUploadError(error: unknown): UploadErrorKind | null {
+  if (error instanceof UploadCancelledError) return null;
+  if (!(error instanceof ApiError || isApiErrorLike(error))) return 'failed';
+
+  const { kind, status } = error;
+
+  if (kind === 'network' || kind === 'timeout') return 'connection';
+  if (status === 401) return null;
+  // Só pelo status: um proxy pode recusar o arquivo sem o JSON da API, e
+  // tentar de novo com o mesmo arquivo daria o mesmo erro.
+  if (status === 413 || status === 415) return 'invalid-file';
+
+  return 'failed';
 }
 
 /**

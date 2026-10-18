@@ -6,7 +6,7 @@ import { TextField } from '@/components/TextField';
 import { spacing } from '@/constants/layout';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
-import { useImageUpload } from '@/hooks/useImageUpload';
+import { useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { useTags } from '@/hooks/useTags';
 
 import { describeMissing, ErrorSummary } from '@/components/CreateEvent/ErrorSummary';
@@ -39,7 +39,7 @@ export function Step1({
   onToggleTag,
 }: Step1Props) {
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
-  const { pickImage, error: coverError } = useImageUpload();
+  const { pickImage, error: coverError } = useEventCoverUpload();
 
   const containerRef = useRef<View>(null);
   const titleRef = useRef<View>(null);

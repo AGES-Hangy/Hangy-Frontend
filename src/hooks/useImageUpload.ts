@@ -1,18 +1,42 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import { classifyUploadError } from '@/utils/apiErrors';
+import { apiUpload } from '@/utils/http';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // 'image/jpg' não é um mimeType padrão, mas algumas câmeras/dispositivos
 // reportam JPG assim em vez do correto 'image/jpeg' — aceitamos os dois.
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
-const INVALID_FILE_MESSAGE = 'Arquivo inválido — use JPG ou PNG\naté 5 MB, na proporção 16:9';
 
 export interface PickedImage {
   uri: string;
   mimeType: string;
   fileSize: number | null;
+}
+
+/** Imagem já enviada: `uri` é a prévia local, `url` é o que vai para a API. */
+export interface UploadedImage {
+  uri: string;
+  url: string;
+}
+
+export interface ImageUploadOptions {
+  /** Rota de `endpoints` que recebe o arquivo. */
+  endpoint: string;
+  /** Campo da resposta 201 que traz a URL hospedada. */
+  urlField: string;
+  /** Recorte pedido no seletor nativo. Sem ele, a imagem vem como foi escolhida. */
+  aspect?: [number, number];
+  messages: {
+    invalidFile: string;
+    permissionDenied: string;
+    /** Servidor indisponível, resposta inesperada ou erro desconhecido. */
+    failed: string;
+    /** Sem rede ou tempo esgotado. */
+    connection: string;
+  };
 }
 
 /**
@@ -28,11 +52,11 @@ function getFileSize(uri: string): number | null {
   }
 }
 
-async function pickFileNative(): Promise<PickedImage | null> {
+async function pickFileNative(aspect?: [number, number]): Promise<PickedImage | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect: [16, 9],
+    allowsEditing: aspect !== undefined,
+    aspect,
     quality: 1,
   });
 
@@ -93,13 +117,7 @@ function pickFileWeb(): Promise<PickedImage | null> {
         return;
       }
 
-      const previousUrl = (globalThis as any).__hangyLastObjectUrl as string | undefined;
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
-
-      const objectUrl = URL.createObjectURL(file);
-      (globalThis as any).__hangyLastObjectUrl = objectUrl;
-
-      settle({ uri: objectUrl, mimeType: file.type, fileSize: file.size });
+      settle({ uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size });
     });
 
     window.addEventListener('focus', handleFocus);
@@ -109,41 +127,194 @@ function pickFileWeb(): Promise<PickedImage | null> {
 }
 
 /**
- * Seleção e validação (tipo, tamanho, proporção) da capa de um
- * evento. A proporção 16:9 é garantida pedindo o recorte já na tela do
- * seletor do sistema (`allowsEditing` + `aspect`) no nativo; na web isso não
- * existe, então quem chama recebe a imagem sem recorte lá.
+ * Escolha, validação (tipo, tamanho) e envio de uma imagem para
+ * `options.endpoint`, com progresso, cancelamento e erro já em texto para a
+ * tela. O recorte (`options.aspect`) só existe no nativo, pedido na tela do
+ * seletor do sistema; na web, a imagem vem sem recorte.
  *
- * O backend ainda não oferece hospedagem de imagens. Esta URI serve apenas
- * para prévia local e nunca deve ser enviada como `cover_photo_url`.
+ * A URI escolhida é local (`file://` no nativo, `blob:` na web) e serve só de
+ * prévia; no corpo da API vai só a URL devolvida pelo envio.
+ *
+ * Na web, os object URLs são criados e revogados só aqui. A prévia anterior
+ * continua válida até um envio novo dar certo, porque a tela pode voltar para
+ * ela quando o novo falha ou é cancelado.
+ *
+ * As telas não desmontam ao sair, então quem chama precisa de `cancelUpload`
+ * no blur e de `reset` ao descartar o formulário. `options` deve ser uma
+ * constante de módulo.
  */
-export function useImageUpload() {
+export function useImageUpload(options: ImageUploadOptions) {
+  const { endpoint, urlField, aspect, messages } = options;
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  /** De 0 a 100; `null` quando a plataforma não informa o total. */
+  const [progress, setProgress] = useState<number | null>(null);
 
-  async function pickImage(): Promise<PickedImage | null> {
+  const mountedRef = useRef(true);
+  const attemptRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
+  const objectUrlsRef = useRef(new Set<string>());
+  const currentUriRef = useRef<string | null>(null);
+
+  /** Só revoga o que este hook criou: URIs do nativo e URLs do servidor passam reto. */
+  function releaseUri(uri: string | null) {
+    if (uri && objectUrlsRef.current.delete(uri)) URL.revokeObjectURL(uri);
+  }
+
+  function releaseAll() {
+    objectUrlsRef.current.forEach((uri) => URL.revokeObjectURL(uri));
+    objectUrlsRef.current.clear();
+    currentUriRef.current = null;
+  }
+
+  /** Invalida o envio em andamento; o `catch` dele vê que não é mais o atual. */
+  function abortAttempt() {
+    attemptRef.current += 1;
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortAttempt();
+      releaseAll();
+    };
+  }, []);
+
+  async function chooseImage(): Promise<PickedImage | null> {
     setError(null);
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!mountedRef.current) return null;
     if (!permission.granted) {
-      setError('Permita o acesso às fotos para escolher uma capa');
+      setError(messages.permissionDenied);
       return null;
     }
 
-    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative();
+    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative(aspect);
     if (!picked) return null;
+    if (Platform.OS === 'web') objectUrlsRef.current.add(picked.uri);
 
+    if (!mountedRef.current) {
+      releaseUri(picked.uri);
+      return null;
+    }
+    return picked;
+  }
+
+  function isAcceptable(picked: PickedImage): boolean {
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
     // Sem o tamanho confirmado, não dá pra garantir o limite de 5 MB — trata
     // como inválido em vez de deixar passar.
     const isWithinSizeLimit = picked.fileSize !== null && picked.fileSize <= MAX_FILE_SIZE_BYTES;
+    if (isAcceptedType && isWithinSizeLimit) return true;
 
-    if (!isAcceptedType || !isWithinSizeLimit) {
-      setError(INVALID_FILE_MESSAGE);
-      return null;
-    }
+    releaseUri(picked.uri);
+    setError(messages.invalidFile);
+    return false;
+  }
 
+  /** Só escolhe e valida, sem enviar. */
+  async function pickImage(): Promise<PickedImage | null> {
+    const picked = await chooseImage();
+    if (!picked || !isAcceptable(picked)) return null;
     return picked;
   }
 
-  return { pickImage, error };
+  function cancelUpload() {
+    abortAttempt();
+    setIsUploading(false);
+    setProgress(null);
+  }
+
+  /**
+   * Escolhe, valida e envia. Só devolve algo no 201; em qualquer outro caso
+   * devolve `null` e a imagem anterior da tela continua valendo.
+   */
+  async function pickAndUpload(): Promise<UploadedImage | null> {
+    const picked = await chooseImage();
+    if (!picked) return null;
+
+    // A escolha nova toma o lugar de um envio em andamento, mesmo que seja
+    // recusada logo abaixo.
+    cancelUpload();
+    if (!isAcceptable(picked)) return null;
+
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const attempt = attemptRef.current;
+    const isCurrent = () => mountedRef.current && attemptRef.current === attempt;
+
+    setError(null);
+    setProgress(0);
+    setIsUploading(true);
+
+    try {
+      const response = await apiUpload<Record<string, unknown> | null>(endpoint, picked, {
+        signal: controller.signal,
+        onProgress: (fraction) => {
+          if (!isCurrent()) return;
+          setProgress(fraction === null ? null : Math.min(100, Math.max(0, Math.floor(fraction * 100))));
+        },
+      });
+
+      const url = response?.[urlField];
+      if (typeof url !== 'string') throw new Error(`Resposta do envio sem "${urlField}"`);
+
+      if (!isCurrent()) {
+        releaseUri(picked.uri);
+        return null;
+      }
+
+      releaseUri(currentUriRef.current);
+      currentUriRef.current = picked.uri;
+      controllerRef.current = null;
+      setIsUploading(false);
+      setProgress(null);
+      return { uri: picked.uri, url };
+    } catch (caught) {
+      releaseUri(picked.uri);
+      if (!isCurrent()) return null;
+
+      controllerRef.current = null;
+      setIsUploading(false);
+      setProgress(null);
+
+      const kind = classifyUploadError(caught);
+      if (kind === 'invalid-file') setError(messages.invalidFile);
+      else if (kind) setError(messages[kind]);
+      return null;
+    }
+  }
+
+  function clearError() {
+    setError(null);
+  }
+
+  /** A tela tirou a imagem do formulário: libera a prévia local. */
+  function clearImage() {
+    releaseUri(currentUriRef.current);
+    currentUriRef.current = null;
+  }
+
+  /** Descarte do formulário: aborta o envio e libera todas as prévias. */
+  function reset() {
+    cancelUpload();
+    releaseAll();
+    setError(null);
+  }
+
+  return {
+    pickImage,
+    pickAndUpload,
+    cancelUpload,
+    clearError,
+    clearImage,
+    reset,
+    isUploading,
+    progress,
+    error,
+  };
 }

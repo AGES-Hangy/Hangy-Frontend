@@ -23,7 +23,7 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEditEvent } from '@/hooks/useEditEvent';
 import { useEvent } from '@/hooks/useEvent';
-import { useImageUpload } from '@/hooks/useImageUpload';
+import { useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 
@@ -115,7 +115,7 @@ export default function EditEvent() {
   const { event, isLoading: isLoadingEvent, error: eventError, reload } = useEvent(id);
   const { saveEvent, isSaving, saveError } = useEditEvent(id);
   const { tags, isLoading: tagsLoading, error: tagsError, refetch: refetchTags } = useTags();
-  const { pickImage, error: coverError } = useImageUpload();
+  const { pickImage, error: coverError } = useEventCoverUpload();
 
   const [form, setForm] = useState<EditEventFormData | null>(null);
   const originalRef = useRef<EditEventFormData | null>(null);
