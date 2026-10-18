@@ -1,3 +1,4 @@
+import { endpoints } from '@/constants/api';
 import type {
   EventDetail,
   EventParticipant,
@@ -5,6 +6,7 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
+import type { ApiUploadOptions, UploadFile } from '@/utils/http';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
@@ -583,4 +585,26 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   }
 
   throw new MockApiError(404, 'Not found');
+}
+
+/**
+ * `POST /uploads/event-covers` (task 276 [BE], ainda não subiu). Fica fora do
+ * `resolveMock` porque o envio tem progresso e cancelamento, que `apiFetch` não
+ * tem. O cancelamento em si é tratado por `apiUpload`, em volta desta função.
+ */
+export async function resolveUploadMock<T>(
+  path: string,
+  file: UploadFile,
+  { onProgress }: ApiUploadOptions = {},
+): Promise<T> {
+  await wait();
+
+  if (path !== endpoints.eventCovers()) throw new MockApiError(404, 'Not found');
+
+  onProgress?.(1);
+  const extensao = file.mimeType === 'image/png' ? 'png' : 'jpg';
+  const id = Math.random().toString(36).slice(2, 10);
+  return {
+    cover_photo_url: `https://hangy-media.s3.us-east-1.amazonaws.com/events/covers/${id}.${extensao}`,
+  } as T;
 }
