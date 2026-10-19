@@ -79,4 +79,19 @@ export const endpoints = {
   myCreatedEvents: () => '/users/me/events/created',
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
+  /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
+  connections: (options?: { cursor?: string | null; search?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.cursor) params.set('cursor', options.cursor);
+    if (options?.search) params.set('q', options.search);
+    const query = params.toString();
+    return `/users/me/connections${query ? `?${query}` : ''}`;
+  },
+  /** Solicitações de conexão recebidas ainda pendentes. */
+  connectionsPending: (cursor?: string | null) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    const query = params.toString();
+    return `/users/me/connections/pending${query ? `?${query}` : ''}`;
+  },
 } as const;
