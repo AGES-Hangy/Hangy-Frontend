@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 
 import { AvatarGroup } from '@/components/AvatarGroup';
-import { Badge, getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from '@/components/Badge';
+import { Badge, getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue, resolvePrivacyVariant } from '@/components/Badge';
 import { Chip } from '@/components/Chip';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
@@ -93,12 +93,13 @@ export function EventCard({
 			onPress={onPress}
 			style={({ pressed }) => [
 				styles.pressable,
-				// `Compact` é a única variante com largura fluida (width: '100%' até
-				// compactMaxWidth); as outras têm largura fixa e devem encolher ao
-				// conteúdo. Sem isto, `width: '100%'` do card não tem uma largura de
-				// referência (o Pressable encolhe ao próprio conteúdo) e o card
-				// estoura para a direita da tela.
-				variant === 'Compact' && styles.pressableFluid,
+				// `Compact` e `MapPreview` têm largura fluida (`MapPreview` ocupa a
+				// largura do overlay do mapa, como no frame "Ao Vivo 2"); as outras
+				// têm largura fixa e devem encolher ao conteúdo. Sem isto,
+				// `width: '100%'` do card não tem uma largura de referência (o
+				// Pressable encolhe ao próprio conteúdo) e o card estoura para a
+				// direita da tela.
+				(variant === 'Compact' || variant === 'MapPreview') && styles.pressableFluid,
 				pressed && styles.pressed,
 			]}
 		>
@@ -244,23 +245,51 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 	);
 }
 
+// Mesmo layout para evento exato e aproximado (frames "Ao Vivo 2" do Figma):
+// título, local e data, com a privacidade num ícone sobre a capa. Quem monta o `Event` decide o texto do local ("Região
+// do…" no aproximado) e a distância ("~600 m"). A distância vai na linha da
+// data — três linhas é o que cabe na altura fixa do card.
 function MapPreviewCard({ event }: { event: Event }) {
-	const distance = event.distance;
+	const dateLine = [formatEventDateTime(event.date), event.distance && `a ${event.distance}`]
+		.filter(Boolean)
+		.join(' · ');
 
 	return (
 		<View style={[styles.cardFlat, styles.mapPreview]}>
 			<View style={styles.mapImageWrap}>
 				<EventImage event={event} style={styles.mapImage} placeholderColor={palette.secondary[200]} />
+				{event.privacy && <MapPreviewPrivacyIcon privacy={event.privacy} />}
 			</View>
 			<View style={styles.mapDetails}>
 				<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
-				{distance != null && (
-					<Text numberOfLines={1} style={[styles.detailText, styles.mapPreviewDistance]}>
-						a {distance} de você
-					</Text>
-				)}
-				{event.privacy && <Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />}
+				{event.location && <Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>}
+				{dateLine ? (
+					<View style={styles.detailLine}>
+						<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={styles.detailText}>{dateLine}</Text>
+					</View>
+				) : null}
 			</View>
+		</View>
+	);
+}
+
+/**
+ * Privacidade no preview do mapa: o `Badge` com texto (24 de altura, até ~93
+ * de largura) é do tamanho da capa de 80. Aqui fica só o ícone, com as cores
+ * do selo de privacidade, no formato do `MapPin/LockBadge` (círculo 20, ícone
+ * 12). Decorativo: o nome já está no `accessibilityLabel` do card.
+ */
+function MapPreviewPrivacyIcon({ privacy }: { privacy: EventPrivacy }) {
+	const visual = resolvePrivacyVariant(getPrivacyBadgeValue(privacy));
+	return (
+		<View
+			style={[styles.mapPrivacyIcon, { backgroundColor: visual.backgroundColor, borderColor: visual.borderColor }]}
+			accessibilityElementsHidden
+			importantForAccessibility="no-hide-descendants"
+			pointerEvents="none"
+		>
+			<Icon name={visual.icon} size={layout.badge.iconSize} color={visual.textColor} strokeWidth={layout.badge.iconStrokeWidth} />
 		</View>
 	);
 }
@@ -434,7 +463,6 @@ const styles = StyleSheet.create({
 		alignSelf: 'stretch',
 	},
 	requestDetailText: { color: colors.text.tertiary },
-	mapPreviewDistance: { color: palette.primary[600] },
 
 	tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[8], flexShrink: 1 },
 
@@ -491,14 +519,15 @@ const styles = StyleSheet.create({
 	compactImage: { width: '100%', height: '100%' },
 	compactContent: { flex: 1, gap: spacing[4], alignItems: 'flex-start' },
 
-	// MapPreview — w280 h96 r14, flutuante sobre o mapa, sem sombra.
+	// MapPreview — largura do overlay, h96 r14, flutuante sobre o mapa, sem sombra.
 	mapPreview: {
-		width: layout.eventCard.mapPreviewWidth,
+		width: '100%',
 		height: layout.eventCard.mapPreviewHeight,
 		flexDirection: 'row',
 		alignItems: 'center',
 		borderRadius: radius.md,
 		padding: spacing[8],
+		paddingRight: layout.eventCard.mapPreviewActionInset,
 		gap: spacing[12],
 		overflow: 'hidden',
 	},
@@ -509,6 +538,18 @@ const styles = StyleSheet.create({
 		overflow: 'hidden',
 	},
 	mapImage: { width: '100%', height: '100%' },
+	mapPrivacyIcon: {
+		position: 'absolute',
+		top: spacing[4],
+		left: spacing[4],
+		width: layout.eventCard.mapPrivacyIconSize,
+		height: layout.eventCard.mapPrivacyIconSize,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: radius.full,
+		borderWidth: layout.badge.borderWidth,
+		zIndex: layout.eventCard.overlayZIndex,
+	},
 	mapDetails: { flex: 1, gap: spacing[4], alignItems: 'flex-start' },
 
 	// Mini e Request — cards do carrossel: w172 fixa, r14, elevação 1.
