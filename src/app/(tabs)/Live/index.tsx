@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { ActivityIndicator, AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, PixelRatio, Platform, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
@@ -13,11 +13,12 @@ import { EventCard } from '@/components/EventCard';
 import type { Event } from '@/components/EventCard/types';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
+import { MapArea } from '@/components/MapArea';
 import { MapPin } from '@/components/MapPin';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { colors, palette } from '@/constants/colors';
-import { elevation, radius, spacing } from '@/constants/layout';
+import { elevation, layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { distanceInMeters, useNearbyEvents } from '@/hooks/useNearbyEvents';
@@ -42,6 +43,20 @@ const CENTER_ANCHOR = { x: 0.5, y: 0.5 };
 /** Círculo do ícone do aviso — diâmetro do IconButton MD. */
 const NOTICE_ICON_CIRCLE = 44;
 const NOTICE_ICON_SIZE = 20;
+/** Metros por grau de latitude — basta para enquadrar a área, não para medir. */
+const METERS_PER_DEGREE = 111320;
+/** Distância de evento aproximado: arredondada, para não sugerir precisão que não existe. */
+const APPROXIMATE_DISTANCE_STEP_M = 100;
+/**
+ * Folga ao enquadrar a área aproximada: embaixo ficam o preview, o botão de
+ * centralizar (44) e os espaçamentos do overlay; em cima, o aviso de localização.
+ */
+const AREA_EDGE_PADDING = {
+  top: spacing[64],
+  right: spacing[32],
+  bottom: layout.eventCard.mapPreviewHeight + NOTICE_ICON_CIRCLE + spacing[16] + spacing[12] + spacing[32],
+  left: spacing[32],
+};
 
 type Coordinate = { latitude: number; longitude: number };
 type LocationPermission = 'checking' | 'undetermined' | 'granted' | 'denied';
@@ -77,7 +92,76 @@ function formatDistance(meters: number) {
   return `${kilometers} km`;
 }
 
+/**
+ * Quem decide se o pin é aproximado é `location_precision`, nunca `privacy`:
+ * evento privado do qual já participo vem `EXACT`. Campo ausente (backend sem a
+ * task 119) conta como `EXACT`.
+ */
+function isLocationApproximate(event: NearbyEventItem) {
+  return event.location_precision === 'APPROXIMATE';
+}
+
+/** Raio da área do evento aproximado; sem raio válido o pin fica sem área. */
+function approximateRadius(event: NearbyEventItem) {
+  const radiusM = event.location_radius_m;
+  return isLocationApproximate(event) && radiusM != null && radiusM > 0 ? radiusM : null;
+}
+
+/** Norte, sul, leste e oeste do círculo — para enquadrar a área inteira, não só o centro. */
+function circleEdges(center: Coordinate, radiusM: number): Coordinate[] {
+  const latitudeDelta = radiusM / METERS_PER_DEGREE;
+  const longitudeDelta = radiusM / (METERS_PER_DEGREE * Math.cos((center.latitude * Math.PI) / 180));
+  return [
+    { latitude: center.latitude + latitudeDelta, longitude: center.longitude },
+    { latitude: center.latitude - latitudeDelta, longitude: center.longitude },
+    { latitude: center.latitude, longitude: center.longitude + longitudeDelta },
+    { latitude: center.latitude, longitude: center.longitude - longitudeDelta },
+  ];
+}
+
+// No Android o `edgePadding` do `fitToCoordinates` é em pixels físicos, não em dp.
+function toNativePadding(padding: typeof AREA_EDGE_PADDING) {
+  if (Platform.OS !== 'android') return padding;
+  const ratio = PixelRatio.get();
+  return {
+    top: padding.top * ratio,
+    right: padding.right * ratio,
+    bottom: padding.bottom * ratio,
+    left: padding.left * ratio,
+  };
+}
+
+/**
+ * Linha de local do preview aproximado. O pin está no centro da área, não no
+ * endereço — o texto fala em região, nunca sugere que o ponto é o local.
+ * `location_name` vem como "Bairro, Cidade"; fica só o bairro.
+ */
+function approximateLocationLabel(locationName: string | null) {
+  const neighborhood = locationName?.split(',')[0]?.trim();
+  return neighborhood ? `Região do ${neighborhood}` : 'Local aproximado';
+}
+
+function formatApproximateDistance(meters: number) {
+  const rounded = Math.max(APPROXIMATE_DISTANCE_STEP_M, Math.round(meters / APPROXIMATE_DISTANCE_STEP_M) * APPROXIMATE_DISTANCE_STEP_M);
+  return `~${formatDistance(rounded)}`;
+}
+
 function toPreviewEvent(event: NearbyEventItem, userCoordinate: Coordinate | null): Event {
+  if (isLocationApproximate(event)) {
+    return {
+      id: event.event_id,
+      title: event.title,
+      date: event.event_date,
+      location: approximateLocationLabel(event.location_name),
+      imageUrl: event.cover_photo_url ?? '',
+      privacy: event.privacy,
+      isLocationApproximate: true,
+      distance: userCoordinate
+        ? formatApproximateDistance(distanceInMeters(userCoordinate, event.location))
+        : undefined,
+    };
+  }
+
   return {
     id: event.event_id,
     title: event.title,
@@ -153,6 +237,8 @@ export function LiveView({
 }: LiveViewProps) {
   const regionRef = useRef(initialRegion);
   const selectedEvent = events.find((event) => event.event_id === selectedEventId) ?? null;
+  // No máximo uma área por vez: só a do pin selecionado.
+  const selectedAreaRadius = selectedEvent ? approximateRadius(selectedEvent) : null;
 
   function handleRegionChangeComplete(region: Region) {
     regionRef.current = region;
@@ -165,9 +251,18 @@ export function LiveView({
     onSelectEvent(null);
   }
 
-  // Selecionar recentra o mapa no pin, mantendo o zoom atual.
+  // Selecionar recentra o mapa no pin, mantendo o zoom atual. Pin aproximado
+  // enquadra a área inteira — num zoom fechado o círculo tomaria a tela toda.
   function handleSelectPin(event: NearbyEventItem) {
     onSelectEvent(event.event_id);
+    const radiusM = approximateRadius(event);
+    if (radiusM) {
+      mapRef.current?.fitToCoordinates(circleEdges(event.location, radiusM), {
+        edgePadding: toNativePadding(AREA_EDGE_PADDING),
+        animated: true,
+      });
+      return;
+    }
     mapRef.current?.animateToRegion({ ...regionRef.current, ...event.location }, MAP_ANIMATION_MS);
   }
 
@@ -193,6 +288,9 @@ export function LiveView({
 
   const notice = locationNotice ? NOTICE_COPY[locationNotice] : null;
   const isConfirmed = selectedEvent?.is_confirmed ?? false;
+  // Evento aproximado ainda não aprovado: a solicitação é feita no detalhe
+  // (task 106), então a ação do preview só abre o evento.
+  const isSelectedApproximate = selectedEvent ? isLocationApproximate(selectedEvent) : false;
   const isPending = !isConfirmed && !!selectedEventId && pendingEventIds.has(selectedEventId);
 
   // Skeleton do mapa: a área cinza (`surface.sunken`) sem nada por cima, até
@@ -237,10 +335,15 @@ export function LiveView({
               <MapPin
                 state={selectedEventId ? (isSelected ? 'Selected' : 'Unselected') : 'Default'}
                 uri={event.cover_photo_url ?? undefined}
+                isApproximate={isLocationApproximate(event)}
               />
             </Marker>
           );
         })}
+
+        {selectedEvent && selectedAreaRadius && (
+          <MapArea key={selectedEvent.event_id} center={selectedEvent.location} radiusM={selectedAreaRadius} />
+        )}
 
         {userCoordinate && (
           <Marker coordinate={userCoordinate} anchor={CENTER_ANCHOR} zIndex={0} tappable={false}>
@@ -305,7 +408,8 @@ export function LiveView({
         )}
         {selectedEvent ? (
           // Botão sobreposto ao card, como irmão (não aninhado): o corpo abre o
-          // detalhe, o botão confirma ou cancela presença.
+          // detalhe, o botão confirma ou cancela presença (ou, no evento
+          // aproximado, também abre o detalhe).
           <View style={styles.previewCard}>
             <EventCard
               variant="MapPreview"
@@ -313,20 +417,30 @@ export function LiveView({
               onPress={() => onOpenEvent(selectedEvent.event_id)}
             />
             <View style={styles.previewAction} pointerEvents="box-none">
-              <IconButton
-                icon={isPending ? 'clock' : isConfirmed ? 'x' : 'check'}
-                variant={isConfirmed ? 'Outline' : 'Filled'}
-                size="SM"
-                disabled={participationLoading || isOffline || isPending}
-                accessibilityLabel={
-                  isPending
-                    ? `Solicitação pendente em ${selectedEvent.title}`
-                    : isConfirmed
-                    ? `Cancelar presença em ${selectedEvent.title}`
-                    : `Confirmar presença em ${selectedEvent.title}`
-                }
-                onPress={() => onParticipationPress(selectedEvent.event_id)}
-              />
+              {isSelectedApproximate ? (
+                <IconButton
+                  icon="chevron-right"
+                  variant="Filled"
+                  size="SM"
+                  accessibilityLabel={`Ver detalhes de ${selectedEvent.title}`}
+                  onPress={() => onOpenEvent(selectedEvent.event_id)}
+                />
+              ) : (
+                <IconButton
+                  icon={isPending ? 'clock' : isConfirmed ? 'x' : 'check'}
+                  variant={isConfirmed ? 'Outline' : 'Filled'}
+                  size="SM"
+                  disabled={participationLoading || isOffline || isPending}
+                  accessibilityLabel={
+                    isPending
+                      ? `Solicitação pendente em ${selectedEvent.title}`
+                      : isConfirmed
+                      ? `Cancelar presença em ${selectedEvent.title}`
+                      : `Confirmar presença em ${selectedEvent.title}`
+                  }
+                  onPress={() => onParticipationPress(selectedEvent.event_id)}
+                />
+              )}
             </View>
           </View>
         ) : showEmptyState ? (
