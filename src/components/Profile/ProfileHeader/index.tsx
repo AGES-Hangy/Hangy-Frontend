@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Chip } from '@/components/Chip';
@@ -10,6 +10,10 @@ import { typography } from '@/constants/typography';
 
 /** Divisor vertical entre os números do cabeçalho, 1 × 28 no frame. */
 const STAT_DIVIDER_HEIGHT = 28;
+
+/** O número com o rótulo tem ~44 de altura; o slot completa a área de toque nas laterais. */
+const STAT_HIT_SLOP = { top: spacing[4], bottom: spacing[4], left: spacing[8], right: spacing[8] };
+const PRESSED_OPACITY = 0.6;
 
 const countFormatter = new Intl.NumberFormat('pt-BR');
 
@@ -55,10 +59,23 @@ export function ProfileHeader({
                       <View style={styles.statSpacer} />
                     </>
                   )}
-                  <View style={styles.stat} accessible accessibilityLabel={`${value} ${stat.label}`}>
-                    <Text style={styles.statValue}>{value}</Text>
-                    <Text style={styles.statLabel}>{stat.label}</Text>
-                  </View>
+                  {stat.onPress ? (
+                    <Pressable
+                      onPress={stat.onPress}
+                      hitSlop={STAT_HIT_SLOP}
+                      accessibilityRole="button"
+                      accessibilityLabel={stat.accessibilityLabel ?? `${value} ${stat.label}`}
+                      style={({ pressed }) => [styles.stat, pressed && styles.statPressed]}
+                    >
+                      <Text style={styles.statValue}>{value}</Text>
+                      <Text style={styles.statLabel}>{stat.label}</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.stat} accessible accessibilityLabel={`${value} ${stat.label}`}>
+                      <Text style={styles.statValue}>{value}</Text>
+                      <Text style={styles.statLabel}>{stat.label}</Text>
+                    </View>
+                  )}
                 </Fragment>
               );
             })}
@@ -121,6 +138,9 @@ const styles = StyleSheet.create({
   stat: {
     alignItems: 'center',
     gap: spacing[4],
+  },
+  statPressed: {
+    opacity: PRESSED_OPACITY,
   },
   statValue: {
     ...typography.h4,

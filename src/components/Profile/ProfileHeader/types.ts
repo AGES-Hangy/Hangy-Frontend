@@ -5,6 +5,10 @@ export type ProfileHeaderStat = {
   value: number;
   /** Já no singular ou no plural: "Conexão", "Seguidores". */
   label: string;
+  /** Torna o número um botão, ex.: Conexões abre `/Connections`. */
+  onPress?: () => void;
+  /** Nome acessível do botão; padrão: "{valor} {label}". */
+  accessibilityLabel?: string;
 };
 
 export type ProfileHeaderProps = {

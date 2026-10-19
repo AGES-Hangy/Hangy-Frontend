@@ -248,7 +248,14 @@ export default function Profile() {
             photoUrl={profile.photo_url}
             avatarVariant="User"
             stats={[
-              { value: profile.connections_count, label: profile.connections_count === 1 ? 'Conexão' : 'Conexões' },
+              {
+                value: profile.connections_count,
+                label: profile.connections_count === 1 ? 'Conexão' : 'Conexões',
+                onPress: () => router.push('/Connections'),
+                accessibilityLabel: `${profile.connections_count} ${
+                  profile.connections_count === 1 ? 'Conexão' : 'Conexões'
+                }, ver conexões`,
+              },
               { value: eventsCount, label: eventsCount === 1 ? 'Evento' : 'Eventos' },
               { value: counts.photos, label: counts.photos === 1 ? 'Foto' : 'Fotos' },
             ]}

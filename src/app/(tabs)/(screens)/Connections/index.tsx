@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { router } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
 import { TextField } from '@/components/TextField';
@@ -14,9 +15,14 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useConnections } from '@/hooks/useConnections';
 import type { ConnectionItem, PendingConnectionItem } from '@/hooks/useConnections';
+import { useMyProfile } from '@/hooks/useMyProfile';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 
+/** Avatar de 40 do item "Item/Conexão" no frame; a escala nomeada do `Avatar` começa em 48. */
+const ROW_AVATAR_DIAMETER = 40;
 const MIN_TOUCH = 44;
+const PILL_HEIGHT = 36;
+const PILL_BORDER_WIDTH = 1.5;
 
 type ListEntry =
   | { kind: 'connected'; data: ConnectionItem }
@@ -32,6 +38,14 @@ function entryName(entry: ListEntry): string {
   return entry.kind === 'connected' ? entry.data.name : entry.data.user.name;
 }
 
+function entryUserId(entry: ListEntry): string {
+  return entry.kind === 'connected' ? entry.data.user_id : entry.data.user.id;
+}
+
+function openProfile(entry: ListEntry) {
+  router.push({ pathname: '/UserProfile', params: { id: entryUserId(entry) } });
+}
+
 function Row({ entry }: { entry: ListEntry }) {
   const name = entryName(entry);
   const photoUrl = entry.kind === 'connected'
@@ -42,16 +56,16 @@ function Row({ entry }: { entry: ListEntry }) {
 
   return (
     <Pressable
+      onPress={() => openProfile(entry)}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
       accessibilityRole="button"
-      accessibilityLabel={`Ver perfil de ${name}`}
+      accessibilityLabel={`${name}, ${isPending ? 'solicitação pendente' : 'conectados'}. Ver perfil`}
       android_ripple={{ color: palette.primary[50] }}
     >
       <Avatar
-        size="SM"
         variant="User"
+        diameter={ROW_AVATAR_DIAMETER}
         source={photoUrl ? { uri: photoUrl } : undefined}
-        accessibilityLabel={name}
       />
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>{name}</Text>
@@ -59,7 +73,9 @@ function Row({ entry }: { entry: ListEntry }) {
           <Text style={styles.rowSub} numberOfLines={1}>{city}</Text>
         ) : null}
       </View>
-      <View style={[styles.pill, isPending ? styles.pillPending : styles.pillConnected]}>
+      {/* Mesma aparência do Button SM (Tertiary / Secondary) do frame, mas sem ser
+          botão: o toque é da linha inteira, e um botão dentro dela seria aninhado. */}
+      <View style={[styles.pill, isPending && styles.pillPending]}>
         <Text style={[styles.pillText, isPending ? styles.pillTextPending : styles.pillTextConnected]}>
           {isPending ? 'Pendente' : 'Conectados'}
         </Text>
@@ -69,7 +85,6 @@ function Row({ entry }: { entry: ListEntry }) {
 }
 
 export default function Connections() {
-  useTopAppBar({ variant: 'BrandBack' });
 
   const {
     connections,
@@ -84,6 +99,15 @@ export default function Connections() {
     reload,
   } = useConnections();
 
+  // O total vem do perfil: a lista é paginada, e o tamanho dela é só o que já carregou.
+  const { profile } = useMyProfile({ enabled: true });
+  const totalCount = profile?.connections_count ?? null;
+  useTopAppBar({
+    variant: 'Detail',
+    title:
+      totalCount === null ? 'Conexões' : `${totalCount} ${totalCount === 1 ? 'conexão' : 'conexões'}`,
+  });
+
   const isSearching = search.trim().length > 0;
 
   const listData: ListEntry[] = [
@@ -91,19 +115,13 @@ export default function Connections() {
     ...connections.map(d => ({ kind: 'connected' as const, data: d })),
   ].sort((a, b) => entryName(a).localeCompare(entryName(b), 'pt-BR', { sensitivity: 'base' }));
 
-  const totalCount = connections.length;
-
   const ListHeader = (
     <View style={styles.header}>
-      <Text style={styles.title}>
-        {totalCount > 0 ? `${totalCount} conexões` : 'Conexões'}
-      </Text>
       <TextField
         type="Search"
         placeholder="Buscar conexões"
         value={search}
         onChangeText={setSearch}
-        style={styles.searchField}
       />
     </View>
   );
@@ -143,6 +161,7 @@ export default function Connections() {
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={ListFooter}
+        ItemSeparatorComponent={RowSeparator}
         onEndReached={hasMore ? () => { void loadMore(); } : undefined}
         onEndReachedThreshold={0.3}
         onRefresh={() => { void reload(); }}
@@ -152,6 +171,10 @@ export default function Connections() {
       />
     </View>
   );
+}
+
+function RowSeparator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
@@ -169,25 +192,22 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: spacing[24],
   },
+  // No frame, a busca fica a 16 da barra e a lista começa 20 abaixo dela
+  // (12 aqui + os 8 do padding da linha).
   header: {
     paddingHorizontal: spacing[16],
     paddingTop: spacing[16],
-    paddingBottom: spacing[8],
-    gap: spacing[12],
+    paddingBottom: spacing[12],
   },
-  title: {
-    ...typography.h3,
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  searchField: {
-    marginBottom: spacing[4],
+  // O "gap 8" da Lista/Conexões.
+  separator: {
+    height: spacing[8],
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing[16],
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     minHeight: MIN_TOUCH,
     gap: spacing[12],
     backgroundColor: colors.bg.base,
@@ -207,27 +227,27 @@ const styles = StyleSheet.create({
     ...typography.bodyS,
     color: colors.text.secondary,
   },
+  // Métricas do Button SM: altura 36, padding 16, Label S; borda 1.5 no Secondary.
   pill: {
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[4],
+    height: PILL_HEIGHT,
+    paddingHorizontal: spacing[16],
     borderRadius: radius.full,
-    minHeight: MIN_TOUCH,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pillConnected: {},
   pillPending: {
-    borderWidth: 1.5,
+    borderWidth: PILL_BORDER_WIDTH,
     borderColor: colors.action.primary,
+    backgroundColor: colors.bg.base,
   },
   pillText: {
     ...typography.labelS,
   },
   pillTextConnected: {
-    color: colors.action.primary,
+    color: palette.primary[600],
   },
   pillTextPending: {
-    color: colors.action.primary,
+    color: colors.text.brand,
   },
   emptyContainer: {
     flex: 1,
