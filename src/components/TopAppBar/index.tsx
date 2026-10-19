@@ -48,21 +48,25 @@ function BarButton({
   icon,
   label,
   onPress,
+  disabled,
   tint,
   children,
 }: {
   icon: IconName;
   label: string;
   onPress?: () => void;
+  disabled?: boolean;
   tint: string;
   children?: React.ReactNode;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       hitSlop={ICON_HIT_SLOP}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
     >
       <View>
         <Icon name={icon} color={tint} />
@@ -164,6 +168,7 @@ export function TopAppBar({
             label={action.accessibilityLabel}
             tint={tint}
             onPress={action.onPress}
+            disabled={action.disabled}
           />
         )}
       </View>
