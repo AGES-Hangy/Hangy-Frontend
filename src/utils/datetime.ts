@@ -17,6 +17,14 @@ export function formatDate(iso: string): string {
   return `${doisDigitos(data.getDate())}/${doisDigitos(data.getMonth() + 1)}/${data.getFullYear()}`;
 }
 
+/** `2026-10-30T16:00:00Z` -> `30/10` */
+export function formatDayMonth(iso: string): string {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return '';
+
+  return `${doisDigitos(data.getDate())}/${doisDigitos(data.getMonth() + 1)}`;
+}
+
 /** `2026-10-30T16:00:00Z` -> `16:00` */
 export function formatTime(iso: string): string {
   const data = new Date(iso);

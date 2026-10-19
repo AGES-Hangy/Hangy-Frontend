@@ -98,7 +98,16 @@ export const endpoints = {
   /** `PATCH` responde a uma solicitação recebida (task 230 [BE]); `DELETE` cancela ou desfaz (task 231 [BE]). */
   connection: (connectionId: string) => `/connections/${encodeURIComponent(connectionId)}`,
   businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
+  /** `POST` bloqueia (task 088); `DELETE` desbloqueia e responde `204` (task 235 [BE]). */
   userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
+  /** Quem a conta logada bloqueou, paginado por cursor (task 236 [BE]). */
+  blockedUsers: (options?: { limit?: number; cursor?: string | null }) => {
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/users/me/blocked${query ? `?${query}` : ''}`;
+  },
   myPhotos: (options?: { limit?: number; cursor?: string | null }) => {
     const params = new URLSearchParams();
     if (options?.limit !== undefined) params.set('limit', String(options.limit));

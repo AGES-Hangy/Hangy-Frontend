@@ -109,3 +109,18 @@ export interface UserTag {
   name: string;
   parent: { id: string; name: string } | null;
 }
+
+/** Item de `GET /users/me/blocked` (task 236 [BE]). */
+export interface BlockedUser {
+  user_id: string;
+  name: string;
+  photo_url: string | null;
+  /** ISO 8601. */
+  blocked_at: string;
+}
+
+/** `GET /users/me/blocked`: paginado por cursor, `next_cursor: null` na última página. */
+export interface BlockedUsersPage {
+  items: BlockedUser[];
+  next_cursor: string | null;
+}
