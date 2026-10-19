@@ -247,6 +247,30 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 function MapPreviewCard({ event }: { event: Event }) {
 	const distance = event.distance;
 
+	if (event.isLocationApproximate) {
+		// Figma "Ao Vivo 2": região no lugar do endereço e data com ícone. A
+		// distância (já com "~") vai na linha da data — três linhas é o que cabe
+		// na altura fixa do card.
+		const dateLine = [formatEventDateTime(event.date), distance].filter(Boolean).join(' · ');
+		return (
+			<View style={[styles.cardFlat, styles.mapPreview]}>
+				<View style={styles.mapImageWrap}>
+					<EventImage event={event} style={styles.mapImage} placeholderColor={palette.secondary[200]} />
+				</View>
+				<View style={styles.mapDetails}>
+					<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
+					{event.location && <Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>}
+					{dateLine ? (
+						<View style={styles.detailLine}>
+							<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
+							<Text numberOfLines={1} style={styles.detailText}>{dateLine}</Text>
+						</View>
+					) : null}
+				</View>
+			</View>
+		);
+	}
+
 	return (
 		<View style={[styles.cardFlat, styles.mapPreview]}>
 			<View style={styles.mapImageWrap}>
