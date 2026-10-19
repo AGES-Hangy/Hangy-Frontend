@@ -17,7 +17,7 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useBusinessFollow } from '@/hooks/useBusinessFollow';
-import { useConnections } from '@/hooks/useConnections';
+import { useConnectionActions } from '@/hooks/useConnectionActions';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
@@ -105,7 +105,7 @@ export default function UserProfile() {
     answer: answerConnection,
     remove: removeConnection,
     isLoading: isConnectionPending,
-  } = useConnections();
+  } = useConnectionActions();
   const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
   const isRelationshipPending = isConnectionPending || isFollowPending;
   const [openDialog, setOpenDialog] = useState<RelationshipDialog | null>(null);

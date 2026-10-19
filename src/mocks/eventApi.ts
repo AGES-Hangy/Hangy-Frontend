@@ -619,7 +619,7 @@ function atualizarRelacao(userId: string, mudanca: RelacaoDoUsuario) {
   db.relacoesDeUsuario[userId] = { ...db.relacoesDeUsuario[userId], ...mudanca };
 }
 
-function perfil(userId: string): UserProfile {
+function perfilVisitado(userId: string): UserProfile {
   return { ...perfilInicial(userId), ...db.relacoesDeUsuario[userId] };
 }
 
@@ -1264,7 +1264,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
 
     if (partes.length === 2) {
       await erroDoUsuario(userId, 'perfil');
-      return perfil(userId) as T;
+      return perfilVisitado(userId) as T;
     }
 
     if (partes.length === 3 && partes[2] === 'events') {
@@ -1324,7 +1324,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   if (partes[0] === 'connections' && partes.length === 1 && method === 'POST') {
     const body = init.body ? JSON.parse(String(init.body)) : {};
     const receiverId: string = body.receiver_id ?? '';
-    const destinatario = perfil(receiverId);
+    const destinatario = perfilVisitado(receiverId);
 
     // Estabelecimento cai no mesmo 404 de inexistente, como no backend.
     if (db.usuariosIndisponiveis.includes(receiverId) || destinatario.user_type === 'BUSINESS') {
@@ -1441,7 +1441,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (db.usuariosIndisponiveis.includes(businessId)) {
       throw new MockApiError(404, 'Business not found');
     }
-    const estabelecimento = perfil(businessId);
+    const estabelecimento = perfilVisitado(businessId);
     const ehEstabelecimento = estabelecimento.user_type === 'BUSINESS';
 
     if (method === 'POST') {
