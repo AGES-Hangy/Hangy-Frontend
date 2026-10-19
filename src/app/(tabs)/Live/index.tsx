@@ -121,6 +121,7 @@ export interface LiveViewProps {
   onOpenEvent: (eventId: string) => void;
   onParticipationPress: (eventId: string) => void;
   participationLoading: boolean;
+  pendingEventIds: ReadonlySet<string>;
 }
 
 /**
@@ -148,6 +149,7 @@ export function LiveView({
   onOpenEvent,
   onParticipationPress,
   participationLoading,
+  pendingEventIds,
 }: LiveViewProps) {
   const regionRef = useRef(initialRegion);
   const selectedEvent = events.find((event) => event.event_id === selectedEventId) ?? null;
@@ -191,6 +193,7 @@ export function LiveView({
 
   const notice = locationNotice ? NOTICE_COPY[locationNotice] : null;
   const isConfirmed = selectedEvent?.is_confirmed ?? false;
+  const isPending = !isConfirmed && !!selectedEventId && pendingEventIds.has(selectedEventId);
 
   // Skeleton do mapa: a área cinza (`surface.sunken`) sem nada por cima, até
   // saber a permissão — sem isto o aviso pisca antes de o status chegar.
@@ -311,12 +314,14 @@ export function LiveView({
             />
             <View style={styles.previewAction} pointerEvents="box-none">
               <IconButton
-                icon={isConfirmed ? 'x' : 'check'}
+                icon={isPending ? 'clock' : isConfirmed ? 'x' : 'check'}
                 variant={isConfirmed ? 'Outline' : 'Filled'}
                 size="SM"
-                disabled={participationLoading || isOffline}
+                disabled={participationLoading || isOffline || isPending}
                 accessibilityLabel={
-                  isConfirmed
+                  isPending
+                    ? `Solicitação pendente em ${selectedEvent.title}`
+                    : isConfirmed
                     ? `Cancelar presença em ${selectedEvent.title}`
                     : `Confirmar presença em ${selectedEvent.title}`
                 }
@@ -355,6 +360,8 @@ export default function Live() {
   /** Incrementa no "Tentar de novo" do aviso de GPS para refazer a localização. */
   const [locateAttempt, setLocateAttempt] = useState(0);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  // Nearby só fornece is_confirmed; conserva as solicitações desta sessão.
+  const [pendingEventIds, setPendingEventIds] = useState<ReadonlySet<string>>(new Set());
   const [isCancelDialogVisible, setIsCancelDialogVisible] = useState(false);
   const { join, cancel, isSubmitting } = useParticipation(selectedEventId ?? '');
 
@@ -450,7 +457,7 @@ export default function Live() {
 
   async function handleParticipationPress(eventId: string) {
     const event = events.find((item) => item.event_id === eventId);
-    if (!event) return;
+    if (!event || isSubmitting || isOffline || (!event.is_confirmed && pendingEventIds.has(eventId))) return;
 
     if (event.is_confirmed) {
       setIsCancelDialogVisible(true);
@@ -460,14 +467,26 @@ export default function Live() {
     try {
       const result = await join();
       if (result.status === 'PENDING') {
+        setPendingEventIds((current) => new Set(current).add(eventId));
         addToast({ type: 'info' });
       } else {
         setConfirmed(eventId, true);
         showSuccessToast(event.title);
       }
     } catch (error) {
-      if ((error as ParticipationError).status === 409) {
+      const failure = error as ParticipationError;
+      if (failure.status === 409 && failure.detail === 'Request already pending') {
+        setPendingEventIds((current) => new Set(current).add(eventId));
+        addToast({ type: 'info', message: 'Sua solicitação já está aguardando aprovação.' });
+      } else if (failure.status === 409 && failure.detail === 'Already participating in this event') {
+        setConfirmed(eventId, true);
+        addToast({ type: 'info', message: 'Sua presença já está confirmada.' });
+      } else if (failure.status === 409 && failure.detail === 'Event is full') {
         addToast({ type: 'warning', message: 'Este evento está lotado' });
+      } else if (failure.status === 409 && failure.detail === 'Event creator cannot join their own event') {
+        addToast({ type: 'info', message: 'Você é o organizador deste evento.' });
+      } else if (failure.status === 409 && failure.detail === 'Event already finished') {
+        addToast({ type: 'warning', message: 'Este evento já foi encerrado.' });
       } else {
         addToast({ type: 'error', message: 'Não foi possível confirmar presença. Tente de novo.' });
       }
@@ -480,6 +499,11 @@ export default function Live() {
     try {
       await cancel();
       setConfirmed(eventId, false);
+      setPendingEventIds((current) => {
+        const next = new Set(current);
+        next.delete(eventId);
+        return next;
+      });
       addToast({ type: 'success', message: 'Participação cancelada.' });
     } catch {
       addToast({ type: 'error', message: 'Não foi possível cancelar. Tente de novo.' });
@@ -511,6 +535,7 @@ export default function Live() {
         onOpenEvent={(eventId) => router.push(`/EventDetail?id=${eventId}`)}
         onParticipationPress={(eventId) => void handleParticipationPress(eventId)}
         participationLoading={isSubmitting}
+        pendingEventIds={pendingEventIds}
       />
 
       <Dialog

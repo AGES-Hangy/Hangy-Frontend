@@ -121,6 +121,11 @@ export function useNearbyEvents() {
 
   /** Atualização local depois de confirmar ou cancelar presença pelo preview. */
   const setConfirmed = useCallback((eventId: string, isConfirmed: boolean) => {
+    // A busca em voo pode ter lido a participação antes da mutação concluir.
+    // Invalida também o debounce para ela não sobrescrever o estado confirmado.
+    latestRequestIdRef.current += 1;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setIsLoading(false);
     setEvents((current) =>
       current.map((event) => (event.event_id === eventId ? { ...event, is_confirmed: isConfirmed } : event)),
     );
