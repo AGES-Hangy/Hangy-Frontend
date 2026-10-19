@@ -18,6 +18,9 @@ import type {
  * mesmo motivo — não é um endpoint de evento, mas é só mais um backend que
  * falta, e criar um segundo arquivo/dispatcher pra um caso só seria over-engineering.
  *
+ * `GET /events/nearby` (mapa Ao Vivo, task 119 [BE]) também mora aqui — ver
+ * `EVENTOS_PROXIMOS` para os cenários do mapa.
+ *
  * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
  * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
  *
@@ -139,6 +142,7 @@ let db = estadoInicial();
 /** Zera o mock, para percorrer o fluxo de novo sem recarregar o app. */
 export function resetMock() {
   db = estadoInicial();
+  ancoraDoMapa = null;
 }
 
 const DESCRICAO = [
@@ -243,6 +247,102 @@ function participantes(eventId: string, statusFiltro: string | null): Participan
     counts,
     next_cursor: null,
   };
+}
+
+/**
+ * Eventos do `GET /events/nearby` (tasks 118 e 274). Ficam a uma distância fixa
+ * de uma âncora, não num endereço — assim aparecem onde quer que o mapa abra
+ * (Porto Alegre, posição do simulador, etc.). A âncora é o centro da primeira
+ * busca e não acompanha as seguintes: senão cada pan/zoom (que refaz a busca)
+ * moveria os pins junto, e o pin "fugiria" ao ser centralizado. Só muda se a
+ * busca for para longe (`DISTANCIA_PARA_REANCORAR_M`), ex.: o GPS chegou depois
+ * da busca na posição padrão. Cada `event_id` é um dos cenários do detalhe,
+ * então tocar no preview abre o detalhe coerente.
+ *
+ * | `event_id`          | No mapa                                                   |
+ * | ------------------- | --------------------------------------------------------- |
+ * | `guest`             | Público, pin normal, botão de confirmar presença           |
+ * | `private`           | Privado não aprovado: selo de cadeado, área de 500 m       |
+ * | `private-no-area`   | Igual, sem bairro: preview com "Local aproximado"          |
+ * | `private-confirmed` | Privado já aprovado: `EXACT`, pin normal, sem selo nem área |
+ * | `sem-precisao`      | Sem `location_precision` (backend antigo): conta como `EXACT` |
+ *
+ * Os eventos ficam entre ~400 m e ~900 m da âncora: com zoom bem fechado longe
+ * deles o raio da busca não os alcança e cai no estado vazio do mapa.
+ */
+const EVENTOS_PROXIMOS: {
+  event_id: string;
+  title: string;
+  /** Deslocamento em metros a partir do centro da busca (norte e leste positivos). */
+  norte: number;
+  leste: number;
+  location_name: string | null;
+  location_precision?: 'EXACT' | 'APPROXIMATE';
+  privacy: 'PUBLIC' | 'PRIVATE';
+  is_confirmed: boolean;
+}[] = [
+  { event_id: 'guest', title: 'Show no Opinião', norte: 450, leste: -350, location_name: 'Bar Opinião', location_precision: 'EXACT', privacy: 'PUBLIC', is_confirmed: false },
+  { event_id: 'private', title: 'Futebol no Planet', norte: -300, leste: 500, location_name: 'Jardim Botânico, Porto Alegre', location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false },
+  { event_id: 'private-no-area', title: 'Aniversário surpresa', norte: -700, leste: -400, location_name: null, location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false },
+  { event_id: 'private-confirmed', title: 'Churrasco da turma', norte: 600, leste: 550, location_name: 'Rua Tenente-Coronel Fabrício Pilar, 520', location_precision: 'EXACT', privacy: 'PRIVATE', is_confirmed: true },
+  { event_id: 'sem-precisao', title: 'Feira do Bom Fim', norte: 150, leste: -850, location_name: 'Parque da Redenção', privacy: 'PUBLIC', is_confirmed: false },
+];
+
+const METROS_POR_GRAU = 111320;
+const DISTANCIA_PARA_REANCORAR_M = 20000;
+
+/** Centro da primeira busca — onde os eventos do mapa ficam presos. */
+let ancoraDoMapa: { latitude: number; longitude: number } | null = null;
+
+/** Distância aproximada em metros (equirretangular) — basta para o mock. */
+function distanciaEmMetros(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const norte = (b.latitude - a.latitude) * METROS_POR_GRAU;
+  const leste = (b.longitude - a.longitude) * METROS_POR_GRAU * Math.cos((a.latitude * Math.PI) / 180);
+  return Math.hypot(norte, leste);
+}
+
+function eventosProximos(path: string) {
+  const params = new URLSearchParams(path.split('?')[1] ?? '');
+  const latitude = Number(params.get('latitude'));
+  const longitude = Number(params.get('longitude'));
+  const raio = Number(params.get('radius_m'));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    throw new MockApiError(422, 'Invalid coordinates');
+  }
+  if (raio > 50000) throw new MockApiError(422, 'Radius exceeds maximum');
+
+  const centro = { latitude, longitude };
+  if (!ancoraDoMapa || distanciaEmMetros(ancoraDoMapa, centro) > DISTANCIA_PARA_REANCORAR_M) {
+    ancoraDoMapa = centro;
+  }
+  const ancora = ancoraDoMapa;
+  const metrosPorGrauDeLongitude = METROS_POR_GRAU * Math.cos((ancora.latitude * Math.PI) / 180);
+  const items = EVENTOS_PROXIMOS.map((evento) => {
+    const aproximado = evento.location_precision === 'APPROXIMATE';
+    const location = {
+      latitude: ancora.latitude + evento.norte / METROS_POR_GRAU,
+      longitude: ancora.longitude + evento.leste / metrosPorGrauDeLongitude,
+    };
+    // Até o centro da busca, como no backend (não até a âncora).
+    const distancia = distanciaEmMetros(centro, location);
+    return {
+      event_id: evento.event_id,
+      title: evento.title,
+      event_date: '2026-10-30T19:00:00Z',
+      location,
+      location_name: evento.location_name,
+      ...(evento.location_precision ? { location_precision: evento.location_precision } : {}),
+      location_radius_m: aproximado ? 500 : null,
+      privacy: evento.privacy,
+      cover_photo_url: `https://picsum.photos/seed/hangy-${evento.event_id}/300/300`,
+      // Igual ao backend: distância de evento aproximado já vem arredondada.
+      distance_m: aproximado ? Math.round(distancia / 100) * 100 : Math.round(distancia),
+      participants_count: aproximado ? null : 12,
+      is_confirmed: evento.is_confirmed,
+    };
+  }).filter((item) => item.distance_m <= raio);
+
+  return { items };
 }
 
 /** `/events/aa11/participants/p11` -> `['events', 'aa11', 'participants', 'p11']` */
@@ -497,6 +597,11 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       url: 'https://hangy.app/termos/2026-08-01',
       summary: 'Termos de uso e política de privacidade do Hangy.',
     } as T;
+  }
+
+  // Antes do detalhe: `/events/nearby` também tem dois segmentos.
+  if (partes[0] === 'events' && partes[1] === 'nearby' && method === 'GET') {
+    return eventosProximos(path) as T;
   }
 
   if (partes[0] === 'events' && partes.length === 2 && method === 'GET') {
