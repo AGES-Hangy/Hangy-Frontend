@@ -171,6 +171,23 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * dos eventos do dono e, em conta de estabelecimento, as duas primeiras chamadas
  * do `GET /users/me`.
  *
+ * Usuários bloqueados (`GET /users/me/blocked` e `DELETE /users/{id}/block`):
+ * o cenário vem de `EXPO_PUBLIC_MOCK_BLOCKED`, lida quando o Metro inicia.
+ * Desbloquear tira a pessoa do `GET` seguinte; recarregar o app desfaz.
+ *
+ * | Valor           | Lista                                                   |
+ * | --------------- | ------------------------------------------------------- |
+ * | `full` (padrão) | 25 pessoas, em duas páginas com o `limit` da tela (20)  |
+ * | `empty`         | Lista vazia                                             |
+ * | `error`         | `500` na primeira página                                |
+ * | `error-page`    | Primeira página OK, `500` na seguinte                   |
+ *
+ * | `user_id`        | Desbloquear                                    |
+ * | ---------------- | ---------------------------------------------- |
+ * | qualquer pessoa  | `204`, sai da lista                            |
+ * | `unblock-gone`   | `404` (já desbloqueada), sai da lista          |
+ * | `unblock-boom`   | `500`                                          |
+ *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
  * (modo avião).
@@ -203,6 +220,39 @@ const cenarioPerfilProprio: CenarioPerfilProprio =
   valorDoCenarioPerfilProprio && CENARIOS_PERFIL_PROPRIO.includes(valorDoCenarioPerfilProprio)
     ? (valorDoCenarioPerfilProprio as CenarioPerfilProprio)
     : 'full';
+
+type CenarioBloqueados = 'full' | 'empty' | 'error' | 'error-page';
+const CENARIOS_BLOQUEADOS: readonly string[] = ['full', 'empty', 'error', 'error-page'];
+const valorDoCenarioBloqueados = process.env.EXPO_PUBLIC_MOCK_BLOCKED;
+const cenarioBloqueados: CenarioBloqueados =
+  valorDoCenarioBloqueados && CENARIOS_BLOQUEADOS.includes(valorDoCenarioBloqueados)
+    ? (valorDoCenarioBloqueados as CenarioBloqueados)
+    : 'full';
+
+const NOMES_BLOQUEADOS = [
+  'Bruno Lima', 'Carla Menezes', 'Diego Arruda', 'Elisa Cardoso', 'Fábio Nunes',
+  'Gabriela Torres', 'Henrique Sales', 'Isadora Pires', 'João Batista', 'Karen Moura',
+  'Leonardo Faria', 'Mariana Castro', 'Nathalia Rocha', 'Otávio Mendes', 'Paula Ribeiro',
+  'Quésia Barros', 'Rafael Antunes', 'Sabrina Costa', 'Tiago Moreira', 'Úrsula Campos',
+  'Vinícius Prado', 'Wesley Dias',
+];
+
+function bloqueadosIniciais() {
+  if (cenarioBloqueados === 'empty') return [];
+  const dia = 24 * 60 * 60 * 1000;
+  const pessoas = NOMES_BLOQUEADOS.map((name, index) => ({
+    user_id: `blocked-${index + 1}`,
+    name,
+    photo_url: index % 3 === 0 ? null : `https://picsum.photos/seed/blocked-${index + 1}/150`,
+    blocked_at: new Date(Date.now() - (index + 1) * dia).toISOString(),
+  }));
+  return [
+    { user_id: 'unblock-gone', name: 'Pessoa já desbloqueada', photo_url: null, blocked_at: new Date().toISOString() },
+    { user_id: 'unblock-boom', name: 'Pessoa com erro no servidor', photo_url: null, blocked_at: new Date().toISOString() },
+    ...pessoas,
+    { user_id: 'blocked-long-name', name: 'Maria Eduarda Albuquerque de Vasconcelos Figueiredo', photo_url: null, blocked_at: new Date(Date.now() - 40 * dia).toISOString() },
+  ];
+}
 
 const wait = (ms = MOCK_LATENCY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -296,6 +346,10 @@ function estadoInicial() {
     chamadasDeUsuario: {} as Record<string, number>,
     relacoesDeUsuario: {} as Record<string, RelacaoDoUsuario>,
     usuariosIndisponiveis: [] as string[],
+    /** `GET /users/me/blocked`, na ordem da lista; nunca encolhe, para o cursor continuar valendo. */
+    bloqueados: bloqueadosIniciais(),
+    /** Quem já foi desbloqueado: some do `GET` seguinte. */
+    desbloqueados: [] as string[],
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -1107,6 +1161,40 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const method = (init.method ?? 'GET').toUpperCase();
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
+
+  if (partes.join('/') === 'users/me/blocked' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const limit = Number(params.get('limit') ?? 20);
+    // Cursor = último `user_id` da página anterior, e não um offset: desbloquear
+    // alguém já carregado não pode empurrar a página seguinte e pular pessoas.
+    const cursor = params.get('cursor');
+    const depoisDe = cursor ? db.bloqueados.findIndex((pessoa) => pessoa.user_id === cursor) : -1;
+    const ativos = (pessoas: typeof db.bloqueados) =>
+      pessoas.filter((pessoa) => !db.desbloqueados.includes(pessoa.user_id));
+    if (!Number.isInteger(limit) || limit < 1 || (cursor && depoisDe === -1)) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+    if (cenarioBloqueados === 'error' || (cenarioBloqueados === 'error-page' && cursor)) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    const restantes = ativos(db.bloqueados.slice(depoisDe + 1));
+    const pagina = restantes.slice(0, limit);
+    const temMais = restantes.length > limit;
+    return {
+      items: pagina,
+      next_cursor: temMais ? pagina[pagina.length - 1].user_id : null,
+    } as T;
+  }
+
+  if (partes[0] === 'users' && partes[2] === 'block' && partes.length === 3 && method === 'DELETE') {
+    const userId = partes[1] ?? '';
+    if (userId === 'unblock-boom') throw new MockApiError(500, 'Internal server error');
+    const estavaBloqueado =
+      db.bloqueados.some((pessoa) => pessoa.user_id === userId) && !db.desbloqueados.includes(userId);
+    db.desbloqueados.push(userId);
+    if (userId === 'unblock-gone' || !estavaBloqueado) throw new MockApiError(404, 'User not found');
+    return undefined as T;
+  }
 
   const respostaDePerfil = resolverPerfil(partes, method, init);
   // Por cima da resposta do PR #62 (TID072), que vem zerada: os contadores

@@ -8,4 +8,5 @@ export const noNavbarScreens: string[] = [
   'ManageEvent',
   'EventPublished',
   'EditProfile',
+  'BlockedUsers',
 ];

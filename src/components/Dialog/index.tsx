@@ -63,6 +63,15 @@ const VARIANTS = {
     confirmLabel: 'Descartar',
     destructive: true,
   },
+  // "Usuários bloqueados - desbloquear (confirmação)", Variant=Confirm. O título
+  // leva o nome de quem é desbloqueado e vem por `title`.
+  Unblock: {
+    title: 'Desbloquear usuário?',
+    description:
+      'Essa pessoa poderá ver seu perfil e encontrar você na busca de novo. A conexão que vocês tinham não volta.',
+    confirmLabel: 'Desbloquear',
+    destructive: false,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({
