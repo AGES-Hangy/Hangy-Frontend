@@ -1,6 +1,6 @@
 // Hangy — Design System · seção "Icons (Lucide)" da página Components do Figma.
 //
-// Contrato: a lista abaixo é fechada e espelha exatamente os 39 símbolos
+// Contrato: a lista abaixo é fechada e espelha exatamente os 40 símbolos
 // `Icon/<nome-lucide>` do Figma. Não adicione um ícone aqui sem alinhar com
 // design — a lista do Figma é a fonte da verdade.
 //
@@ -9,6 +9,7 @@
 
 import {
   ArrowLeft,
+  Ban,
   Bell,
   Calendar,
   CalendarX,
@@ -51,6 +52,8 @@ import {
 
 export const icons = {
   'arrow-left': ArrowLeft,
+  /** `Icon/ban` do estado vazio de "Usuários bloqueados" (Sprint 3 Pages, task 285). */
+  ban: Ban,
   bell: Bell,
   calendar: Calendar,
   'calendar-x': CalendarX,
