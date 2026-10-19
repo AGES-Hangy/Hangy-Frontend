@@ -13,12 +13,6 @@ export interface Event {
   /** Sem valor, o card oculta o selo em vez de assumir uma privacidade. */
   privacy?: EventPrivacy;
   distance?: string;
-  /**
-   * Local aproximado (evento privado para quem não foi aprovado). Em
-   * `MapPreview`, `location` vira a linha da região e a data aparece no lugar
-   * do selo de privacidade — o cadeado já está no pin.
-   */
-  isLocationApproximate?: boolean;
   requesterName?: string;
   /** Tags do evento — chips no rodapé de `Featured` e `Mini`. */
   tags?: string[];

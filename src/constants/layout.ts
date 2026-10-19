@@ -79,7 +79,13 @@ export const layout = {
     compactImageSize: 72,
     overlayZIndex: 1,
     flexShrink: 1,
-    mapPreviewWidth: 280,
+    /**
+     * Folga à direita do `MapPreview` para o botão de ação que a aba Ao Vivo
+     * sobrepõe ao card: IconButton SM (36) + `right` de 12 + 8 de respiro.
+     */
+    mapPreviewActionInset: 56,
+    /** Ícone de privacidade sobre a capa do `MapPreview` — mesmo círculo do `MapPin/LockBadge`. */
+    mapPrivacyIconSize: 20,
     mapPreviewHeight: 96,
     mapImageSize: 80,
     miniWidth: 172,

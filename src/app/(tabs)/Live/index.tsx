@@ -147,33 +147,20 @@ function formatApproximateDistance(meters: number) {
 }
 
 function toPreviewEvent(event: NearbyEventItem, userCoordinate: Coordinate | null): Event {
-  if (isLocationApproximate(event)) {
-    return {
-      id: event.event_id,
-      title: event.title,
-      date: event.event_date,
-      location: approximateLocationLabel(event.location_name),
-      imageUrl: event.cover_photo_url ?? '',
-      privacy: event.privacy,
-      isLocationApproximate: true,
-      distance: userCoordinate
-        ? formatApproximateDistance(distanceInMeters(userCoordinate, event.location))
-        : undefined,
-    };
-  }
+  const isApproximate = isLocationApproximate(event);
+  // `distance_m` é até o centro da busca, que muda ao arrastar o mapa — não
+  // serve como distância "de você". Sem a posição do usuário, o card omite a distância.
+  const meters = userCoordinate ? distanceInMeters(userCoordinate, event.location) : null;
 
   return {
     id: event.event_id,
     title: event.title,
     date: event.event_date,
-    location: event.location_name,
+    location: isApproximate ? approximateLocationLabel(event.location_name) : event.location_name,
     imageUrl: event.cover_photo_url ?? '',
     privacy: event.privacy,
-    // `distance_m` é até o centro da busca, que muda ao arrastar o mapa — não
-    // serve como distância "de você". Sem a posição do usuário, o card omite a linha.
-    distance: userCoordinate
-      ? formatDistance(distanceInMeters(userCoordinate, event.location))
-      : undefined,
+    distance:
+      meters == null ? undefined : isApproximate ? formatApproximateDistance(meters) : formatDistance(meters),
   };
 }
 
@@ -705,6 +692,8 @@ const styles = StyleSheet.create({
   // O card do Design System é plano; a sombra fica no wrapper porque aqui ele
   // flutua sobre o mapa.
   previewCard: {
+    // O overlay centraliza os filhos; o preview ocupa a largura toda (Figma).
+    alignSelf: 'stretch',
     borderRadius: radius.md,
     backgroundColor: colors.surface.card,
     ...elevation[2],
