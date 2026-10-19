@@ -30,7 +30,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "O Hangy usa sua localização para preencher o endereço do seu comércio no cadastro."
+          "locationWhenInUsePermission": "O Hangy usa sua localização para mostrar eventos perto de você no mapa e para preencher o endereço do seu comércio no cadastro."
         }
       ],
       [

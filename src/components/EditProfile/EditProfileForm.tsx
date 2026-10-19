@@ -17,6 +17,7 @@ import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { InterestsSection } from '@/components/EditProfile/InterestsSection';
 import { NotificationsSection } from '@/components/EditProfile/NotificationsSection';
+import { PermissionsSection } from '@/components/EditProfile/PermissionsSection';
 import {
   BIO_MAX_LENGTH,
   MINIMUM_AREAS,
@@ -42,6 +43,7 @@ import { useBrazilianCities, useBrazilianStates } from '@/hooks/useBrazilLocatio
 import type { CurrentUser } from '@/hooks/useCurrentUser';
 import { useDeleteAccount } from '@/hooks/useDeleteAccount';
 import { invalidateFeed } from '@/hooks/useFeed';
+import { useLogout } from '@/hooks/useLogout';
 import type { TagNode } from '@/hooks/useTags';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { useUpdateProfile } from '@/hooks/useUpdateProfile';
@@ -126,6 +128,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
   const { saveTags, isLoading: isSavingTags } = useUserTags();
   const { deleteAccount, isLoading: isDeleting } = useDeleteAccount();
   const { unregisterDevice } = useUnregisterDevice();
+  const { logout, isLoading: isLoggingOut } = useLogout();
 
   const { states } = useBrazilianStates();
   const { cities } = useBrazilianCities(!isBusiness && form.stateUf ? form.stateUf : null);
@@ -148,7 +151,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
   const isDirty = isProfileChanged || isTagsChanged;
   const isSaving = isUpdating || isSavingTags;
-  const isBlocked = isSaving || isDeleting;
+  const isBlocked = isSaving || isDeleting || isLoggingOut;
   const canSave = isDirty && Object.keys(validation).length === 0 && selectionError === null && !isBlocked;
 
   function update(changes: Partial<EditProfileFormState>, ...fields: EditProfileField[]) {
@@ -518,6 +521,18 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
           <NotificationsSection />
 
+          <PermissionsSection />
+
+          <Button
+            label="Sair da conta"
+            variant="Secondary"
+            size="LG"
+            onPress={() => void logout()}
+            isLoading={isLoggingOut}
+            disabled={isSaving || isDeleting}
+            style={styles.logout}
+          />
+
           <Button
             label="Excluir conta"
             variant="DangerText"
@@ -613,6 +628,9 @@ const styles = StyleSheet.create({
     ...typography.bodyM,
     flex: 1,
     color: colors.text.primary,
+  },
+    logout: {
+    alignSelf: 'stretch',
   },
   deleteAccount: {
     alignSelf: 'stretch',
