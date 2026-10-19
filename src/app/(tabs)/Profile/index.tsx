@@ -210,6 +210,9 @@ export default function Profile() {
     }
   }, [addToast, isOffline, reloadFailure, retryFailed]);
 
+  // O "Sair da conta" do dia a dia fica no Editar perfil (frame 2221:28020).
+  // Aqui ele só aparece quando o perfil não carrega: sem o perfil, não há como
+  // chegar ao Editar perfil.
   const logoutButton = (
     <Button
       label="Sair da conta"
@@ -248,7 +251,14 @@ export default function Profile() {
             photoUrl={profile.photo_url}
             avatarVariant="User"
             stats={[
-              { value: profile.connections_count, label: profile.connections_count === 1 ? 'Conexão' : 'Conexões' },
+              {
+                value: profile.connections_count,
+                label: profile.connections_count === 1 ? 'Conexão' : 'Conexões',
+                onPress: () => router.push('/Connections'),
+                accessibilityLabel: `${profile.connections_count} ${
+                  profile.connections_count === 1 ? 'Conexão' : 'Conexões'
+                }, ver conexões`,
+              },
               { value: eventsCount, label: eventsCount === 1 ? 'Evento' : 'Eventos' },
               { value: counts.photos, label: counts.photos === 1 ? 'Foto' : 'Fotos' },
             ]}
@@ -306,8 +316,6 @@ export default function Profile() {
             />
           )}
 
-          {/* No Figma, "Sair da conta" fica no Editar perfil; aqui é o único logout do app por enquanto. */}
-          <View style={styles.logoutRow}>{logoutButton}</View>
         </ScrollView>
         {isOffline && <OfflineBanner />}
       </View>
@@ -456,8 +464,6 @@ function BusinessOwnProfile({
           loadMoreButtonRef={loadMoreButtonRef}
         />
 
-        {/* No Figma, "Sair da conta" fica no Editar perfil; aqui é o único logout do app por enquanto. */}
-        <View style={styles.logoutRow}>{logoutButton}</View>
       </ScrollView>
       {isOffline && <OfflineBanner />}
     </View>
