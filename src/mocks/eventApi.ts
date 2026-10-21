@@ -63,9 +63,11 @@ import type { ApiUploadOptions, UploadFile } from '@/utils/http';
  *
  * Ex.: `npx cross-env EXPO_PUBLIC_MOCK_UPLOAD=503,ok npm run start:stub`
  * (PowerShell: `$env:EXPO_PUBLIC_MOCK_UPLOAD='503,ok'; npm run start:stub`).
- * Para trocar o valor, reinicie o Metro. A expectativa é não precisar de
- * `--clear`: em dev, o `babel-preset-expo` não grava o valor no módulo
- * transformado, só uma referência a `expo/virtual/env`. Falta confirmar no app.
+ * Para trocar o valor, reinicie o `start:stub`; `--clear` não é preciso
+ * (confirmado no web em 21/10): em dev, o `babel-preset-expo` não grava o
+ * valor no módulo transformado, só uma referência a `expo/virtual/env`. Na
+ * web, abra uma aba nova pelo `w` e espere o "Web Bundled": F5 numa aba
+ * aberta antes de reiniciar continua com o valor antigo.
  *
  * A URL do bucket devolvida aqui não aponta para imagem nenhuma: depois de
  * salvar, o detalhe mostra a capa quebrada.
