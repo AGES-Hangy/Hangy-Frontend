@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 
 import { API_BASE_URL } from '@/constants/api';
+import { INVALID_COVER_PHOTO_URL } from '@/utils/apiErrors';
 import { getToken, removeToken } from '@/utils/auth';
 
 type EventId = string;
@@ -29,6 +30,12 @@ type PublishEventResponse = {
   privacy: string;
   event_date: string;
 };
+
+/** `invalid-cover` sai sem `publishError`: a tela mostra o erro no campo da capa. */
+type PublishEventResult =
+  | { kind: 'published'; event: PublishEventResponse }
+  | { kind: 'invalid-cover' }
+  | { kind: 'failed' };
 
 type UpdatePrivacyResponse = {
   event_id: string;
@@ -79,8 +86,8 @@ export function useCreateEventStep2() {
   const [inviteLinkError, setInviteLinkError] = useState<string | null>(null);
   const publishingRef = useRef(false);
 
-  async function publishEvent(body: PublishEventBody): Promise<PublishEventResponse | null> {
-    if (publishingRef.current) return null;
+  async function publishEvent(body: PublishEventBody): Promise<PublishEventResult> {
+    if (publishingRef.current) return { kind: 'failed' };
     publishingRef.current = true;
     setIsPublishing(true);
     setPublishError(null);
@@ -93,24 +100,25 @@ export function useCreateEventStep2() {
 
       if (response.status === 400) {
         const json = (await response.json()) as { detail?: string };
+        if (json.detail === INVALID_COVER_PHOTO_URL) return { kind: 'invalid-cover' };
         setPublishError(
           json.detail === 'Event date must be in the future'
             ? 'Essa data já passou. Escolha o dia de hoje ou uma data futura.'
             : json.detail || 'Não foi possível criar o evento',
         );
-        return null;
+        return { kind: 'failed' };
       }
 
       if (!response.ok) {
         setPublishError('Não foi possível criar o evento');
-        return null;
+        return { kind: 'failed' };
       }
 
-      return (await response.json()) as PublishEventResponse;
+      return { kind: 'published', event: (await response.json()) as PublishEventResponse };
     } catch (error) {
-      if (error instanceof Error && error.message === '401') return null;
+      if (error instanceof Error && error.message === '401') return { kind: 'failed' };
       setPublishError('Não foi possível criar o evento');
-      return null;
+      return { kind: 'failed' };
     } finally {
       setIsPublishing(false);
       publishingRef.current = false;

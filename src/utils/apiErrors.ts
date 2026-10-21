@@ -170,6 +170,12 @@ export function describeActionError(error: unknown): ActionError {
   return GENERIC_ACTION_ERROR;
 }
 
+/**
+ * `detail` do 400 de `POST /events` e `PATCH /events/{id}` quando
+ * `cover_photo_url` não é do bucket (task 276).
+ */
+export const INVALID_COVER_PHOTO_URL = 'Invalid cover photo URL';
+
 /** Falha no envio de um arquivo. O texto fica com quem chama. */
 export type UploadErrorKind = 'invalid-file' | 'connection' | 'failed';
 
