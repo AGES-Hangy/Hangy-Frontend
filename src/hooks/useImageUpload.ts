@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
@@ -140,11 +140,14 @@ function pickFileWeb(): Promise<PickedImage | null> {
  * ela quando o novo falha ou é cancelado.
  *
  * As telas não desmontam ao sair, então quem chama precisa de `cancelUpload`
- * no blur e de `reset` ao descartar o formulário. `options` deve ser uma
- * constante de módulo.
+ * no blur e de `reset` ao descartar o formulário. As funções devolvidas são
+ * estáveis entre renders, para poderem entrar em dependências de efeitos; por
+ * isso `options` é lida no momento da chamada, não capturada.
  */
 export function useImageUpload(options: ImageUploadOptions) {
-  const { endpoint, urlField, aspect, messages } = options;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   /** De 0 a 100; `null` quando a plataforma não informa o total. */
@@ -157,22 +160,22 @@ export function useImageUpload(options: ImageUploadOptions) {
   const currentUriRef = useRef<string | null>(null);
 
   /** Só revoga o que este hook criou: URIs do nativo e URLs do servidor passam reto. */
-  function releaseUri(uri: string | null) {
+  const releaseUri = useCallback((uri: string | null) => {
     if (uri && objectUrlsRef.current.delete(uri)) URL.revokeObjectURL(uri);
-  }
+  }, []);
 
-  function releaseAll() {
+  const releaseAll = useCallback(() => {
     objectUrlsRef.current.forEach((uri) => URL.revokeObjectURL(uri));
     objectUrlsRef.current.clear();
     currentUriRef.current = null;
-  }
+  }, []);
 
   /** Invalida o envio em andamento; o `catch` dele vê que não é mais o atual. */
-  function abortAttempt() {
+  const abortAttempt = useCallback(() => {
     attemptRef.current += 1;
     controllerRef.current?.abort();
     controllerRef.current = null;
-  }
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -181,9 +184,10 @@ export function useImageUpload(options: ImageUploadOptions) {
       abortAttempt();
       releaseAll();
     };
-  }, []);
+  }, [abortAttempt, releaseAll]);
 
-  async function chooseImage(): Promise<PickedImage | null> {
+  const chooseImage = useCallback(async (): Promise<PickedImage | null> => {
+    const { aspect, messages } = optionsRef.current;
     setError(null);
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -202,9 +206,9 @@ export function useImageUpload(options: ImageUploadOptions) {
       return null;
     }
     return picked;
-  }
+  }, [releaseUri]);
 
-  function isAcceptable(picked: PickedImage): boolean {
+  const isAcceptable = useCallback((picked: PickedImage): boolean => {
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
     // Sem o tamanho confirmado, não dá pra garantir o limite de 5 MB — trata
     // como inválido em vez de deixar passar.
@@ -212,28 +216,28 @@ export function useImageUpload(options: ImageUploadOptions) {
     if (isAcceptedType && isWithinSizeLimit) return true;
 
     releaseUri(picked.uri);
-    setError(messages.invalidFile);
+    setError(optionsRef.current.messages.invalidFile);
     return false;
-  }
+  }, [releaseUri]);
 
   /** Só escolhe e valida, sem enviar. */
-  async function pickImage(): Promise<PickedImage | null> {
+  const pickImage = useCallback(async (): Promise<PickedImage | null> => {
     const picked = await chooseImage();
     if (!picked || !isAcceptable(picked)) return null;
     return picked;
-  }
+  }, [chooseImage, isAcceptable]);
 
-  function cancelUpload() {
+  const cancelUpload = useCallback(() => {
     abortAttempt();
     setIsUploading(false);
     setProgress(null);
-  }
+  }, [abortAttempt]);
 
   /**
    * Escolhe, valida e envia. Só devolve algo no 201; em qualquer outro caso
    * devolve `null` e a imagem anterior da tela continua valendo.
    */
-  async function pickAndUpload(): Promise<UploadedImage | null> {
+  const pickAndUpload = useCallback(async (): Promise<UploadedImage | null> => {
     const picked = await chooseImage();
     if (!picked) return null;
 
@@ -242,6 +246,7 @@ export function useImageUpload(options: ImageUploadOptions) {
     cancelUpload();
     if (!isAcceptable(picked)) return null;
 
+    const { endpoint, urlField, messages } = optionsRef.current;
     const controller = new AbortController();
     controllerRef.current = controller;
     const attempt = attemptRef.current;
@@ -287,24 +292,24 @@ export function useImageUpload(options: ImageUploadOptions) {
       else if (kind) setError(messages[kind]);
       return null;
     }
-  }
+  }, [chooseImage, cancelUpload, isAcceptable, releaseUri]);
 
-  function clearError() {
+  const clearError = useCallback(() => {
     setError(null);
-  }
+  }, []);
 
   /** A tela tirou a imagem do formulário: libera a prévia local. */
-  function clearImage() {
+  const clearImage = useCallback(() => {
     releaseUri(currentUriRef.current);
     currentUriRef.current = null;
-  }
+  }, [releaseUri]);
 
   /** Descarte do formulário: aborta o envio e libera todas as prévias. */
-  function reset() {
+  const reset = useCallback(() => {
     cancelUpload();
     releaseAll();
     setError(null);
-  }
+  }, [cancelUpload, releaseAll]);
 
   return {
     pickImage,
