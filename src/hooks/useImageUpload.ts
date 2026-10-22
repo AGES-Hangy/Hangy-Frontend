@@ -1,18 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+
+import { apiUpload, type ApiUploadHandle, type UploadProgressHandler } from '@/utils/http';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // 'image/jpg' não é um mimeType padrão, mas algumas câmeras/dispositivos
 // reportam JPG assim em vez do correto 'image/jpeg' — aceitamos os dois.
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
 const INVALID_FILE_MESSAGE = 'Arquivo inválido — use JPG ou PNG\naté 5 MB, na proporção 16:9';
+const INVALID_PHOTO_MESSAGE = 'Arquivo inválido — use JPG ou PNG\naté 5 MB';
+/** Recorte da capa de evento — o padrão, para quem já usava o hook. */
+const COVER_ASPECT: [number, number] = [16, 9];
 
 export interface PickedImage {
   uri: string;
   mimeType: string;
   fileSize: number | null;
+}
+
+export interface ImageUploadOptions {
+  /**
+   * Recorte pedido no seletor nativo. Padrão `[16, 9]` (capa de evento);
+   * `null` deixa a foto sem recorte, como nas fotos do registro de um evento.
+   */
+  aspect?: [number, number] | null;
 }
 
 /**
@@ -28,11 +41,11 @@ function getFileSize(uri: string): number | null {
   }
 }
 
-async function pickFileNative(): Promise<PickedImage | null> {
+async function pickFileNative(aspect: [number, number] | null): Promise<PickedImage | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect: [16, 9],
+    allowsEditing: aspect !== null,
+    ...(aspect ? { aspect } : null),
     quality: 1,
   });
 
@@ -108,28 +121,54 @@ function pickFileWeb(): Promise<PickedImage | null> {
   });
 }
 
+/** Nome do arquivo na parte do multipart — a extensão acompanha o tipo. */
+function uploadFileName(mimeType: string) {
+  return mimeType === 'image/png' ? 'foto.png' : 'foto.jpg';
+}
+
 /**
- * Seleção e validação (tipo, tamanho, proporção) da capa de um
- * evento. A proporção 16:9 é garantida pedindo o recorte já na tela do
- * seletor do sistema (`allowsEditing` + `aspect`) no nativo; na web isso não
- * existe, então quem chama recebe a imagem sem recorte lá.
+ * Seleção, validação (tipo, tamanho, proporção) e envio de uma imagem.
+ * A proporção é garantida pedindo o recorte já na tela do seletor do sistema
+ * (`allowsEditing` + `aspect`) no nativo; na web isso não existe, então quem
+ * chama recebe a imagem sem recorte lá.
  *
- * O backend ainda não oferece hospedagem de imagens. Esta URI serve apenas
- * para prévia local e nunca deve ser enviada como `cover_photo_url`.
+ * ```ts
+ * const { pickImage, uploadImage } = useImageUpload({ aspect: null });
+ * const picked = await pickImage();
+ * const { promise, cancel } = uploadImage(endpoints.experienceImages(id), picked, setProgress);
+ * ```
+ *
+ * A URI de `pickImage` é só prévia local e nunca deve ir num campo de URL
+ * (ex.: `cover_photo_url`): o arquivo sobe por `uploadImage`.
  */
-export function useImageUpload() {
+export function useImageUpload({ aspect = COVER_ASPECT }: ImageUploadOptions = {}) {
   const [error, setError] = useState<string | null>(null);
+  const invalidMessage = aspect ? INVALID_FILE_MESSAGE : INVALID_PHOTO_MESSAGE;
+  // Envios em voo, para não deixar um XHR rodando depois que a tela sai.
+  const activeUploads = useRef(new Set<() => void>());
+
+  useEffect(() => {
+    const uploads = activeUploads.current;
+    return () => {
+      uploads.forEach((cancel) => cancel());
+      uploads.clear();
+    };
+  }, []);
 
   async function pickImage(): Promise<PickedImage | null> {
     setError(null);
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setError('Permita o acesso às fotos para escolher uma capa');
+      setError(
+        aspect
+          ? 'Permita o acesso às fotos para escolher uma capa'
+          : 'Permita o acesso às fotos para escolher uma foto',
+      );
       return null;
     }
 
-    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative();
+    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative(aspect);
     if (!picked) return null;
 
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
@@ -138,12 +177,48 @@ export function useImageUpload() {
     const isWithinSizeLimit = picked.fileSize !== null && picked.fileSize <= MAX_FILE_SIZE_BYTES;
 
     if (!isAcceptedType || !isWithinSizeLimit) {
-      setError(INVALID_FILE_MESSAGE);
+      setError(invalidMessage);
       return null;
     }
 
     return picked;
   }
 
-  return { pickImage, error };
+  /**
+   * Envia o arquivo em `multipart/form-data`, no campo `file`, para `path`.
+   * `onProgress` recebe de 0 a 1; `cancel` aborta o envio.
+   */
+  function uploadImage<T>(
+    path: string,
+    image: PickedImage,
+    onProgress?: UploadProgressHandler,
+  ): ApiUploadHandle<T> {
+    let request: ApiUploadHandle<T> | null = null;
+    let wasCancelled = false;
+    const cancel = () => {
+      wasCancelled = true;
+      request?.cancel();
+    };
+    activeUploads.current.add(cancel);
+
+    const promise = (async () => {
+      const body = new FormData();
+      const name = uploadFileName(image.mimeType);
+      if (Platform.OS === 'web') {
+        // Na web a URI é um object URL: o Blob precisa ser buscado antes.
+        body.append('file', await (await fetch(image.uri)).blob(), name);
+      } else {
+        // No nativo o React Native monta a parte do arquivo a partir da URI.
+        body.append('file', { uri: image.uri, name, type: image.mimeType } as unknown as Blob);
+      }
+
+      request = apiUpload<T>(path, body, { onProgress });
+      if (wasCancelled) request.cancel();
+      return request.promise;
+    })().finally(() => activeUploads.current.delete(cancel));
+
+    return { promise, cancel };
+  }
+
+  return { pickImage, uploadImage, error };
 }
