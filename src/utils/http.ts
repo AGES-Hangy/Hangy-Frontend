@@ -136,3 +136,98 @@ export async function apiFetch<T>(
 
   return (await response.json()) as T;
 }
+
+/** Andamento de um envio, de 0 a 1. */
+export type UploadProgressHandler = (fraction: number) => void;
+
+export interface ApiUploadHandle<T> {
+  promise: Promise<T>;
+  /** Aborta o envio em voo; a `promise` rejeita com `ApiError` de rede. */
+  cancel: () => void;
+}
+
+/** Lê o JSON de um `XMLHttpRequest` sem explodir quando o corpo não é JSON. */
+function parseXhrBody(xhr: XMLHttpRequest): unknown {
+  try {
+    return xhr.responseText ? JSON.parse(xhr.responseText) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Envio `multipart/form-data` com progresso. Existe ao lado do `apiFetch`
+ * porque `fetch` não informa o andamento do upload — aqui é
+ * `XMLHttpRequest` com `xhr.upload.onprogress`.
+ *
+ * Mesmo contrato do `apiFetch`: token, timeout, 401 global e `ApiError`.
+ * O `Content-Type` nunca é definido à mão: quem monta o boundary do
+ * multipart é a própria plataforma a partir do `FormData`.
+ */
+export function apiUpload<T>(
+  path: string,
+  body: FormData,
+  { method = 'POST', onProgress }: { method?: string; onProgress?: UploadProgressHandler } = {},
+): ApiUploadHandle<T> {
+  if (USE_API_MOCKS) {
+    return { promise: resolveMock<T>(path, { method, body }), cancel: () => {} };
+  }
+
+  const xhr = new XMLHttpRequest();
+  let wasCancelled = false;
+
+  const promise = new Promise<T>((resolve, reject) => {
+    void (async () => {
+      const token = await getToken();
+      if (wasCancelled) {
+        reject(new ApiError('network', null, null));
+        return;
+      }
+
+      xhr.open(method, `${API_BASE_URL}${path}`);
+      xhr.timeout = API_TIMEOUT_MS;
+      xhr.setRequestHeader('Accept', 'application/json');
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      xhr.upload.onprogress = (progress) => {
+        if (progress.lengthComputable && progress.total > 0) {
+          onProgress?.(progress.loaded / progress.total);
+        }
+      };
+
+      xhr.onload = async () => {
+        const responseBody = parseXhrBody(xhr);
+        const detail =
+          typeof (responseBody as { detail?: unknown } | null)?.detail === 'string'
+            ? ((responseBody as { detail: string }).detail)
+            : null;
+
+        if (xhr.status === 401) {
+          await handleUnauthorized();
+          reject(new ApiError('http', 401, detail, responseBody));
+          return;
+        }
+
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new ApiError('http', xhr.status, detail, responseBody));
+          return;
+        }
+
+        resolve(responseBody as T);
+      };
+      xhr.onerror = () => reject(new ApiError('network', null, null));
+      xhr.onabort = () => reject(new ApiError('network', null, null));
+      xhr.ontimeout = () => reject(new ApiError('timeout', null, null));
+
+      xhr.send(body);
+    })();
+  });
+
+  return {
+    promise,
+    cancel: () => {
+      wasCancelled = true;
+      xhr.abort();
+    },
+  };
+}
