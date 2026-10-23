@@ -12,6 +12,8 @@ const EVENT_COVER_UPLOAD: ImageUploadOptions = {
     permissionDenied: 'Permita o acesso às fotos para escolher uma capa',
     failed: 'Não foi possível enviar a capa. Tente de novo.',
     connection: 'Não foi possível enviar a capa. Verifique sua conexão.',
+    uploading: 'Enviando a capa.',
+    uploaded: 'Capa enviada.',
   },
 };
 

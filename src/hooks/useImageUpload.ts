@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { classifyUploadError } from '@/utils/apiErrors';
+import { announce } from '@/utils/accessibility';
 import { apiUpload } from '@/utils/http';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -43,6 +44,9 @@ export interface ImageUploadOptions {
     failed: string;
     /** Sem rede ou tempo esgotado. */
     connection: string;
+    /** Lidos pelo leitor de tela no começo e no fim do envio, nunca a porcentagem. */
+    uploading: string;
+    uploaded: string;
   };
 }
 
@@ -223,6 +227,12 @@ export function useImageUpload(options: ImageUploadOptions) {
     pickRef.current = null;
   }, []);
 
+  /** O FileUpload não é região viva: todo erro mostrado também é anunciado. */
+  const showError = useCallback((message: string) => {
+    setError(message);
+    announce(message, 'assertive');
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -255,7 +265,7 @@ export function useImageUpload(options: ImageUploadOptions) {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!isCurrentPick()) return null;
       if (!permission.granted) {
-        setError(messages.permissionDenied);
+        showError(messages.permissionDenied);
         return null;
       }
 
@@ -277,7 +287,7 @@ export function useImageUpload(options: ImageUploadOptions) {
     } finally {
       if (pickRef.current === pick) pickRef.current = null;
     }
-  }, [abortPick, releaseUri]);
+  }, [abortPick, releaseUri, showError]);
 
   const isAcceptable = useCallback((picked: PickedImage): boolean => {
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
@@ -287,9 +297,9 @@ export function useImageUpload(options: ImageUploadOptions) {
     if (isAcceptedType && isWithinSizeLimit) return true;
 
     releaseUri(picked.uri);
-    setError(optionsRef.current.messages.invalidFile);
+    showError(optionsRef.current.messages.invalidFile);
     return false;
-  }, [releaseUri]);
+  }, [releaseUri, showError]);
 
   /** Só escolhe e valida, sem enviar. */
   const pickImage = useCallback(async (): Promise<PickedImage | null> => {
@@ -328,6 +338,7 @@ export function useImageUpload(options: ImageUploadOptions) {
     setError(null);
     setProgress(0);
     setIsUploading(true);
+    announce(messages.uploading);
 
     try {
       const response = await apiUpload<Record<string, unknown> | null>(endpoint, picked, {
@@ -351,6 +362,7 @@ export function useImageUpload(options: ImageUploadOptions) {
       controllerRef.current = null;
       setIsUploading(false);
       setProgress(null);
+      announce(messages.uploaded);
       return { uri: picked.uri, url };
     } catch (caught) {
       releaseUri(picked.uri);
@@ -361,11 +373,11 @@ export function useImageUpload(options: ImageUploadOptions) {
       setProgress(null);
 
       const kind = classifyUploadError(caught);
-      if (kind === 'invalid-file') setError(messages.invalidFile);
-      else if (kind) setError(messages[kind]);
+      if (kind === 'invalid-file') showError(messages.invalidFile);
+      else if (kind) showError(messages[kind]);
       return null;
     }
-  }, [chooseImage, cancelUpload, isAcceptable, releaseUri]);
+  }, [chooseImage, cancelUpload, isAcceptable, releaseUri, showError]);
 
   const clearError = useCallback(() => {
     setError(null);

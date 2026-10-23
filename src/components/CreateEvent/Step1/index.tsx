@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Platform, type ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, type ScrollView, StyleSheet, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
 import { spacing } from '@/constants/layout';
 import { useTags } from '@/hooks/useTags';
+import { moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
 
 import { describeMissing, ErrorSummary } from '@/components/CreateEvent/ErrorSummary';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
@@ -112,6 +113,21 @@ export function Step1({
     scrollToField(node);
   }, [submitCount]);
 
+  const coverState = coverError
+    ? 'error'
+    : coverProgress !== undefined ? 'uploading' : data.coverUri ? 'filled' : 'empty';
+  const previousCoverStateRef = useRef(coverState);
+
+  // No web, o botão acionado (adicionar, cancelar, remover) some quando o
+  // FileUpload troca de estado, e o foco do teclado cai no `body`. Só na troca,
+  // e não ao montar, para não tirar o foco de quem acabou de abrir a etapa.
+  useEffect(() => {
+    if (previousCoverStateRef.current === coverState) return;
+    previousCoverStateRef.current = coverState;
+    const node = coverRef.current;
+    if (node) restoreLostFocus(node);
+  }, [coverState]);
+
   // No `onLayout`, e não num efeito: o 400 da capa chega na etapa 2, então o
   // Step1 monta no mesmo render em que `focusCover` liga, e a posição do campo
   // só é confiável depois do primeiro layout.
@@ -120,9 +136,7 @@ export function Step1({
     if (!focusCover || !node) return;
 
     scrollToField(node);
-    // O react-native-web não implementa `sendAccessibilityEvent`; chamá-lo no
-    // web derruba a tela.
-    if (Platform.OS !== 'web') AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
+    moveAccessibilityFocus(node);
     onCoverFocused();
   };
 

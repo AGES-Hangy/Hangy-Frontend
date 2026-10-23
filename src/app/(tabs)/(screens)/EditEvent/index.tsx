@@ -26,6 +26,7 @@ import { useEvent } from '@/hooks/useEvent';
 import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import { announce, moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
 
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import { MAX_TAGS } from '@/components/CreateEvent/types';
@@ -218,10 +219,26 @@ export default function EditEvent() {
     node.measureLayout(contentNode, (_x, y) => {
       scroll.scrollTo({ y: Math.max(y - SCROLL_MARGIN, 0), animated: true });
     });
-    // O react-native-web não implementa `sendAccessibilityEvent`; chamá-lo no
-    // web derruba a tela.
-    if (Platform.OS !== 'web') AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
+    moveAccessibilityFocus(node);
   }, [coverFocusRequest]);
+
+  // `null` até o formulário carregar: a primeira capa não conta como troca.
+  const coverState = !form
+    ? null
+    : (coverUploadError ?? coverRejected)
+      ? 'error'
+      : isCoverUploading ? 'uploading' : form.coverUri ? 'filled' : 'empty';
+  const previousCoverStateRef = useRef(coverState);
+
+  // No web, o botão acionado (adicionar, cancelar, remover) some quando o
+  // FileUpload troca de estado, e o foco do teclado cai no `body`.
+  useEffect(() => {
+    const previous = previousCoverStateRef.current;
+    previousCoverStateRef.current = coverState;
+    if (previous === null || previous === coverState) return;
+    const node = coverRef.current;
+    if (node) restoreLostFocus(node);
+  }, [coverState]);
 
   if (isLoadingEvent || !form) return <EditEventSkeleton />;
 
@@ -372,7 +389,7 @@ export default function EditEvent() {
       setCoverFocusRequest((count) => count + 1);
       // Sempre, e não só o foco: se o foco não mudar de lugar, este anúncio é
       // o único jeito de o leitor de tela saber da recusa.
-      AccessibilityInfo.announceForAccessibility(INVALID_COVER_MESSAGE);
+      announce(INVALID_COVER_MESSAGE);
       return;
     }
 

@@ -18,6 +18,7 @@ import { spacing } from '@/constants/layout';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
 import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
+import { announce } from '@/utils/accessibility';
 
 import { Step1 } from '@/components/CreateEvent/Step1';
 import { Step2, type Step2Handle } from '@/components/CreateEvent/Step2';
@@ -180,7 +181,7 @@ export default function CreateEvent() {
       setFocusCover(true);
       // Sempre, e não só o foco: se o foco não mudar de lugar, este anúncio é
       // o único jeito de o leitor de tela saber da recusa.
-      AccessibilityInfo.announceForAccessibility(INVALID_COVER_MESSAGE);
+      announce(INVALID_COVER_MESSAGE);
       return;
     }
     if (result.kind === 'failed') return;
