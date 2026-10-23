@@ -87,7 +87,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `GET /users/{id}/events` devolve as abas de quem visita, `history` (encerrados)
  * e `created` (criados e não encerrados), com `interests` e `confirmed` em
  * `null`. Com `tab` e `cursor` vem só a continuação daquela aba. Com o id da
- * conta logada (`me`), vêm as quatro abas do dono, com privados (veja abaixo).
+ * conta logada (`conta-mock`), vêm as quatro abas do dono, com privados (veja abaixo).
  *
  * Conectar (`POST /connections`), responder (`PATCH /connections/{id}`),
  * cancelar ou desfazer (`DELETE /connections/{id}`), seguir (`POST`/`DELETE
@@ -140,7 +140,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `connected-legacy` | Conectada, sem 281           | Nenhuma                                            |
  * | `business-legacy`  | Estabelecimento, sem 281     | Seguir: `204`, +1                                  |
  *
- * Perfil próprio (`GET /users/me/photos`, `GET /users/me/events` e os
+ * Perfil próprio (`GET /users/me/photos`, `GET /users/conta-mock/events` e os
  * contadores de `GET /users/me/profile`): o cenário vem de
  * `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o valor
  * exige reiniciar o Metro (sem precisar de `-c`).
@@ -156,23 +156,22 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `own-events-flaky` | Como em `full`                                       | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
  * | `photos-grow`      | 45 na 1ª carga; 46 (uma nova no topo) a partir da 2ª | Como em `full`                                       | 45 fotos na 1ª chamada; 46 a partir da 2ª                                              |
  *
- * Com `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`, o perfil comercial lê o
- * `GET /users/me` (o id da conta é `me`), que ganha os campos do perfil público:
- * 1204 seguidores (0 em `empty`). As abas do dono são `history` e `created`, como
- * as de quem visita. `profile-error` e `profile-flaky` contam a partir da 2ª
- * chamada do `GET /users/me` (supõe que a 1ª é a do `useCurrentUser` do Perfil):
- * `500` sempre, ou depois da 2ª. Editar perfil só em `full` (o `useCurrentUser`
- * dele também chama o `GET /users/me` e entra na conta).
+ * O id da conta é `conta-mock`, e não `me`, para o perfil próprio
+ * (`GET /users/conta-mock`) e o usuário logado (`GET /users/me`, do
+ * `useCurrentUser`) serem rotas diferentes. Cada cenário conta só as chamadas
+ * da própria rota; o `GET /users/me` do `useCurrentUser` (de qualquer tela,
+ * inclusive o EventDetail) não entra mais na contagem.
  *
- * Os contadores não sabem quem chamou: `GET /users/me` e `GET /users/{id
- * próprio}` são o mesmo caminho, e o `/UserProfile` também chama o
- * `GET /users/me` (`useCurrentUser`); com o id próprio, chama ainda o
- * `GET /users/me/events` antes de redirecionar para o Perfil. Com
- * `profile-error`, `profile-flaky` ou `own-events-flaky`, recarregar a página
- * (zera os contadores) e abrir o Perfil antes de qualquer `/UserProfile`. O
- * `/UserProfile?id=me` não combina com esses três cenários: ele gasta a 1ª carga
- * dos eventos do dono e, em conta de estabelecimento, as duas primeiras chamadas
- * do `GET /users/me`.
+ * Com `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`, o perfil comercial lê o
+ * `GET /users/conta-mock`: 1204 seguidores (0 em `empty`). As abas do dono são
+ * `history` e `created`, como as de quem visita. Nessa rota, `profile-error`
+ * responde `500` sempre e `profile-flaky`, a partir da 2ª chamada. A leitura do
+ * Editar perfil (`GET /businesses/me`) não falha.
+ *
+ * O `/UserProfile?id=conta-mock` chama o `GET /users/conta-mock/events` antes de
+ * redirecionar para o Perfil, e em conta de estabelecimento também o
+ * `GET /users/conta-mock`: ele gasta a 1ª carga de `own-events-flaky` e a 1ª
+ * chamada de `profile-flaky`. Nesses cenários, abrir o Perfil antes.
  *
  * Usuários bloqueados (`GET /users/me/blocked` e `DELETE /users/{id}/block`):
  * o cenário vem de `EXPO_PUBLIC_MOCK_BLOCKED`, lida quando o Metro inicia.
@@ -1004,21 +1003,39 @@ function contadoresDoDono() {
 }
 
 /**
- * Campos do perfil público (`GET /users/{id}`) da conta de estabelecimento,
- * lidos do mesmo `perfil.estabelecimento` e das mesmas tags que o Editar perfil
- * grava, para a volta da edição mostrar o dado novo.
+ * Perfil público da conta (`GET /users/{id da conta}`), lido do mesmo `perfil`
+ * e das mesmas tags que o Editar perfil grava, para a volta da edição mostrar o
+ * dado novo.
  */
-function perfilPublicoDoEstabelecimento() {
-  return {
-    description: perfil.estabelecimento.description,
+function perfilPublicoDaConta(): UserProfile {
+  const comum = {
+    id: ID_DA_CONTA,
     photo_url: null,
     tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
-    connections_count: 0,
-    followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
     connection_status: null,
     connection_id: null,
     connection_direction: null,
     is_following: false,
+  };
+
+  if (MOCK_USER_TYPE === 'BUSINESS') {
+    return {
+      ...comum,
+      user_type: 'BUSINESS',
+      name: perfil.estabelecimento.business_name,
+      description: perfil.estabelecimento.description,
+      connections_count: 0,
+      followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
+    };
+  }
+
+  return {
+    ...comum,
+    user_type: 'PERSONAL',
+    name: perfil.pessoa.name,
+    description: perfil.pessoa.description,
+    connections_count: contadoresDoDono().connections_count,
+    followers_count: null,
   };
 }
 
@@ -1069,6 +1086,9 @@ async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
  */
 const MOCK_USER_TYPE = process.env.EXPO_PUBLIC_MOCK_USER_TYPE === 'BUSINESS' ? 'BUSINESS' : 'PERSONAL';
 
+/** Diferente de `me` para o `GET /users/{id}` próprio não cair no `GET /users/me`. */
+const ID_DA_CONTA = 'conta-mock';
+
 const ARVORE_DE_TAGS = [
   ['Esportes', ['Futebol', 'Vôlei', 'Corrida', 'Basquete', 'Ciclismo']],
   ['Gastronomia', ['Café', 'Brunch', 'Churrasco', 'Vinhos']],
@@ -1105,7 +1125,7 @@ const perfil = {
     city: 'Porto Alegre',
   },
   estabelecimento: {
-    user_id: 'me',
+    user_id: ID_DA_CONTA,
     business_name: 'Quiero Café',
     cnpj: '12345678000199',
     description: 'Cafeteria de especialidade na Cidade Baixa.',
@@ -1139,7 +1159,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
     const { pessoa, estabelecimento } = perfil;
     return {
       resposta: {
-        id: 'me',
+        id: ID_DA_CONTA,
         email: perfil.email,
         user_type: MOCK_USER_TYPE,
         name: MOCK_USER_TYPE === 'BUSINESS' ? estabelecimento.business_name : pessoa.name,
@@ -1190,7 +1210,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
       return {
         resposta: {
           profile: {
-            id: 'me',
+            id: ID_DA_CONTA,
             name: pessoa.name,
             description: pessoa.description,
             photo_url: null,
@@ -1214,7 +1234,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
       if (typeof body.city === 'string') pessoa.city = body.city;
       return {
         resposta: {
-          id: 'me',
+          id: ID_DA_CONTA,
           name: pessoa.name,
           description: pessoa.description,
           city: pessoa.city,
@@ -1312,23 +1332,21 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     const { connections_count, counts } = contadoresDoDono();
     return { profile: { ...resposta.profile, connections_count }, counts } as T;
   }
-  // Em conta de estabelecimento, o id do mock é `me`: o `GET /users/{id próprio}`
-  // do perfil comercial cai no `GET /users/me` do PR #62 (TID072), que ganha por
-  // cima os campos do perfil público. Os cenários de erro valem a partir da
-  // segunda chamada: supõem que a primeira é a do `useCurrentUser` do Perfil
-  // (ordem e limitações no comentário do topo).
-  if (respostaDePerfil && partes.join('/') === 'users/me' && method === 'GET' && MOCK_USER_TYPE === 'BUSINESS') {
-    const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
-    db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
-    if (cenarioPerfilProprio === 'profile-error' && chamadas > 1) {
-      throw new MockApiError(500, 'Internal server error');
-    }
-    if (cenarioPerfilProprio === 'profile-flaky' && chamadas > 2) {
-      throw new MockApiError(500, 'Internal server error');
-    }
-    return { ...(respostaDePerfil.resposta as Record<string, unknown>), ...perfilPublicoDoEstabelecimento() } as T;
-  }
   if (respostaDePerfil) return respostaDePerfil.resposta as T;
+
+  if (partes[0] === 'users' && partes[1] === ID_DA_CONTA && partes.length === 2 && method === 'GET') {
+    // A pessoa física lê os contadores pelo `GET /users/me/profile`, que já
+    // tem os cenários de erro; aqui eles valem só para o perfil comercial.
+    if (MOCK_USER_TYPE === 'BUSINESS') {
+      const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
+      db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
+      if (cenarioPerfilProprio === 'profile-error') throw new MockApiError(500, 'Internal server error');
+      if (cenarioPerfilProprio === 'profile-flaky' && chamadas > 1) {
+        throw new MockApiError(500, 'Internal server error');
+      }
+    }
+    return perfilPublicoDaConta() as T;
+  }
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
   // também ainda não subiu — o cadastro (task 056) precisa disto pra dar de
@@ -1450,10 +1468,8 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return { items, next_cursor: fim < todas.length ? String(fim) : null } as T;
   }
 
-  // `me` é o usuário logado, não um perfil visitado: fica fora destas regras,
-  // menos nas abas de eventos, em que é o dono.
-  const ehAbasDoDono = partes[1] === 'me' && partes[2] === 'events' && partes.length === 3;
-  if (partes[0] === 'users' && (partes[1] !== 'me' || ehAbasDoDono) && method === 'GET') {
+  // `/users/me/...` são as rotas da conta logada, não um perfil visitado.
+  if (partes[0] === 'users' && partes[1] !== 'me' && method === 'GET') {
     const userId = partes[1] ?? '';
 
     if (partes.length === 2) {
@@ -1462,7 +1478,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     if (partes.length === 3 && partes[2] === 'events') {
-      const ehDono = userId === 'me';
+      const ehDono = userId === ID_DA_CONTA;
       if (!ehDono) {
         await erroDoUsuario(userId, 'eventos');
         if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');
