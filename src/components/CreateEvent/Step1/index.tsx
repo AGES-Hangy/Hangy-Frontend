@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, type ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Platform, type ScrollView, StyleSheet, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
@@ -120,7 +120,9 @@ export function Step1({
     if (!focusCover || !node) return;
 
     scrollToField(node);
-    AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
+    // O react-native-web não implementa `sendAccessibilityEvent`; chamá-lo no
+    // web derruba a tela.
+    if (Platform.OS !== 'web') AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
     onCoverFocused();
   };
 
