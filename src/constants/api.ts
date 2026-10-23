@@ -64,6 +64,7 @@ export const endpoints = {
   },
   eventCancel: (eventId: string) => `/events/${eventId}/cancel`,
   eventShare: (eventId: string) => `/events/${eventId}/share`,
+  eventFavorite: (eventId: string) => `/events/${encodeURIComponent(eventId)}/favorite`,
   notifications: (options?: { limit?: number; cursor?: string | null; unreadOnly?: boolean }) => {
     const params = new URLSearchParams();
     if (options?.limit !== undefined) params.set('limit', String(options.limit));
