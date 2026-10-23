@@ -182,7 +182,8 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * lista. Ela começa com `samba-cidade-baixa` e `brique-redencao` (vazia em
  * `empty`); um favorito fora desses dois entra na aba com os dados do detalhe.
  * Conta de estabelecimento recebe `403`, e evento cancelado, `404`; o favorito
- * feito antes do cancelamento sai da aba.
+ * feito antes do cancelamento sai da aba. O evento encerrado (`finished`) aceita
+ * o favorito, mas não entra na aba.
  *
  * Nos cenários abaixo o detalhe carrega como o de `guest`, na visão de visitante:
  *
@@ -896,12 +897,18 @@ function itemDoDetalhe(eventId: string): UserEventItem {
 }
 
 /**
- * Na ordem do backend: data crescente, com desempate pelo id. Como lá, o
- * favorito de um evento cancelado ou indisponível continua guardado, mas sai da lista.
+ * Na ordem do backend: data crescente, com desempate pelo id. Como lá, a aba só
+ * lista publicados e não encerrados: o favorito de um evento cancelado, encerrado
+ * ou indisponível continua guardado, mas sai da lista.
  */
 function interessesDoDono(): UserEventItem[] {
   return db.favoritos
-    .filter((eventId) => !db.eventosCancelados.includes(eventId) && !db.eventosIndisponiveis.includes(eventId))
+    .filter(
+      (eventId) =>
+        eventId !== 'finished' &&
+        !db.eventosCancelados.includes(eventId) &&
+        !db.eventosIndisponiveis.includes(eventId),
+    )
     .map((eventId) => EVENTOS_DE_INTERESSE_DO_DONO.find((evento) => evento.event_id === eventId) ?? itemDoDetalhe(eventId))
     .sort((a, b) => Date.parse(a.event_date) - Date.parse(b.event_date) || a.event_id.localeCompare(b.event_id));
 }
