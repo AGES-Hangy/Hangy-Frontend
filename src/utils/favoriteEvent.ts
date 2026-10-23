@@ -88,3 +88,29 @@ export function favoriteErrorOutcome(error: FavoriteErrorInput | null, target: b
       : 'Não foi possível remover dos favoritos. Tente de novo.',
   };
 }
+
+/**
+ * Mensagem do toast com a tela inativa: a pessoa já está em outra tela e precisa saber de
+ * qual evento é a falha. `null` significa sem toast (`ignore` e `unavailable`).
+ */
+export function inactiveFavoriteMessage(
+  error: FavoriteErrorInput | null,
+  target: boolean,
+  eventTitle: string | undefined,
+): string | null {
+  const outcome = favoriteErrorOutcome(error, target);
+  if (outcome.kind === 'ignore' || outcome.kind === 'unavailable') return null;
+
+  const title = eventTitle?.trim();
+  if (!title) return outcome.message;
+
+  // Por code point, para não partir um emoji no corte.
+  const characters = Array.from(title);
+  const shown = characters.length > 40 ? `${characters.slice(0, 40).join('').trimEnd()}…` : title;
+  const failure = target
+    ? `Não foi possível favoritar "${shown}".`
+    : `Não foi possível remover "${shown}" dos favoritos.`;
+
+  if (error?.kind === 'network' || error?.kind === 'timeout') return `${outcome.message}. ${failure}`;
+  return `${failure} Tente de novo.`;
+}
