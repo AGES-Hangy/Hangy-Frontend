@@ -10,6 +10,13 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // reportam JPG assim em vez do correto 'image/jpeg' — aceitamos os dois.
 const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
 
+// Prazos para um toque novo substituir um seletor que ainda não deu resultado.
+// Com o diálogo aberto de fato nenhum toque chega à página, então eles só
+// contam depois que ele fecha: o primeiro, a partir do foco de volta na janela;
+// o segundo, para quando nem o foco volta (e no nativo), a partir da abertura.
+const PICKER_FOCUS_FALLBACK_MS = 300;
+const PICKER_NO_SIGNAL_FALLBACK_MS = 1000;
+
 export interface PickedImage {
   uri: string;
   mimeType: string;
@@ -78,6 +85,19 @@ async function pickFileNative(aspect?: [number, number]): Promise<PickedImage | 
   return { uri, mimeType, fileSize };
 }
 
+interface WebFilePicker {
+  result: Promise<PickedImage | null>;
+  /** Encerra o seletor: `result` resolve `null` e o que chegar depois é ignorado. */
+  abort: () => void;
+  focusReturnedAt: () => number | null;
+}
+
+interface PendingPick {
+  startedAt: number;
+  /** Só na web, e só depois da permissão. */
+  web: WebFilePicker | null;
+}
+
 /**
  * Só na web: o `<input>` interno do expo-image-picker lê o arquivo dentro do
  * próprio listener de `change` e, pra tipos que não são imagem/vídeo (ex.:
@@ -87,43 +107,62 @@ async function pickFileNative(aspect?: [number, number]): Promise<PickedImage | 
  * antes de qualquer try/catch nosso rodar. Em vez de tentar interceptar esse
  * evento, criamos nosso próprio `<input>` aqui e validamos tipo/tamanho no
  * nosso código, sem nunca chamar o `readFile` problemático da lib.
+ *
+ * O resultado vem só do `change` ou do `cancel`. O foco volta para a janela
+ * antes do `change`, ainda sem o arquivo em `input.files`, então ele não pode
+ * significar cancelamento: um prazo curto depois dele transformava escolhas em
+ * cancelamentos. Ele só informa que o diálogo fechou, para o hook liberar um
+ * toque novo nos navegadores que não disparam `cancel` no input.
  */
-function pickFileWeb(): Promise<PickedImage | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/jpeg,image/jpg,image/png';
-    input.style.display = 'none';
+function openFilePickerWeb(): WebFilePicker {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/jpg,image/png';
+  input.style.display = 'none';
 
-    let settled = false;
-    function settle(value: PickedImage | null) {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener('focus', handleFocus);
-      input.remove();
-      resolve(value);
-    }
-
-    function handleFocus() {
-      // O diálogo do sistema fecha e devolve o foco pra janela; se `change`
-      // não disparar logo em seguida, o usuário cancelou a seleção.
-      setTimeout(() => settle(null), 300);
-    }
-
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      if (!file) {
-        settle(null);
-        return;
-      }
-
-      settle({ uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size });
-    });
-
-    window.addEventListener('focus', handleFocus);
-    document.body.appendChild(input);
-    input.click();
+  let focusReturnedAt: number | null = null;
+  let settled = false;
+  let resolveResult!: (value: PickedImage | null) => void;
+  const result = new Promise<PickedImage | null>((resolve) => {
+    resolveResult = resolve;
   });
+
+  function settle(value: PickedImage | null) {
+    if (settled) return;
+    settled = true;
+    window.removeEventListener('focus', handleFocus);
+    input.remove();
+    resolveResult(value);
+  }
+
+  function handleFocus() {
+    focusReturnedAt = Date.now();
+  }
+
+  input.addEventListener('change', () => {
+    // Depois de `abort`, um object URL criado aqui não teria quem o revogasse.
+    if (settled) return;
+    const file = input.files?.[0];
+    if (!file) {
+      settle(null);
+      return;
+    }
+
+    settle({ uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size });
+  });
+  input.addEventListener('cancel', () => settle(null));
+
+  window.addEventListener('focus', handleFocus);
+  document.body.appendChild(input);
+  input.click();
+
+  return { result, abort: () => settle(null), focusReturnedAt: () => focusReturnedAt };
+}
+
+function pickSeemsClosed(pick: PendingPick): boolean {
+  const focusReturnedAt = pick.web?.focusReturnedAt() ?? null;
+  if (focusReturnedAt !== null) return Date.now() - focusReturnedAt >= PICKER_FOCUS_FALLBACK_MS;
+  return Date.now() - pick.startedAt >= PICKER_NO_SIGNAL_FALLBACK_MS;
 }
 
 /**
@@ -158,6 +197,7 @@ export function useImageUpload(options: ImageUploadOptions) {
   const controllerRef = useRef<AbortController | null>(null);
   const objectUrlsRef = useRef(new Set<string>());
   const currentUriRef = useRef<string | null>(null);
+  const pickRef = useRef<PendingPick | null>(null);
 
   /** Só revoga o que este hook criou: URIs do nativo e URLs do servidor passam reto. */
   const releaseUri = useCallback((uri: string | null) => {
@@ -177,36 +217,67 @@ export function useImageUpload(options: ImageUploadOptions) {
     controllerRef.current = null;
   }, []);
 
+  /** Desiste do seletor pendente; o que ele devolver depois é descartado. */
+  const abortPick = useCallback(() => {
+    pickRef.current?.web?.abort();
+    pickRef.current = null;
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      abortPick();
       abortAttempt();
       releaseAll();
     };
-  }, [abortAttempt, releaseAll]);
+  }, [abortPick, abortAttempt, releaseAll]);
 
+  /**
+   * Um seletor por vez: a chamada que chega enquanto ele parece aberto (toque
+   * duplo, ou o `change` ainda a caminho) é ignorada. Depois dos prazos, a
+   * chamada nova substitui o pendente, senão um navegador que não dispara
+   * `cancel` deixaria a área sem resposta.
+   */
   const chooseImage = useCallback(async (): Promise<PickedImage | null> => {
-    const { aspect, messages } = optionsRef.current;
-    setError(null);
+    const pending = pickRef.current;
+    if (pending && !pickSeemsClosed(pending)) return null;
+    abortPick();
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!mountedRef.current) return null;
-    if (!permission.granted) {
-      setError(messages.permissionDenied);
-      return null;
+    const pick: PendingPick = { startedAt: Date.now(), web: null };
+    pickRef.current = pick;
+    const isCurrentPick = () => mountedRef.current && pickRef.current === pick;
+
+    try {
+      const { aspect, messages } = optionsRef.current;
+      setError(null);
+
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!isCurrentPick()) return null;
+      if (!permission.granted) {
+        setError(messages.permissionDenied);
+        return null;
+      }
+
+      let picked: PickedImage | null;
+      if (Platform.OS === 'web') {
+        pick.web = openFilePickerWeb();
+        picked = await pick.web.result;
+        if (picked) objectUrlsRef.current.add(picked.uri);
+      } else {
+        picked = await pickFileNative(aspect);
+      }
+      if (!picked) return null;
+
+      if (!isCurrentPick()) {
+        releaseUri(picked.uri);
+        return null;
+      }
+      return picked;
+    } finally {
+      if (pickRef.current === pick) pickRef.current = null;
     }
-
-    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative(aspect);
-    if (!picked) return null;
-    if (Platform.OS === 'web') objectUrlsRef.current.add(picked.uri);
-
-    if (!mountedRef.current) {
-      releaseUri(picked.uri);
-      return null;
-    }
-    return picked;
-  }, [releaseUri]);
+  }, [abortPick, releaseUri]);
 
   const isAcceptable = useCallback((picked: PickedImage): boolean => {
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
@@ -227,11 +298,13 @@ export function useImageUpload(options: ImageUploadOptions) {
     return picked;
   }, [chooseImage, isAcceptable]);
 
+  /** Também desiste de um seletor pendente, que sem `cancel` pode nunca resolver. */
   const cancelUpload = useCallback(() => {
+    abortPick();
     abortAttempt();
     setIsUploading(false);
     setProgress(null);
-  }, [abortAttempt]);
+  }, [abortPick, abortAttempt]);
 
   /**
    * Escolhe, valida e envia. Só devolve algo no 201; em qualquer outro caso
