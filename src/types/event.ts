@@ -50,6 +50,7 @@ export interface EventViewer {
   participation_status: ParticipationStatus | null;
   can_see_participants: boolean;
   available_action: ViewerAction;
+  is_favorited: boolean;
 }
 
 export interface ParticipantsPreview {

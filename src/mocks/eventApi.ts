@@ -376,6 +376,7 @@ function detalhe(eventId: string): EventDetail {
           : ehPrivado
             ? 'REQUEST'
             : 'CONFIRM',
+      is_favorited: false,
     },
     participants_preview: localAproximado
       ? null
