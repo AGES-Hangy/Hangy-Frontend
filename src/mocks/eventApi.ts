@@ -48,6 +48,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | ----------- | ------------------------------------------------------- |
  * | qualquer    | Caminho feliz, na visão do organizador                   |
  * | `guest`     | Visitante comum num evento público (ação `CONFIRM`)      |
+ * | `favorite-*` | Igual a `guest`, com erro só ao favoritar (veja "Favoritar") |
  * | `private`   | Evento privado sem participação: sem lista de confirmados, local aproximado (bairro) |
  * | `private-no-area` | Igual a `private`, mas sem bairro: "Local aproximado" |
  * | `private-confirmed` | Evento privado já aprovado: local exato          |
@@ -193,6 +194,22 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
  * (modo avião).
+ *
+ * ## Favoritar (`POST`/`DELETE /events/{id}/favorite`)
+ *
+ * Os dois respondem `204` e são idempotentes, como no backend, e alteram o
+ * `viewer.is_favorited` do detalhe. Os favoritos começam com os eventos da aba
+ * Interesses do dono (nenhum em `empty`). Conta de estabelecimento recebe `403`,
+ * e evento cancelado, `404`. Nos cenários abaixo o detalhe carrega como o de
+ * `guest`, na visão de visitante:
+ *
+ * | `event_id`           | Favoritar ou desfavoritar                           |
+ * | -------------------- | --------------------------------------------------- |
+ * | `favorite-gone`      | `404`, e o GET seguinte do detalhe também vem `404` |
+ * | `favorite-boom`      | `500`                                               |
+ * | `favorite-forbidden` | `403`                                               |
+ * | `favorite-offline`   | Falha de rede                                       |
+ * | `favorite-slow`      | Timeout, após `API_TIMEOUT_MS`                      |
  */
 
 /** Latência de mentira, para os estados de carregamento aparecerem de verdade. */
@@ -352,6 +369,11 @@ function estadoInicial() {
     bloqueados: bloqueadosIniciais(),
     /** Quem já foi desbloqueado: some do `GET` seguinte. */
     desbloqueados: [] as string[],
+    // Os mesmos eventos da aba Interesses do dono, que vem vazia em `empty`.
+    favoritos: cenarioPerfilProprio === 'empty' ? [] : ['samba-cidade-baixa', 'brique-redencao'],
+    eventosIndisponiveis: [] as string[],
+    // `cancelled` vale para o mock inteiro; o favoritar só responde `404` para o evento cancelado.
+    eventosCancelados: [] as string[],
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -388,7 +410,12 @@ const NOME_DA_TAG: Record<string, string> = { t1: 'Esportes', t2: 'Futebol' };
 /** Cenários de evento privado visto por quem não organiza. */
 const CENARIOS_PRIVADOS = ['private', 'private-no-area', 'private-confirmed'];
 
-const ehVisitante = (eventId: string) => eventId === 'guest' || CENARIOS_PRIVADOS.includes(eventId);
+/** Erros só no favoritar, com o detalhe igual ao de `guest`: visitante, o caso principal do favoritar. */
+const CENARIOS_DE_FAVORITAR = ['favorite-gone', 'favorite-boom', 'favorite-forbidden', 'favorite-offline', 'favorite-slow'];
+
+const ehVisitanteDeEventoPublico = (eventId: string) => eventId === 'guest' || CENARIOS_DE_FAVORITAR.includes(eventId);
+
+const ehVisitante = (eventId: string) => ehVisitanteDeEventoPublico(eventId) || CENARIOS_PRIVADOS.includes(eventId);
 
 function detalhe(eventId: string): EventDetail {
   const ehOrganizador = !ehVisitante(eventId);
@@ -416,7 +443,7 @@ function detalhe(eventId: string): EventDetail {
       : (overrides?.location_name ?? 'DRY Moments'),
     location_precision: localAproximado ? 'APPROXIMATE' : 'EXACT',
     location_radius_m: localAproximado ? 500 : null,
-    privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
+    privacy: ehPrivado ? 'PRIVATE' : ehVisitanteDeEventoPublico(eventId) ? 'PUBLIC' : 'INVITE_ONLY',
     status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
     cover_photo_url: overrides?.cover_photo_url ?? 'https://picsum.photos/seed/hangy-evento/900/600',
     tags: (overrides?.tag_ids ?? ['t1', 't2']).map((id) => ({ id, name: NOME_DA_TAG[id] ?? id })),
@@ -433,7 +460,7 @@ function detalhe(eventId: string): EventDetail {
           : ehPrivado
             ? 'REQUEST'
             : 'CONFIRM',
-      is_favorited: false,
+      is_favorited: db.favoritos.includes(eventId),
     },
     participants_preview: localAproximado
       ? null
@@ -583,7 +610,9 @@ function segmentos(path: string) {
 
 function erroDoCenario(eventId: string) {
   if (eventId === 'cancelled') throw new MockApiError(410, 'Event was cancelled');
-  if (eventId === 'missing') throw new MockApiError(404, 'Event not found');
+  if (eventId === 'missing' || db.eventosIndisponiveis.includes(eventId)) {
+    throw new MockApiError(404, 'Event not found');
+  }
   if (eventId === 'boom') throw new MockApiError(500, 'Internal server error');
   if (eventId === 'offline') throw new MockNetworkError();
 }
@@ -599,6 +628,28 @@ function erroCompartilhar(eventId: string) {
   }
   if (eventId === 'boom') throw new MockApiError(500, 'Internal server error');
   if (eventId === 'offline') throw new MockNetworkError();
+}
+
+/**
+ * Como o backend, favoritar responde `404` também para o evento cancelado, em
+ * vez do `410` do `GET /events/{id}`.
+ */
+async function erroFavoritar(eventId: string) {
+  if (MOCK_USER_TYPE === 'BUSINESS') throw new MockApiError(403, 'Only personal accounts can favorite events');
+  if (db.eventosCancelados.includes(eventId) || db.eventosIndisponiveis.includes(eventId)) {
+    throw new MockApiError(404, 'Event not found');
+  }
+  if (eventId === 'favorite-gone') {
+    db.eventosIndisponiveis.push(eventId);
+    throw new MockApiError(404, 'Event not found');
+  }
+  if (eventId === 'favorite-boom') throw new MockApiError(500, 'Internal server error');
+  if (eventId === 'favorite-forbidden') throw new MockApiError(403, 'Only personal accounts can favorite events');
+  if (eventId === 'favorite-offline') throw new MockNetworkError();
+  if (eventId === 'favorite-slow') {
+    await wait(API_TIMEOUT_MS);
+    throw new MockTimeoutError();
+  }
 }
 
 function compartilhar(eventId: string): EventShare {
@@ -1419,7 +1470,15 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     db.cancelled = true;
+    db.eventosCancelados.push(eventId);
     return { event_id: eventId, status: 'CANCELLED', updated_at: new Date().toISOString() } as T;
+  }
+
+  if (partes[0] === 'events' && partes[2] === 'favorite' && partes.length === 3 && (method === 'POST' || method === 'DELETE')) {
+    await erroFavoritar(eventId);
+    const semEste = db.favoritos.filter((id) => id !== eventId);
+    db.favoritos = method === 'POST' ? [...semEste, eventId] : semEste;
+    return undefined as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'participants' && partes.length === 4) {
