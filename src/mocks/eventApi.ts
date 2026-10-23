@@ -198,10 +198,13 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * ## Favoritar (`POST`/`DELETE /events/{id}/favorite`)
  *
  * Os dois respondem `204` e são idempotentes, como no backend, e alteram o
- * `viewer.is_favorited` do detalhe. Os favoritos começam com os eventos da aba
- * Interesses do dono (nenhum em `empty`). Conta de estabelecimento recebe `403`,
- * e evento cancelado, `404`. Nos cenários abaixo o detalhe carrega como o de
- * `guest`, na visão de visitante:
+ * `viewer.is_favorited` do detalhe e a aba Interesses do dono, que saem da mesma
+ * lista. Ela começa com `samba-cidade-baixa` e `brique-redencao` (vazia em
+ * `empty`); um favorito fora desses dois entra na aba com os dados do detalhe.
+ * Conta de estabelecimento recebe `403`, e evento cancelado, `404`; o favorito
+ * feito antes do cancelamento sai da aba.
+ *
+ * Nos cenários abaixo o detalhe carrega como o de `guest`, na visão de visitante:
  *
  * | `event_id`           | Favoritar ou desfavoritar                           |
  * | -------------------- | --------------------------------------------------- |
@@ -369,7 +372,9 @@ function estadoInicial() {
     bloqueados: bloqueadosIniciais(),
     /** Quem já foi desbloqueado: some do `GET` seguinte. */
     desbloqueados: [] as string[],
-    // Os mesmos eventos da aba Interesses do dono, que vem vazia em `empty`.
+    // Fonte do `is_favorited` e da aba Interesses do dono. Os ids iniciais repetem
+    // os de `EVENTOS_DE_INTERESSE_DO_DONO` porque `db` nasce antes de a constante
+    // ser declarada; nenhum em `empty`.
     favoritos: cenarioPerfilProprio === 'empty' ? [] : ['samba-cidade-baixa', 'brique-redencao'],
     eventosIndisponiveis: [] as string[],
     // `cancelled` vale para o mock inteiro; o favoritar só responde `404` para o evento cancelado.
@@ -967,6 +972,7 @@ const EVENTOS_CRIADOS_DO_DONO: UserEventItem[] = [
   },
 ];
 
+/** Itens dos favoritos iniciais; os demais favoritos saem do `detalhe()`. */
 const EVENTOS_DE_INTERESSE_DO_DONO: UserEventItem[] = [
   {
     event_id: 'samba-cidade-baixa',
@@ -1030,11 +1036,36 @@ function historicoDoDono(): UserEventItem[] {
   }));
 }
 
+function itemDoDetalhe(eventId: string): UserEventItem {
+  const evento = detalhe(eventId);
+  return {
+    event_id: evento.event_id,
+    title: evento.title,
+    event_date: evento.event_date,
+    location_name: evento.location_name,
+    cover_photo_url: evento.cover_photo_url,
+    privacy: evento.privacy,
+    participation_status: evento.viewer.participation_status,
+  };
+}
+
+/**
+ * Na ordem do backend: data crescente, com desempate pelo id. Como lá, o
+ * favorito de um evento cancelado ou indisponível continua guardado, mas sai da lista.
+ */
+function interessesDoDono(): UserEventItem[] {
+  return db.favoritos
+    .filter((eventId) => !db.eventosCancelados.includes(eventId) && !db.eventosIndisponiveis.includes(eventId))
+    .map((eventId) => EVENTOS_DE_INTERESSE_DO_DONO.find((evento) => evento.event_id === eventId) ?? itemDoDetalhe(eventId))
+    .sort((a, b) => Date.parse(a.event_date) - Date.parse(b.event_date) || a.event_id.localeCompare(b.event_id));
+}
+
 function eventosDoDono(aba: UserEventsTab): UserEventItem[] {
+  // Os favoritos já começam vazios em `empty`, e favoritar lá precisa aparecer.
+  if (aba === 'interests') return interessesDoDono();
   if (cenarioPerfilProprio === 'empty') return [];
   if (aba === 'history') return historicoDoDono();
   if (aba === 'created') return EVENTOS_CRIADOS_DO_DONO;
-  if (aba === 'interests') return EVENTOS_DE_INTERESSE_DO_DONO;
   return EVENTOS_CONFIRMADOS_DO_DONO;
 }
 
