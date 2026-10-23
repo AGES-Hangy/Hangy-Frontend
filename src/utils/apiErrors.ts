@@ -72,6 +72,23 @@ export function describeLoadError(error: unknown): LoadError {
   };
 }
 
+export function describeProfileLoadError(error: unknown): LoadError {
+  const loadError = describeLoadError(error);
+
+  if (loadError.kind === 'unavailable' || loadError.kind === 'cancelled') {
+    // Ambíguo de propósito: o 404 também é a resposta quando o perfil
+    // visitado bloqueou quem acessa, e a mensagem não pode entregar isso.
+    return {
+      kind: 'unavailable',
+      title: 'Perfil indisponível',
+      message: 'Este perfil não está disponível.',
+      canRetry: false,
+    };
+  }
+
+  return loadError;
+}
+
 /** O que fazer com o erro de uma ação (aprovar, recusar, remover, cancelar). */
 export interface ActionError {
   message: string;

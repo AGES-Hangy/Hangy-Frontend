@@ -119,6 +119,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
 
@@ -148,7 +149,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
   const isDirty = isProfileChanged || isTagsChanged;
   const isSaving = isUpdating || isSavingTags;
-  const isBlocked = isSaving || isDeleting;
+  const isBlocked = isSaving || isDeleting || isLoggingOut;
   const canSave = isDirty && Object.keys(validation).length === 0 && selectionError === null && !isBlocked;
 
   function update(changes: Partial<EditProfileFormState>, ...fields: EditProfileField[]) {
@@ -255,6 +256,15 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
     leaveScreen();
   }
   handleSaveRef.current = () => void handleSave();
+
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    // Antes de removeToken porque o DELETE precisa do Bearer. Logout
+    // voluntário não deve exibir sessão expirada se a API responder 401.
+    await unregisterDevice({ isLoggingOut: true });
+    await removeToken();
+    router.replace('/Login');
+  }
 
   function openDeleteDialog() {
     setDeletePassword('');
@@ -518,12 +528,22 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
 
           <NotificationsSection />
 
+          {/* Frame 2221:28020: "Sair da conta" (Secondary LG, largura total) logo acima de "Excluir conta". */}
+          <Button
+            label="Sair da conta"
+            variant="Secondary"
+            onPress={() => void handleLogout()}
+            isLoading={isLoggingOut}
+            disabled={isSaving || isDeleting}
+            style={styles.accountAction}
+          />
+
           <Button
             label="Excluir conta"
             variant="DangerText"
             onPress={openDeleteDialog}
             disabled={isBlocked}
-            style={styles.deleteAccount}
+            style={styles.accountAction}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -614,7 +634,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text.primary,
   },
-  deleteAccount: {
+  accountAction: {
     alignSelf: 'stretch',
   },
 });

@@ -1,3 +1,5 @@
+import type { UserEventsTab } from '@/types/user';
+
 export const API_BASE_URL = 'http://localhost:8000';
 
 /**
@@ -56,6 +58,18 @@ export const endpoints = {
    */
   account: () => '/users/me',
   event: (eventId: string) => `/events/${eventId}`,
+  /**
+   * Eventos ao redor de um ponto (task 119). A coordenada é o centro do mapa e
+   * só existe nesta query — a posição do usuário não é persistida no backend.
+   */
+  eventsNearby: ({ latitude, longitude, radiusM }: { latitude: number; longitude: number; radiusM: number }) => {
+    const params = new URLSearchParams({
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+      radius_m: String(Math.round(radiusM)),
+    });
+    return `/events/nearby?${params.toString()}`;
+  },
   /** Sem `status`, a API devolve confirmados; `status=PENDING` exige ser o organizador. */
   eventParticipants: (eventId: string, status?: 'PENDING') => {
     const params = new URLSearchParams({ limit: String(PARTICIPANTS_PAGE_LIMIT) });
@@ -81,6 +95,48 @@ export const endpoints = {
   myCreatedEvents: () => '/users/me/events/created',
   /** Capa do evento: `multipart/form-data` com o campo `file` (task 276 [BE]). */
   eventCovers: () => '/uploads/event-covers',
+  user: (userId: string) => `/users/${encodeURIComponent(userId)}`,
+  /** Sem tab, vem a primeira página de cada aba permitida. */
+  userEvents: (
+    userId: string,
+    options?: { limit?: number } | { tab: UserEventsTab; cursor: string; limit?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (options && 'tab' in options) {
+      params.set('tab', options.tab);
+      params.set('cursor', options.cursor);
+    }
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    const query = params.toString();
+    return `/users/${encodeURIComponent(userId)}/events${query ? `?${query}` : ''}`;
+  },
+  connectionRequests: () => '/connections',
+  /** `PATCH` responde a uma solicitação recebida (task 230 [BE]); `DELETE` cancela ou desfaz (task 231 [BE]). */
+  connection: (connectionId: string) => `/connections/${encodeURIComponent(connectionId)}`,
+  businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
+  userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
+  myPhotos: (options?: { limit?: number; cursor?: string | null }) => {
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/users/me/photos${query ? `?${query}` : ''}`;
+  },
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
+  /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
+  connections: (options?: { cursor?: string | null; search?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.cursor) params.set('cursor', options.cursor);
+    if (options?.search) params.set('q', options.search);
+    const query = params.toString();
+    return `/users/me/connections${query ? `?${query}` : ''}`;
+  },
+  /** Solicitações de conexão recebidas ainda pendentes. */
+  connectionsPending: (cursor?: string | null) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    const query = params.toString();
+    return `/users/me/connections/pending${query ? `?${query}` : ''}`;
+  },
 } as const;

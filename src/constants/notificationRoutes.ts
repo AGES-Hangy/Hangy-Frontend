@@ -4,7 +4,7 @@ import type { Notification, NotificationType } from '@/types/notification';
 
 type NotificationRouteConfig = {
   /** Tela que já existe para receber o toque; nenhum tipo fica sem destino. */
-  pathname: '/Profile' | '/ManageEvent' | '/EventDetail';
+  pathname: '/UserProfile' | '/ManageEvent' | '/EventDetail';
   /** De onde vem o id do destino: quem enviou a notificação ou o evento. */
   idSource: 'sender' | 'event';
 };
@@ -15,8 +15,8 @@ type NotificationRouteConfig = {
  * conexão abrem o perfil de quem enviou.
  */
 export const NOTIFICATION_ROUTE_BY_TYPE: Record<NotificationType, NotificationRouteConfig> = {
-  CONNECTION_REQUEST: { pathname: '/Profile', idSource: 'sender' },
-  CONNECTION_ACCEPTED: { pathname: '/Profile', idSource: 'sender' },
+  CONNECTION_REQUEST: { pathname: '/UserProfile', idSource: 'sender' },
+  CONNECTION_ACCEPTED: { pathname: '/UserProfile', idSource: 'sender' },
   EVENT_PARTICIPATION_REQUEST: { pathname: '/ManageEvent', idSource: 'event' },
   EVENT_REQUEST_APPROVED: { pathname: '/EventDetail', idSource: 'event' },
   EVENT_REQUEST_REJECTED: { pathname: '/EventDetail', idSource: 'event' },
@@ -32,11 +32,10 @@ export function getNotificationDestination(notification: Notification): Href | n
   const config = NOTIFICATION_ROUTE_BY_TYPE[notification.type as NotificationType];
   if (!config) return null;
 
-  if (config.pathname === '/Profile') {
+  if (config.idSource === 'sender') {
     const sender = notification.payload.sender;
     if (!sender?.id) return null;
-    // `Profile` recebe o nome por parâmetro enquanto não existe a API de perfil.
-    return { pathname: '/Profile', params: { userId: sender.id, name: sender.name } } as Href;
+    return { pathname: config.pathname, params: { id: sender.id } } as Href;
   }
 
   const id = notification.payload.event_id;

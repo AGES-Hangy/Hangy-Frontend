@@ -133,3 +133,26 @@ export interface EventShare {
   location_name: string;
   cover_photo_url: string | null;
 }
+
+/** Item de `GET /events/nearby` (task 119) — só o que o pin e o preview do mapa usam. */
+export interface NearbyEventItem {
+  event_id: string;
+  title: string;
+  event_date: string;
+  location: { latitude: number; longitude: number };
+  location_name: string | null;
+  cover_photo_url: string | null;
+  /**
+   * Vem do contrato do backend #86, ainda sem merge. Opcional até o endpoint
+   * estar disponível: sem o campo, o preview oculta o selo em vez de assumir `PUBLIC`.
+   */
+  privacy?: EventPrivacy;
+  /** Distância até o centro da busca, calculada pelo backend. */
+  distance_m: number;
+  participants_count: number;
+  is_confirmed: boolean;
+}
+
+export interface NearbyEventsPage {
+  items: NearbyEventItem[];
+}

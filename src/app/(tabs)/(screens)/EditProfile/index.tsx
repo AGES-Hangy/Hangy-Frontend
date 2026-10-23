@@ -53,7 +53,7 @@ export default function EditProfile() {
   useEffect(() => {
     if (!isOtherUser) return;
     showErrorToast('Você só pode editar o seu perfil');
-    router.replace({ pathname: '/Profile', params: { userId } });
+    router.replace({ pathname: '/UserProfile', params: { id: userId } });
   }, [isOtherUser, userId, showErrorToast]);
 
   const userType = user?.userType;
