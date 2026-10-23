@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   KeyboardAvoidingView,
@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
@@ -23,9 +23,10 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEditEvent } from '@/hooks/useEditEvent';
 import { useEvent } from '@/hooks/useEvent';
-import { useImageUpload } from '@/hooks/useImageUpload';
+import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import { announce, moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
 
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import { MAX_TAGS } from '@/components/CreateEvent/types';
@@ -34,7 +35,10 @@ import type { EventDetail } from '@/types/event';
 type EditEventFormData = {
   title: string;
   description: string;
+  /** Prévia da capa: a URL salva ou a URI local de uma capa nova. */
   coverUri: string | null;
+  /** O que vai em `cover_photo_url`: a URL salva ou a devolvida pelo envio. */
+  coverUrl: string | null;
   date: Date | null;
   time: Date | null;
   location: string;
@@ -56,6 +60,7 @@ function toFormData(event: EventDetail): EditEventFormData {
     title: event.title,
     description: event.description ?? '',
     coverUri: event.cover_photo_url,
+    coverUrl: event.cover_photo_url,
     date: eventDate,
     time: eventDate,
     location: event.location_name ?? '',
@@ -111,17 +116,28 @@ export default function EditEvent() {
   const dateRowRef = useRef<View>(null);
   const locationRef = useRef<View>(null);
   const tagsRef = useRef<View>(null);
+  const coverRef = useRef<View>(null);
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload } = useEvent(id);
   const { saveEvent, isSaving, saveError } = useEditEvent(id);
   const { tags, isLoading: tagsLoading, error: tagsError, refetch: refetchTags } = useTags();
-  const { pickImage, error: coverError } = useImageUpload();
+  const {
+    pickAndUpload: pickAndUploadCover,
+    cancelUpload: cancelCoverUpload,
+    clearImage: clearCoverImage,
+    reset: resetCoverUpload,
+    isUploading: isCoverUploading,
+    progress: coverProgress,
+    error: coverUploadError,
+  } = useEventCoverUpload();
 
   const [form, setForm] = useState<EditEventFormData | null>(null);
   const originalRef = useRef<EditEventFormData | null>(null);
   const durationMsRef = useRef(2 * 60 * 60 * 1000);
   const [submitCount, setSubmitCount] = useState(0);
-  const [localError, setLocalError] = useState<string | null>(null);
+  /** Capa recusada pela API ao salvar; aparece como erro do FileUpload. */
+  const [coverRejected, setCoverRejected] = useState<string | null>(null);
+  const [coverFocusRequest, setCoverFocusRequest] = useState(0);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Só na primeira carga: sem isto, o refetch do `useEvent` no foco (ex.:
@@ -135,6 +151,10 @@ export default function EditEvent() {
         new Date(event.end_date).getTime() - new Date(event.event_date).getTime();
     }
   }, [event, form]);
+
+  // A tela continua montada ao sair: o envio em andamento é cancelado aqui, e
+  // o formulário fica como estava.
+  useFocusEffect(useCallback(() => () => cancelCoverUpload(), [cancelCoverUpload]));
 
   const hasChanges = Boolean(
     form && originalRef.current && JSON.stringify(form) !== JSON.stringify(originalRef.current),
@@ -185,6 +205,40 @@ export default function EditEvent() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submitCount]);
+
+  // Num efeito, e não no `onLayout` como no Criar evento: aqui o FileUpload já
+  // está montado quando o 400 chega, e nada acima dele muda de altura.
+  useEffect(() => {
+    if (coverFocusRequest === 0) return;
+
+    const node = coverRef.current;
+    const scroll = scrollRef.current;
+    const contentNode = containerRef.current;
+    if (!node || !scroll || !contentNode) return;
+
+    node.measureLayout(contentNode, (_x, y) => {
+      scroll.scrollTo({ y: Math.max(y - SCROLL_MARGIN, 0), animated: true });
+    });
+    moveAccessibilityFocus(node);
+  }, [coverFocusRequest]);
+
+  // `null` até o formulário carregar: a primeira capa não conta como troca.
+  const coverState = !form
+    ? null
+    : (coverUploadError ?? coverRejected)
+      ? 'error'
+      : isCoverUploading ? 'uploading' : form.coverUri ? 'filled' : 'empty';
+  const previousCoverStateRef = useRef(coverState);
+
+  // No web, o botão acionado (adicionar, cancelar, remover) some quando o
+  // FileUpload troca de estado, e o foco do teclado cai no `body`.
+  useEffect(() => {
+    const previous = previousCoverStateRef.current;
+    previousCoverStateRef.current = coverState;
+    if (previous === null || previous === coverState) return;
+    const node = coverRef.current;
+    if (node) restoreLostFocus(node);
+  }, [coverState]);
 
   if (isLoadingEvent || !form) return <EditEventSkeleton />;
 
@@ -271,29 +325,28 @@ export default function EditEvent() {
       };
     });
 
-  const handlePickCover = async () => {
-    const picked = await pickImage();
-    if (picked) set('coverUri', picked.uri);
+  const pickCover = async () => {
+    setCoverRejected(null);
+    const uploaded = await pickAndUploadCover();
+    if (uploaded) {
+      setForm((current) =>
+        current ? { ...current, coverUri: uploaded.uri, coverUrl: uploaded.url } : current,
+      );
+    }
+  };
+
+  const removeCover = () => {
+    clearCoverImage();
+    setForm((current) => (current ? { ...current, coverUri: null, coverUrl: null } : current));
   };
 
   async function handleSave() {
-    if (!form || !event) return;
+    if (!form || !event || isCoverUploading) return;
 
-    setLocalError(null);
     setSubmitCount((count) => count + 1);
     if (validate(form).length > 0) return;
 
-    // O upload de capa ainda não existe (mesma limitação da criação): só dá
-    // para mandar a capa que já veio do servidor, ou remover.
     const original = originalRef.current;
-    if (form.coverUri && form.coverUri !== original?.coverUri) {
-      setLocalError(
-        'Remova a nova capa para salvar. O envio de imagens ainda não está disponível.',
-      );
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
-      return;
-    }
-
     const eventDate = new Date(form.date!);
     eventDate.setHours(form.time!.getHours(), form.time!.getMinutes(), 0, 0);
     const endDate = new Date(eventDate.getTime() + durationMsRef.current);
@@ -307,11 +360,14 @@ export default function EditEvent() {
       form.locationCoordinates?.longitude !== original?.locationCoordinates?.longitude ||
       form.locationNeighborhood !== original?.locationNeighborhood ||
       form.locationCity !== original?.locationCity;
+    const coverChanged = form.coverUrl !== original?.coverUrl;
 
-    const saved = await saveEvent({
+    const result = await saveEvent({
       title: form.title,
       description: form.description || null,
-      cover_photo_url: form.coverUri,
+      // Capa sem troca nem remoção fica fora do corpo: o backend mantém a
+      // salva sem depender de compará-la com o valor recebido.
+      ...(coverChanged ? { cover_photo_url: form.coverUrl } : {}),
       tag_ids: form.tagIds,
       event_date: eventDate.toISOString(),
       end_date: endDate.toISOString(),
@@ -327,8 +383,23 @@ export default function EditEvent() {
         : {}),
     });
 
-    if (saved) {
-      originalRef.current = form;
+    if (result === 'invalid-cover') {
+      removeCover();
+      setCoverRejected(INVALID_COVER_MESSAGE);
+      setCoverFocusRequest((count) => count + 1);
+      // Sempre, e não só o foco: se o foco não mudar de lugar, este anúncio é
+      // o único jeito de o leitor de tela saber da recusa.
+      announce(INVALID_COVER_MESSAGE);
+      return;
+    }
+
+    if (result === 'saved') {
+      // A prévia passa para a URL do servidor, como na primeira carga: a tela
+      // não desmonta, e o `blob:` liberado aqui não pode voltar num descarte.
+      const savedForm = { ...form, coverUri: form.coverUrl };
+      originalRef.current = savedForm;
+      setForm(savedForm);
+      resetCoverUpload();
       router.back();
     }
   }
@@ -344,11 +415,11 @@ export default function EditEvent() {
           pointerEvents={isSaving ? 'none' : 'auto'}
         >
           <View ref={containerRef}>
-            {(saveError || localError) && (
+            {saveError && (
               <View style={styles.errorBanner} accessibilityRole="alert">
                 <Icon name="triangle-alert" size={16} color={palette.error.default} />
                 <Text style={[typography.bodyS, styles.errorBannerText]}>
-                  {localError ?? saveError}
+                  {saveError}
                 </Text>
               </View>
             )}
@@ -381,21 +452,17 @@ export default function EditEvent() {
               />
             </View>
 
-            <View style={styles.field}>
+            <View style={styles.field} ref={coverRef}>
               <FileUpload
                 label="Capa"
                 badge="Opcional"
                 value={form.coverUri ? { uri: form.coverUri } : null}
-                error={coverError ?? undefined}
-                onPick={handlePickCover}
-                onRemove={() => set('coverUri', null)}
+                progress={isCoverUploading ? (coverProgress ?? 0) : undefined}
+                error={coverUploadError ?? coverRejected ?? undefined}
+                onPick={pickCover}
+                onCancel={cancelCoverUpload}
+                onRemove={removeCover}
               />
-              {form.coverUri && form.coverUri !== originalRef.current?.coverUri && (
-                <Text style={styles.notice}>
-                  Capa selecionada apenas para prévia. Remova-a para salvar; o envio de imagens
-                  ainda não está disponível.
-                </Text>
-              )}
             </View>
 
             <View style={styles.field} ref={dateRowRef}>
@@ -495,7 +562,7 @@ export default function EditEvent() {
             style={styles.saveButton}
             onPress={handleSave}
             isLoading={isSaving}
-            disabled={!hasChanges}
+            disabled={!hasChanges || isCoverUploading}
           />
         </View>
       </KeyboardAvoidingView>
@@ -508,6 +575,11 @@ export default function EditEvent() {
         confirmLabel="Descartar"
         onConfirm={() => {
           setShowDiscardConfirm(false);
+          // A tela não desmonta ao sair: sem restaurar o formulário, reabrir
+          // mostraria as edições descartadas e uma prévia `blob:` já revogada.
+          resetCoverUpload();
+          setForm(originalRef.current);
+          setCoverRejected(null);
           router.back();
         }}
         onCancel={() => setShowDiscardConfirm(false)}
@@ -561,11 +633,6 @@ const styles = StyleSheet.create({
   },
   required: {
     color: palette.error.default,
-  },
-  notice: {
-    ...typography.bodyS,
-    color: colors.text.secondary,
-    marginTop: spacing[8],
   },
   dateRow: {
     flexDirection: 'row',

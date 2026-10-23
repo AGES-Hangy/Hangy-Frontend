@@ -1,3 +1,4 @@
+import { endpoints } from '@/constants/api';
 import type {
   EventDetail,
   EventParticipant,
@@ -5,6 +6,7 @@ import type {
   EventShare,
   ParticipantsPage,
 } from '@/types/event';
+import type { ApiUploadOptions, UploadFile } from '@/utils/http';
 import type { PersonalProfileResponse } from '@/types/profile';
 import type {
   ConnectionAnswerResult,
@@ -22,7 +24,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
  * em `@/constants/api`.
  *
- * Existe porque as tasks de backend 103, 097, 209, 099 e 101 ainda não
+ * Existe porque as tasks de backend 103, 097, 209, 099, 101 e 276 ainda não
  * subiram. O formato é cópia do contrato acordado, então quando o backend
  * chegar é só desligar a flag — nada nas telas nem nos hooks muda.
  *
@@ -55,6 +57,42 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `forbidden` | `403` nos pendentes: só a seção de confirmados aparece    |
  * | `full`      | `409 Event is full` ao aprovar                           |
  * | `finished`  | `409 Event already finished` ao cancelar                 |
+ *
+ * ## Envio da capa (`POST /uploads/event-covers`, task 276)
+ *
+ * `EXPO_PUBLIC_MOCK_UPLOAD` escolhe o resultado de cada envio: uma sequência
+ * separada por vírgulas, consumida um envio por vez (cancelar também conta).
+ * O último valor se repete; sem a variável, vale `ok`. A sequência só recomeça
+ * quando o app recarrega.
+ *
+ * | Valor     | O que acontece                                                |
+ * | --------- | ------------------------------------------------------------- |
+ * | `ok`      | Progresso em ~1,5 s e 201 com URL no formato do bucket          |
+ * | `slow`    | Igual a `ok`, em ~10 s: dá tempo de cancelar ou sair da tela    |
+ * | `nototal` | Como `slow`, mas sem total: o progresso vem sempre `null`       |
+ * | `413`     | `413 Image too large` depois do envio completo                  |
+ * | `415`     | `415 Unsupported image type` depois do envio completo           |
+ * | `503`     | `503 Image storage unavailable` depois do envio completo        |
+ * | `offline` | Falha de rede com ~30% enviado                                 |
+ * | `foreign` | 201 com URL fora do bucket, para o 400 do `PATCH /events/{id}`  |
+ *
+ * Ex.: `npx cross-env EXPO_PUBLIC_MOCK_UPLOAD=503,ok npm run start:stub`
+ * (PowerShell: `$env:EXPO_PUBLIC_MOCK_UPLOAD='503,ok'; npm run start:stub`).
+ * Para trocar o valor, reinicie o `start:stub`; `--clear` não é preciso
+ * (confirmado no web em 21/10): em dev, o `babel-preset-expo` não grava o
+ * valor no módulo transformado, só uma referência a `expo/virtual/env`. Na
+ * web, abra uma aba nova pelo `w` e espere o "Web Bundled": F5 numa aba
+ * aberta antes de reiniciar continua com o valor antigo.
+ *
+ * A URL do bucket devolvida aqui não aponta para imagem nenhuma: depois de
+ * salvar, o detalhe mostra a capa quebrada.
+ *
+ * `PATCH /events/{id}` trata `cover_photo_url` como a task 276: omitido mantém
+ * a capa, `null` remove, e uma URL fora do bucket e diferente da salva vira
+ * `400 Invalid cover photo URL`. Os campos editados são um só para o mock
+ * inteiro, não por evento: remover ou trocar a capa vale para o detalhe de
+ * qualquer `event_id`, e a "capa salva" da comparação é a do último PATCH
+ * gravado (ou a padrão, antes do primeiro).
  *
  * Nas rotas de usuário, o `user_id` escolhe o cenário (`/UserProfile?id=pending`):
  *
@@ -361,7 +399,8 @@ function detalhe(eventId: string): EventDetail {
     location_radius_m: localAproximado ? 500 : null,
     privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
     status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
-    cover_photo_url: overrides?.cover_photo_url ?? 'https://picsum.photos/seed/hangy-evento/900/600',
+    // `null` gravado pelo PATCH é "sem capa": com `??`, a padrão voltaria.
+    cover_photo_url: overrides ? overrides.cover_photo_url : 'https://picsum.photos/seed/hangy-evento/900/600',
     tags: (overrides?.tag_ids ?? ['t1', 't2']).map((id) => ({ id, name: NOME_DA_TAG[id] ?? id })),
     organizer: { id: 'org-1', name: 'Ana Souza', user_type: 'PERSONAL', avatar_url: null },
     viewer: {
@@ -1162,13 +1201,18 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (eventId === 'finished') throw new MockApiError(409, 'Event already finished');
 
     const body = init.body ? JSON.parse(String(init.body)) : {};
-    // Os campos de local só vêm quando o endereço mudou; sem eles, vale o
-    // que o evento já tinha.
+    // Os campos de local só vêm quando o endereço mudou, e a capa só quando
+    // foi trocada ou removida; sem eles, vale o que o evento já tinha.
     const atual = detalhe(eventId);
+    const capa = 'cover_photo_url' in body ? body.cover_photo_url : atual.cover_photo_url;
+    if (typeof capa === 'string' && capa !== atual.cover_photo_url && !capa.startsWith(BUCKET_DE_MIDIA)) {
+      throw new MockApiError(400, 'Invalid cover photo URL');
+    }
+
     db.overrides = {
       title: body.title,
       description: body.description ?? null,
-      cover_photo_url: body.cover_photo_url ?? null,
+      cover_photo_url: capa ?? null,
       event_date: body.event_date,
       end_date: body.end_date,
       location: body.location ?? atual.location,
@@ -1472,4 +1516,113 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   }
 
   throw new MockApiError(404, 'Not found');
+}
+
+/** Prefixo das URLs que a API grava. Aproximação do `owns(url)` do backend. */
+const BUCKET_DE_MIDIA = 'https://hangy-media.s3.us-east-1.amazonaws.com/';
+
+const CENARIOS_DE_ENVIO = ['ok', 'slow', 'nototal', '413', '415', '503', 'offline', 'foreign'] as const;
+type CenarioDeEnvio = (typeof CENARIOS_DE_ENVIO)[number];
+
+const ehCenarioDeEnvio = (valor: string): valor is CenarioDeEnvio =>
+  (CENARIOS_DE_ENVIO as readonly string[]).includes(valor);
+
+function lerSequenciaDeEnvio(): CenarioDeEnvio[] {
+  const bruto: string = process.env.EXPO_PUBLIC_MOCK_UPLOAD ?? '';
+  const valores = bruto
+    .split(',')
+    .map((valor) => valor.trim())
+    .filter(Boolean);
+
+  // Avisa em vez de cair em `ok` calado: um erro de digitação passaria por
+  // teste do caminho feliz.
+  const desconhecidos = valores.filter((valor) => !ehCenarioDeEnvio(valor));
+  if (desconhecidos.length > 0) {
+    console.warn(
+      `EXPO_PUBLIC_MOCK_UPLOAD: ignorando ${desconhecidos.join(', ')}. Valores válidos: ${CENARIOS_DE_ENVIO.join(', ')}.`,
+    );
+  }
+
+  const validos = valores.filter(ehCenarioDeEnvio);
+  return validos.length > 0 ? validos : ['ok'];
+}
+
+const SEQUENCIA_DE_ENVIO = lerSequenciaDeEnvio();
+let enviosFeitos = 0;
+
+function proximoCenarioDeEnvio(): CenarioDeEnvio {
+  const cenario = SEQUENCIA_DE_ENVIO[Math.min(enviosFeitos, SEQUENCIA_DE_ENVIO.length - 1)];
+  enviosFeitos += 1;
+  return cenario;
+}
+
+/**
+ * Como `wait`, mas para o relógio se o envio for cancelado. O erro daqui não
+ * chega a quem chamou, porque `apiUpload` já rejeitou com `UploadCancelledError`;
+ * importar essa classe criaria um ciclo com `@/utils/http`.
+ */
+function esperar(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('aborted'));
+      return;
+    }
+
+    const parar = () => {
+      clearTimeout(timer);
+      reject(new Error('aborted'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', parar);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', parar);
+  });
+}
+
+function ritmoDoEnvio(cenario: CenarioDeEnvio) {
+  return cenario === 'slow' || cenario === 'nototal' ? { passos: 20, passoMs: 500 } : { passos: 10, passoMs: 150 };
+}
+
+/**
+ * `POST /uploads/event-covers`. Fica fora do `resolveMock` porque o envio tem
+ * progresso e cancelamento, que `apiFetch` não tem. Quem rejeita no
+ * cancelamento é o `apiUpload`, em volta desta função; aqui o `signal` só para
+ * o progresso simulado. Cenários no cabeçalho do arquivo.
+ */
+export async function resolveUploadMock<T>(
+  path: string,
+  file: UploadFile,
+  { onProgress, signal }: ApiUploadOptions = {},
+): Promise<T> {
+  if (path !== endpoints.eventCovers()) {
+    await esperar(MOCK_LATENCY_MS, signal);
+    throw new MockApiError(404, 'Not found');
+  }
+
+  const cenario = proximoCenarioDeEnvio();
+  const { passos, passoMs } = ritmoDoEnvio(cenario);
+  const ultimoPasso = cenario === 'offline' ? Math.round(passos * 0.3) : passos;
+
+  for (let passo = 1; passo <= ultimoPasso; passo += 1) {
+    await esperar(passoMs, signal);
+    onProgress?.(cenario === 'nototal' ? null : passo / passos);
+  }
+  if (cenario === 'offline') throw new MockNetworkError();
+
+  // A API só responde depois do último byte, enquanto grava no S3.
+  await esperar(MOCK_LATENCY_MS, signal);
+
+  if (cenario === '413') throw new MockApiError(413, 'Image too large');
+  if (cenario === '415') throw new MockApiError(415, 'Unsupported image type');
+  if (cenario === '503') throw new MockApiError(503, 'Image storage unavailable');
+
+  const extensao = file.mimeType === 'image/png' ? 'png' : 'jpg';
+  const id = Math.random().toString(36).slice(2, 10);
+  return {
+    cover_photo_url:
+      cenario === 'foreign'
+        ? `https://example.com/capa-${id}.${extensao}`
+        : `${BUCKET_DE_MIDIA}events/covers/${id}.${extensao}`,
+  } as T;
 }

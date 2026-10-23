@@ -21,6 +21,20 @@ export const USE_API_MOCKS = __DEV__ && process.env.EXPO_PUBLIC_USE_API_MOCKS ==
 /** Quanto esperar por uma resposta antes de desistir. */
 export const API_TIMEOUT_MS = 15000;
 
+/**
+ * Envio de arquivo (`apiUpload`): sem nenhum progresso de envio por este tempo,
+ * desiste. Só vale depois do primeiro evento de progresso com total conhecido —
+ * se a plataforma não dispara o evento, um envio lento mas saudável seria abortado.
+ */
+export const UPLOAD_STALL_TIMEOUT_MS = 30000;
+
+/**
+ * Envio de arquivo: espera pela resposta depois do último byte (e até o primeiro
+ * progresso). Cobre o pior caso do backend gravando no S3, ~105 s com as
+ * tentativas do boto; com menos, o app culparia a conexão por um 503 a caminho.
+ */
+export const UPLOAD_RESPONSE_TIMEOUT_MS = 120000;
+
 /** Maior `limit` aceito por `GET /participants` — a tela não pagina, então pede a página cheia. */
 const PARTICIPANTS_PAGE_LIMIT = 100;
 
@@ -79,6 +93,8 @@ export const endpoints = {
   eventParticipant: (eventId: string, participantId: string) =>
     `/events/${eventId}/participants/${participantId}`,
   myCreatedEvents: () => '/users/me/events/created',
+  /** Capa do evento: `multipart/form-data` com o campo `file` (task 276 [BE]). */
+  eventCovers: () => '/uploads/event-covers',
   user: (userId: string) => `/users/${encodeURIComponent(userId)}`,
   /** Sem tab, vem a primeira página de cada aba permitida. */
   userEvents: (

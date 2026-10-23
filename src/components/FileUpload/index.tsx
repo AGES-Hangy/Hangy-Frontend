@@ -219,12 +219,12 @@ const styles = StyleSheet.create({
   },
   bodyText: {
     ...bodyS,
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   bodyTextMuted: {
     ...bodyS,
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   errorText: {

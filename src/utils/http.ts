@@ -1,8 +1,15 @@
 import { router } from 'expo-router';
+import { Platform } from 'react-native';
 
-import { API_BASE_URL, API_TIMEOUT_MS, USE_API_MOCKS } from '@/constants/api';
+import {
+  API_BASE_URL,
+  API_TIMEOUT_MS,
+  UPLOAD_RESPONSE_TIMEOUT_MS,
+  UPLOAD_STALL_TIMEOUT_MS,
+  USE_API_MOCKS,
+} from '@/constants/api';
 import { getToken, removeToken } from '@/utils/auth';
-import { resolveMock } from '@/mocks/eventApi';
+import { resolveMock, resolveUploadMock } from '@/mocks/eventApi';
 
 /** Por que a chamada falhou — separa "o servidor respondeu" de "nem chegou lá". */
 export type ApiErrorKind = 'http' | 'network' | 'timeout';
@@ -60,11 +67,16 @@ async function handleUnauthorized() {
   router.replace('/Login');
 }
 
+function detailOf(body: unknown): string | null {
+  const detail = (body as { detail?: unknown } | null | undefined)?.detail;
+  return typeof detail === 'string' ? detail : null;
+}
+
 /** Lê o corpo de erro (e o `detail` textual) sem explodir quando ele não é JSON. */
 async function readErrorBody(response: Response): Promise<{ detail: string | null; body: unknown }> {
   try {
     const body = await response.json();
-    return { detail: typeof body?.detail === 'string' ? body.detail : null, body };
+    return { detail: detailOf(body), body };
   } catch {
     return { detail: null, body: null };
   }
@@ -135,4 +147,189 @@ export async function apiFetch<T>(
   }
 
   return (await response.json()) as T;
+}
+
+/** Arquivo local a enviar: URI `file://` no nativo, `blob:` na web. */
+export interface UploadFile {
+  uri: string;
+  mimeType: string;
+}
+
+export interface ApiUploadOptions {
+  /** Fração enviada, de 0 a 1; `null` quando a plataforma não informa o total. */
+  onProgress?: (fraction: number | null) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Quem chamou abortou o envio. Não é `ApiError` de propósito: cancelar não é
+ * falha e não deve virar mensagem de erro.
+ */
+export class UploadCancelledError extends Error {
+  constructor() {
+    super('cancelled');
+    this.name = 'UploadCancelledError';
+  }
+}
+
+async function buildUploadBody(file: UploadFile): Promise<FormData> {
+  const name = `upload.${file.mimeType === 'image/png' ? 'png' : 'jpg'}`;
+  const form = new FormData();
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(file.uri)).blob();
+    form.append('file', blob, name);
+  } else {
+    // O FormData do React Native lê o arquivo de `{ uri, name, type }`; o tipo
+    // do DOM, que é o que o TS enxerga aqui, só conhece `Blob`.
+    form.append('file', { uri: file.uri, name, type: file.mimeType } as unknown as Blob);
+  }
+  return form;
+}
+
+function rejectOnAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new UploadCancelledError());
+    signal.addEventListener('abort', onAbort);
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/**
+ * Faz o envio e devolve o status e o texto da resposta, sem interpretar.
+ *
+ * Dois relógios: até o primeiro progresso, a cada progresso sem total e depois
+ * do último byte, `UPLOAD_RESPONSE_TIMEOUT_MS`; entre progressos com total,
+ * `UPLOAD_STALL_TIMEOUT_MS`. Estouro de qualquer um vira `timeout`.
+ */
+function sendUpload(
+  url: string,
+  body: FormData,
+  token: string | null,
+  onProgress: (fraction: number | null) => void,
+  signal?: AbortSignal,
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastByteSent = false;
+    let done = false;
+
+    // Termina uma vez só e solta os handlers de progresso: um evento atrasado
+    // depois do cancelamento faria a tela voltar a "Enviando".
+    const settle = (outcome: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abortBySignal);
+      xhr.upload.onprogress = null;
+      xhr.upload.onload = null;
+      outcome();
+    };
+
+    // No RN não está confirmado que `xhr.abort()` dispara `abort` em todos os
+    // estados: quem aborta termina a promessa direto, e o `onabort` é redundância.
+    const abortWith = (error: Error) => {
+      settle(() => reject(error));
+      xhr.abort();
+    };
+
+    const abortBySignal = () => abortWith(new UploadCancelledError());
+
+    const arm = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => abortWith(new ApiError('timeout', null, null)), ms);
+    };
+
+    const markLastByteSent = () => {
+      if (lastByteSent) return;
+      lastByteSent = true;
+      arm(UPLOAD_RESPONSE_TIMEOUT_MS);
+    };
+
+    xhr.upload.onprogress = (event) => {
+      const computable = event.lengthComputable && event.total > 0;
+      onProgress(computable ? event.loaded / event.total : null);
+      if (lastByteSent) return;
+      if (!computable) arm(UPLOAD_RESPONSE_TIMEOUT_MS);
+      else if (event.loaded >= event.total) markLastByteSent();
+      else arm(UPLOAD_STALL_TIMEOUT_MS);
+    };
+    xhr.upload.onload = markLastByteSent;
+
+    xhr.onload = () => {
+      settle(() =>
+        xhr.status === 0
+          ? reject(new ApiError('network', null, null))
+          : resolve({ status: xhr.status, text: xhr.responseText }),
+      );
+    };
+    xhr.onerror = () => settle(() => reject(new ApiError('network', null, null)));
+    xhr.onabort = () => settle(() => reject(new UploadCancelledError()));
+
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    signal?.addEventListener('abort', abortBySignal);
+    arm(UPLOAD_RESPONSE_TIMEOUT_MS);
+    xhr.send(body);
+  });
+}
+
+function parseJson(text: string): { body: unknown } | null {
+  try {
+    return { body: JSON.parse(text) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Envia um arquivo em `multipart/form-data` (campo `file`) com progresso. Irmã
+ * do `apiFetch`: mesmo token, mesmo 401 global e falhas como `ApiError`. Usa
+ * XHR porque o `fetch` não informa o progresso do envio. Não define
+ * `Content-Type`: o runtime precisa pôr o boundary.
+ *
+ * Abortar `signal` rejeita com `UploadCancelledError`. Com `USE_API_MOCKS`
+ * ligado, desvia para `resolveUploadMock`.
+ */
+export async function apiUpload<T>(
+  path: string,
+  file: UploadFile,
+  { onProgress, signal }: ApiUploadOptions = {},
+): Promise<T> {
+  if (signal?.aborted) throw new UploadCancelledError();
+
+  let settled = false;
+  const reportProgress = (fraction: number | null) => {
+    if (!settled) onProgress?.(fraction);
+  };
+
+  try {
+    if (USE_API_MOCKS) {
+      return await rejectOnAbort(resolveUploadMock<T>(path, file, { onProgress: reportProgress, signal }), signal);
+    }
+
+    const token = await getToken();
+    const body = await buildUploadBody(file);
+    if (signal?.aborted) throw new UploadCancelledError();
+
+    const { status, text } = await sendUpload(`${API_BASE_URL}${path}`, body, token, reportProgress, signal);
+    const parsed = parseJson(text);
+
+    if (status === 401) {
+      await handleUnauthorized();
+      throw new ApiError('http', 401, detailOf(parsed?.body), parsed?.body ?? null);
+    }
+
+    if (status < 200 || status >= 300) {
+      throw new ApiError('http', status, detailOf(parsed?.body), parsed?.body ?? null);
+    }
+
+    if (!parsed) throw new ApiError('http', status, null, null);
+
+    return parsed.body as T;
+  } finally {
+    settled = true;
+  }
 }
