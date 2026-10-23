@@ -17,15 +17,13 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
-import { useEventCoverUpload } from '@/hooks/useEventCoverUpload';
+import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 
 import { Step1 } from '@/components/CreateEvent/Step1';
 import { Step2, type Step2Handle } from '@/components/CreateEvent/Step2';
 import { Stepper } from '@/components/CreateEvent/Stepper';
 import { MAX_TAGS, type CreateEventFormData, type Privacy } from '@/components/CreateEvent/types';
 import { validateStep1 } from '@/components/CreateEvent/validation';
-
-const INVALID_COVER_MESSAGE = 'Não foi possível usar esta capa. Envie a imagem de novo.';
 
 const EMPTY_FORM: CreateEventFormData = {
   title: '',

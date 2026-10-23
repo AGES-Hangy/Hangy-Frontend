@@ -15,6 +15,9 @@ const EVENT_COVER_UPLOAD: ImageUploadOptions = {
   },
 };
 
+/** Texto da tabela da task para o 400 `Invalid cover photo URL` ao publicar ou salvar. */
+export const INVALID_COVER_MESSAGE = 'Não foi possível usar esta capa. Envie a imagem de novo.';
+
 /** Envio da capa de evento, compartilhado por Criar e Editar evento. */
 export function useEventCoverUpload() {
   return useImageUpload(EVENT_COVER_UPLOAD);

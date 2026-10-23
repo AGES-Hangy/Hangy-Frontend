@@ -2,12 +2,16 @@ import { useCallback, useState } from 'react';
 
 import { endpoints } from '@/constants/api';
 import { apiFetch } from '@/utils/http';
-import { describeActionError } from '@/utils/apiErrors';
+import { INVALID_COVER_PHOTO_URL, describeActionError, isApiErrorLike } from '@/utils/apiErrors';
 
 export type UpdateEventBody = {
   title: string;
   description: string | null;
-  cover_photo_url: string | null;
+  /**
+   * Só quando a capa mudou: `null` remove, e omitido mantém a salva (o backend
+   * só atualiza os campos que vieram no corpo).
+   */
+  cover_photo_url?: string | null;
   tag_ids: string[];
   event_date: string;
   end_date: string;
@@ -29,6 +33,9 @@ type UpdateEventResponse = {
   updated_at: string;
 };
 
+/** `invalid-cover` sai sem `saveError`: a tela mostra o erro no campo da capa. */
+type SaveEventResult = 'saved' | 'invalid-cover' | 'failed';
+
 /**
  * Edição de evento — `PATCH /events/{event_id}` (`UpdateEventInput` no
  * backend). Não manda `max_participants` nem `privacy`: o contrato não aceita
@@ -39,8 +46,8 @@ export function useEditEvent(eventId: string | undefined) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const saveEvent = useCallback(
-    async (body: UpdateEventBody): Promise<boolean> => {
-      if (!eventId) return false;
+    async (body: UpdateEventBody): Promise<SaveEventResult> => {
+      if (!eventId) return 'failed';
 
       setIsSaving(true);
       setSaveError(null);
@@ -50,11 +57,18 @@ export function useEditEvent(eventId: string | undefined) {
           method: 'PATCH',
           body: JSON.stringify(body),
         });
-        return true;
+        return 'saved';
       } catch (caught) {
+        if (
+          isApiErrorLike(caught) &&
+          caught.status === 400 &&
+          caught.detail === INVALID_COVER_PHOTO_URL
+        ) {
+          return 'invalid-cover';
+        }
         const failure = describeActionError(caught);
         setSaveError(failure.message || 'Não foi possível salvar as alterações.');
-        return false;
+        return 'failed';
       } finally {
         setIsSaving(false);
       }
