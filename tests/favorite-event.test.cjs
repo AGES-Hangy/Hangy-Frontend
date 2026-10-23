@@ -23,10 +23,10 @@ function evaluate(source, context) {
 }
 const {
   createFavoriteState, setFavorite, retryFavorite, isCurrentRequest,
-  confirmFavorite, revertFavorite, syncFavorite, favoriteErrorOutcome,
+  confirmFavorite, revertFavorite, syncFavorite, favoriteErrorOutcome, inactiveFavoriteMessage,
 } = evaluate(functions('src/utils/favoriteEvent.ts', [
   'createFavoriteState', 'setFavorite', 'retryFavorite', 'isCurrentRequest',
-  'confirmFavorite', 'revertFavorite', 'syncFavorite', 'favoriteErrorOutcome',
+  'confirmFavorite', 'revertFavorite', 'syncFavorite', 'favoriteErrorOutcome', 'inactiveFavoriteMessage',
 ]), { exports: {} });
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -146,5 +146,43 @@ test('403 and 5xx name the attempted action', () => {
   for (const status of [403, 500, 503]) {
     assert.deepEqual(plain(favoriteErrorOutcome({ kind: 'http', status }, true)), { kind: 'failed', message: 'Não foi possível favoritar. Tente de novo.' });
     assert.deepEqual(plain(favoriteErrorOutcome({ kind: 'http', status }, false)), { kind: 'failed', message: 'Não foi possível remover dos favoritos. Tente de novo.' });
+  }
+});
+test('inactive screen names the event in each failure', () => {
+  const title = 'Samba na Cidade Baixa';
+  for (const status of [403, 500]) {
+    const error = { kind: 'http', status };
+    assert.equal(inactiveFavoriteMessage(error, true, title), 'Não foi possível favoritar "Samba na Cidade Baixa". Tente de novo.');
+    assert.equal(inactiveFavoriteMessage(error, false, title), 'Não foi possível remover "Samba na Cidade Baixa" dos favoritos. Tente de novo.');
+  }
+  const timeout = { kind: 'timeout', status: null };
+  assert.equal(inactiveFavoriteMessage(timeout, true, title), 'A conexão demorou demais. Não foi possível favoritar "Samba na Cidade Baixa".');
+  assert.equal(inactiveFavoriteMessage(timeout, false, title), 'A conexão demorou demais. Não foi possível remover "Samba na Cidade Baixa" dos favoritos.');
+  const network = { kind: 'network', status: null };
+  assert.equal(inactiveFavoriteMessage(network, true, title), 'Sem conexão com a internet. Não foi possível favoritar "Samba na Cidade Baixa".');
+  assert.equal(inactiveFavoriteMessage(network, false, title), 'Sem conexão com a internet. Não foi possível remover "Samba na Cidade Baixa" dos favoritos.');
+});
+test('inactive screen cuts titles longer than 40 characters', () => {
+  const error = { kind: 'http', status: 500 };
+  const long = 'Festival de Inverno da Cidade Baixa 2026 com convidados';
+  assert.equal(inactiveFavoriteMessage(error, true, long), 'Não foi possível favoritar "Festival de Inverno da Cidade Baixa 2026…". Tente de novo.');
+  // O caractere 40 é um espaço: o "…" fica colado na palavra.
+  assert.equal(inactiveFavoriteMessage(error, true, 'Feira de Artesanato e Gastronomia Local da Redenção'), 'Não foi possível favoritar "Feira de Artesanato e Gastronomia Local…". Tente de novo.');
+  const exact = 'Brique da Redenção aos domingos de manhã';
+  assert.equal(Array.from(exact).length, 40);
+  assert.equal(inactiveFavoriteMessage(error, true, exact), `Não foi possível favoritar "${exact}". Tente de novo.`);
+});
+test('inactive screen falls back to the outcome message without a title', () => {
+  for (const title of [undefined, '', '   ']) {
+    assert.equal(inactiveFavoriteMessage({ kind: 'http', status: 500 }, false, title), 'Não foi possível remover dos favoritos. Tente de novo.');
+    assert.equal(inactiveFavoriteMessage({ kind: 'timeout', status: null }, true, title), 'A conexão demorou demais');
+  }
+});
+test('inactive screen shows no toast for 401 and 404', () => {
+  for (const status of [401, 404]) {
+    for (const title of ['Samba na Cidade Baixa', undefined]) {
+      assert.equal(inactiveFavoriteMessage({ kind: 'http', status }, true, title), null);
+      assert.equal(inactiveFavoriteMessage({ kind: 'http', status }, false, title), null);
+    }
   }
 });
