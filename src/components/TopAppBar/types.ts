@@ -12,6 +12,8 @@ export interface TopAppBarAction {
   /** Obrigatório: o botão é só ícone, sem label visível. */
   accessibilityLabel: string;
   onPress: () => void;
+  /** Bloqueia o toque e anuncia a ação como desabilitada; o ícone não muda de cor. */
+  disabled?: boolean;
 }
 
 export interface TopAppBarProps {

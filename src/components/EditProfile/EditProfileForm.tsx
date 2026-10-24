@@ -530,7 +530,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
             onPress={() => void logout()}
             isLoading={isLoggingOut}
             disabled={isSaving || isDeleting}
-            style={styles.logout}
+            style={styles.accountAction}
           />
 
           <Button
@@ -538,7 +538,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
             variant="DangerText"
             onPress={openDeleteDialog}
             disabled={isBlocked}
-            style={styles.deleteAccount}
+            style={styles.accountAction}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -629,10 +629,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text.primary,
   },
-    logout: {
-    alignSelf: 'stretch',
-  },
-  deleteAccount: {
+  accountAction: {
     alignSelf: 'stretch',
   },
 });

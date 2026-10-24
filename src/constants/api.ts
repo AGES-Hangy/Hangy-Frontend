@@ -1,3 +1,5 @@
+import type { UserEventsTab } from '@/types/user';
+
 export const API_BASE_URL = 'http://localhost:8000';
 
 /**
@@ -77,6 +79,33 @@ export const endpoints = {
   eventParticipant: (eventId: string, participantId: string) =>
     `/events/${eventId}/participants/${participantId}`,
   myCreatedEvents: () => '/users/me/events/created',
+  user: (userId: string) => `/users/${encodeURIComponent(userId)}`,
+  /** Sem tab, vem a primeira página de cada aba permitida. */
+  userEvents: (
+    userId: string,
+    options?: { limit?: number } | { tab: UserEventsTab; cursor: string; limit?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (options && 'tab' in options) {
+      params.set('tab', options.tab);
+      params.set('cursor', options.cursor);
+    }
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    const query = params.toString();
+    return `/users/${encodeURIComponent(userId)}/events${query ? `?${query}` : ''}`;
+  },
+  connectionRequests: () => '/connections',
+  /** `PATCH` responde a uma solicitação recebida (task 230 [BE]); `DELETE` cancela ou desfaz (task 231 [BE]). */
+  connection: (connectionId: string) => `/connections/${encodeURIComponent(connectionId)}`,
+  businessFollow: (businessId: string) => `/businesses/${encodeURIComponent(businessId)}/follow`,
+  userBlock: (userId: string) => `/users/${encodeURIComponent(userId)}/block`,
+  myPhotos: (options?: { limit?: number; cursor?: string | null }) => {
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/users/me/photos${query ? `?${query}` : ''}`;
+  },
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
