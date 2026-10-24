@@ -16,6 +16,7 @@ import { useToast } from '@/components/Toast';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { useBlockUser } from '@/hooks/useBlockUser';
 import { useBusinessFollow } from '@/hooks/useBusinessFollow';
 import { useConnectionActions } from '@/hooks/useConnectionActions';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -107,8 +108,10 @@ export default function UserProfile() {
     isLoading: isConnectionPending,
   } = useConnectionActions();
   const { follow, unfollow, isLoading: isFollowPending } = useBusinessFollow();
+  const { block, isLoading: isBlocking } = useBlockUser();
   const isRelationshipPending = isConnectionPending || isFollowPending;
   const [openDialog, setOpenDialog] = useState<RelationshipDialog | null>(null);
+  const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const relationshipButtonRef = useRef<View>(null);
   // O nome ou, sem nome, o cabeçalho: o destino do foco quando o botão some.
   const headerFocusRef = useRef<View | Text>(null);
@@ -138,6 +141,15 @@ export default function UserProfile() {
     action: visibleProfile
       ? { icon: 'flag', accessibilityLabel: 'Denunciar perfil', disabled: true, onPress: () => {} }
       : undefined,
+      secondaryAction:
+      visibleProfile && visibleProfile.user_type !== 'BUSINESS'
+        ? {
+            icon: 'ban',
+            accessibilityLabel: 'Bloquear usuário',
+            disabled: isOffline,
+            onPress: () => setIsBlockDialogOpen(true),
+          }
+        : undefined,
   });
 
   // Chave do último toast de falha ao recarregar. Cada volta ao foco gera um
@@ -381,6 +393,23 @@ export default function UserProfile() {
     patchProfile(previous);
   }, [addToast, closeDialog, patchProfile, reloadAfterStaleConnection, removeConnection]);
 
+  const handleBlock = useCallback(async () => {
+    const target = profileRef.current;
+    if (!target) return;
+
+    const result = await block(target.id);
+    if (result === 'ignored') return;
+    setIsBlockDialogOpen(false);
+
+    if (result === 'unavailable') {
+      addToast({ type: 'error', message: 'Perfil não encontrado' });
+      goBack();
+      return;
+    }
+    if (result === 'done') goBack();
+  }, [addToast, block]);
+
+
   if (isOwnProfile) return <Redirect href="/Profile" />;
 
   // O erro também espera quem está logado: com o id próprio, a tela vira o
@@ -565,6 +594,20 @@ export default function UserProfile() {
         cancelLabel="Cancelar"
         onConfirm={() => void handleRemoveConnection()}
         onCancel={closeDialog}
+      />
+
+      <Dialog
+        visible={isBlockDialogOpen}
+        variant="LeaveEvent"
+        title={name ? `Bloquear ${name}?` : 'Bloquear este usuário?'}
+        description="Essa pessoa não vai mais ver seu perfil, encontrar você na busca nem falar com você. A conexão entre vocês será desfeita e não volta se você desbloquear depois."
+        confirmLabel="Bloquear"
+        cancelLabel="Cancelar"
+        isLoading={isBlocking}
+        onConfirm={() => void handleBlock()}
+        onCancel={() => {
+          if (!isBlocking) setIsBlockDialogOpen(false);
+        }}
       />
 
       {isOffline && <OfflineBanner />}

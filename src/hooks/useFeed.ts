@@ -70,10 +70,14 @@ function normalizeFeed(data: ApiFeedResponse): FeedSection[] {
 // No módulo, e não em estado: quem invalida (ex.: Editar perfil, ao salvar as
 // tags) não está na árvore da Home, que continua montada na tab bar.
 let isFeedStale = false;
+let discardCachedFeed = false;
+let feedRevision = 0;
 
 /** Marca o feed como desatualizado: ele é recarregado na próxima visita à Home. */
-export function invalidateFeed() {
+export function invalidateFeed({ discardCache = false }: { discardCache?: boolean } = {}) {
   isFeedStale = true;
+  discardCachedFeed ||= discardCache;
+  ++feedRevision;
 }
 
 export function useFeed() {
@@ -89,6 +93,7 @@ export function useFeed() {
     async (options: { silent?: boolean } = {}) => {
       const { silent = false } = options;
       const requestId = ++latestRequestIdRef.current;
+      const revision = feedRevision;
 
       if (!silent) {
         setIsLoading(true);
@@ -106,7 +111,7 @@ export function useFeed() {
           signal: controller.signal,
         });
 
-        if (requestId !== latestRequestIdRef.current) return;
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         if (!response.ok) {
           if (response.status === 401) {
@@ -127,13 +132,13 @@ export function useFeed() {
         }
 
         const data = (await response.json()) as ApiFeedResponse;
-        if (requestId !== latestRequestIdRef.current) return;
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         setSections(normalizeFeed(data));
         setError(null);
         setIsOffline(false);
       } catch (requestError) {
-        if (requestId !== latestRequestIdRef.current) return;
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         const offline = requestError instanceof TypeError;
 
@@ -160,6 +165,7 @@ export function useFeed() {
   useEffect(() => {
     // A carga inicial já traz o feed atual.
     isFeedStale = false;
+    discardCachedFeed = false;
     void loadFeed();
   }, [loadFeed]);
 
@@ -169,7 +175,10 @@ export function useFeed() {
     useCallback(() => {
       if (!isFeedStale) return;
       isFeedStale = false;
-      void loadFeed({ silent: true });
+      const discard = discardCachedFeed;
+      discardCachedFeed = false;
+      if (discard) setSections([]);
+      void loadFeed({ silent: !discard });
     }, [loadFeed]),
   );
 

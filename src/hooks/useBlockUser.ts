@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
+import { invalidateFeed } from '@/hooks/useFeed';
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
 import { describeActionError, isApiErrorLike } from '@/utils/apiErrors';
@@ -21,12 +22,16 @@ export function useBlockUser() {
 
     try {
       await apiFetch<void>(endpoints.userBlock(userId), { method: 'POST' });
+      invalidateFeed({ discardCache: true });
       return 'done';
     } catch (caught) {
       // O `apiFetch` já avisa a sessão expirada e volta para o Login.
       if (isApiErrorLike(caught) && caught.status === 401) return 'failed';
       // Já bloqueado: o resultado que a pessoa pediu já vale.
-      if (isApiErrorLike(caught) && caught.status === 409) return 'done';
+      if (isApiErrorLike(caught) && caught.status === 409) {
+        invalidateFeed({ discardCache: true });
+        return 'done';
+      }
       if (isApiErrorLike(caught) && caught.status === 404) return 'unavailable';
 
       const failure = describeActionError(caught);
