@@ -1,6 +1,6 @@
 import type { UserEventsTab } from '@/types/user';
 
-export const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 /**
  * Liga as respostas de mentira de `src/mocks/eventApi.ts` no lugar da rede.
