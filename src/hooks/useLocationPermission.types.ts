@@ -3,5 +3,8 @@ export type LocationPermissionStatus = 'undetermined' | 'granted' | 'denied' | '
 export interface LocationPermission {
   status: LocationPermissionStatus;
   canAskAgain: boolean;
+  error: string | null;
+  isRefreshing: boolean;
+  refresh: () => Promise<void>;
   request: () => Promise<Exclude<LocationPermissionStatus, null>>;
 }
