@@ -78,7 +78,25 @@ export default function TabsLayout() {
               // específicas.
               header: () => <TopAppBarSlot />,
             }}
-          />
+          >
+            {/* SDK 58 exige declaração explícita de todas as rotas deste navegador. */}
+            <Tabs.Screen name="Home/index" />
+            <Tabs.Screen name="Live/index" />
+            <Tabs.Screen name="Search/index" />
+            <Tabs.Screen name="Profile/index" />
+            <Tabs.Screen name="(screens)/BlockedUsers/index" />
+            <Tabs.Screen name="(screens)/Connections/index" />
+            <Tabs.Screen name="(screens)/CreateEvent/index" />
+            <Tabs.Screen name="(screens)/EditEvent/index" />
+            <Tabs.Screen name="(screens)/EditProfile/index" />
+            <Tabs.Screen name="(screens)/EventDetail/index" />
+            <Tabs.Screen name="(screens)/EventPublished/index" />
+            <Tabs.Screen name="(screens)/ManageEvent/index" />
+            <Tabs.Screen name="(screens)/Notifications/ConnectionRequests/index" />
+            <Tabs.Screen name="(screens)/Notifications/ParticipationRequests/index" />
+            <Tabs.Screen name="(screens)/Notifications/index" />
+            <Tabs.Screen name="(screens)/UserProfile/index" />
+          </Tabs>
         </TopAppBarProvider>
       </NotificationsProvider>
     </AuthGuard>
