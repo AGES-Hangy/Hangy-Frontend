@@ -1,3 +1,4 @@
+import type { TextInstance } from 'react-native';
 import { useRef } from 'react';
 import {
   ActivityIndicator,
@@ -94,7 +95,7 @@ export function Dialog({
     description: description ?? variantConfig.description,
     confirmLabel: confirmLabel ?? variantConfig.confirmLabel,
   };
-  const titleRef = useRef<Text>(null);
+  const titleRef = useRef<TextInstance>(null);
 
   function focusTitle() {
     if (Platform.OS === 'web') return;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { AccessibilityInfo, Platform, type View } from 'react-native';
+import { AccessibilityInfo, Platform, type ViewInstance } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import type { UserPhoto } from '@/types/user';
@@ -33,7 +33,7 @@ export function useProfilePhotosLoadMore({
   isOffline,
 }: Options) {
   const { addToast } = useToast();
-  const loadMoreButtonRef = useRef<View>(null);
+  const loadMoreButtonRef = useRef<ViewInstance>(null);
   // Quantas fotos havia quando o "Ver mais" começou, para anunciar quantas chegaram.
   const countBefore = useRef<number | null>(null);
   const shownLoadMoreError = useRef<LoadError | null>(null);

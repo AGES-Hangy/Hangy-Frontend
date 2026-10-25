@@ -1,3 +1,4 @@
+import type { ScrollViewInstance, ViewInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -105,12 +106,12 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
 export default function EditEvent() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
-  const containerRef = useRef<View>(null);
-  const titleRef = useRef<View>(null);
-  const dateRowRef = useRef<View>(null);
-  const locationRef = useRef<View>(null);
-  const tagsRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const containerRef = useRef<ViewInstance>(null);
+  const titleRef = useRef<ViewInstance>(null);
+  const dateRowRef = useRef<ViewInstance>(null);
+  const locationRef = useRef<ViewInstance>(null);
+  const tagsRef = useRef<ViewInstance>(null);
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload } = useEvent(id);
   const { saveEvent, isSaving, saveError } = useEditEvent(id);
@@ -158,7 +159,7 @@ export default function EditEvent() {
   const submitAttempted = submitCount > 0;
   const showSummary = submitAttempted && missing.length > 0;
 
-  const fieldRefs: Record<MissingField, React.RefObject<View | null>> = {
+  const fieldRefs: Record<MissingField, React.RefObject<ViewInstance | null>> = {
     title: titleRef,
     dateRow: dateRowRef,
     location: locationRef,

@@ -23,7 +23,7 @@ const TAB_BY_ROUTE: Record<string, BottomNavTab> = Object.fromEntries(
   Object.entries(ROUTE_BY_TAB).map(([tab, route]) => [route, tab as BottomNavTab]),
 );
 
-function TabBar({ state, navigation }: BottomTabBarProps) {
+function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const current = state.routes[state.index];
 
   // noNavbarScreens continua sendo a fonte de verdade de quem esconde a barra.
@@ -43,14 +43,14 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
 
         // Emitir tabPress mantém o comportamento padrão do navegador (como o
         // scroll-to-top e o reset de stack) que um tabBar próprio perderia.
-        const event = navigation.emit({
+        const event = emitter.emit({
           type: 'tabPress',
           target: target.key,
           canPreventDefault: true,
         });
 
         if (target.key !== current.key && !event.defaultPrevented) {
-          navigation.navigate(target.name);
+          navigateToTab(target.key);
         }
       }}
       onCreatePress={() => router.push('/CreateEvent')}
