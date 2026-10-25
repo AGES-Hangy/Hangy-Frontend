@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
+import { onRelationshipsChanged } from '@/utils/relationshipChanges';
 import { endpoints } from '@/constants/api';
 import type { UserEventItem, UserEventsPage, UserEventsTab, UserEventsTabs } from '@/types/user';
 import { apiFetch } from '@/utils/http';
@@ -112,6 +113,11 @@ export function useUserEvents(userId: string | undefined, { reloadOnFocus = fals
       }
     }
   }, [store, userId]);
+
+  useEffect(() => onRelationshipsChanged(() => {
+    store(null);
+    void load();
+  }), [load, store]);
 
   const loadMore = useCallback(async (tab: UserEventsTab) => {
     const current = loadedRef.current;
