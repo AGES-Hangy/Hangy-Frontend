@@ -308,6 +308,7 @@ export default function EventDetail() {
                 <IconButton
                   icon="star"
                   variant={isFavorited ? 'Filled' : 'Tonal'}
+                  iconFilled={isFavorited}
                   accessibilityLabel={isFavorited ? 'Remover dos favoritos' : 'Favoritar evento'}
                   disabled={isOffline}
                   onPress={toggleFavorite}

@@ -3,6 +3,7 @@ import { useNavigation } from 'expo-router';
 
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
+import { invalidateFeed } from '@/hooks/useFeed';
 import { isApiErrorLike } from '@/utils/apiErrors';
 import {
   confirmFavorite,
@@ -67,6 +68,8 @@ export function useFavoriteEvent(
 
     try {
       await apiFetch<void>(endpoints.eventFavorite(request.eventId), { method: request.target ? 'POST' : 'DELETE' });
+      // A estrela também aparece nos cards da Home, que não recarrega sozinha.
+      invalidateFeed();
       if (isCurrentRequest(stateRef.current, request)) commit(confirmFavorite(stateRef.current, request));
     } catch (caught) {
       if (!isCurrentRequest(stateRef.current, request)) return;

@@ -21,6 +21,8 @@ interface ApiFeedItem {
   cover_photo_url?: string | null;
   privacy: EventPrivacy;
   participants_count?: number;
+  /** Se quem está vendo favoritou o evento — mesmo valor de `viewer.is_favorited` no detalhe. */
+  is_favorited?: boolean;
   /** Tag(s) do próprio evento que casaram com esta seção (ex.: "Futebol" em "Esportes"). */
   tags?: { id: string; name: string }[];
 }
@@ -45,6 +47,7 @@ function toEvent(item: ApiFeedItem): Event {
     location: item.location_name,
     imageUrl: item.cover_photo_url ?? '',
     privacy: item.privacy,
+    isFavorited: item.is_favorited ?? false,
   };
 }
 

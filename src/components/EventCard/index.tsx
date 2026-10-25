@@ -72,8 +72,10 @@ export function EventCard({
 	actionsDisabled,
 	onAcceptRequest,
 	onRejectRequest,
-	onNotifyPress,
+	onFavoritePress,
+	isFavorited = false,
 }: EventCardProps) {
+	const favorite = onFavoritePress ? { isFavorited, onPress: onFavoritePress } : undefined;
 	const dateTime = formatEventDateTime(event.date);
 	const accessibleLabel = [event.title, dateTime, event.location, event.privacy && getPrivacyBadgeLabel(event.privacy)]
 		.filter(Boolean)
@@ -82,7 +84,7 @@ export function EventCard({
 		return <RequestCard event={event} isUnread={isUnread} onPress={onPress} actionsDisabled={actionsDisabled} onAccept={onAcceptRequest} onReject={onRejectRequest} />;
 	}
 	if (variant === 'Mini') {
-		return <MiniCard event={event} onPress={onPress} onNotifyPress={onNotifyPress} accessibleLabel={accessibleLabel} />;
+		return <MiniCard event={event} onPress={onPress} favorite={favorite} accessibleLabel={accessibleLabel} />;
 	}
 
 	return (
@@ -103,7 +105,7 @@ export function EventCard({
 				pressed && styles.pressed,
 			]}
 		>
-			{variant === 'Featured' && <FeaturedCard event={event} onNotifyPress={onNotifyPress} />}
+			{variant === 'Featured' && <FeaturedCard event={event} favorite={favorite} />}
 			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
 		</Pressable>
@@ -137,16 +139,23 @@ function PrivacyTag({ privacy }: { privacy?: EventPrivacy }) {
 	);
 }
 
-/** Sino de notificações sobre a capa — mesmo `IconButton` de sempre, só posicionado por cima da imagem. */
-function NotifyButton({ style, onPress }: { style: object; onPress?: () => void }) {
+type FavoriteToggle = { isFavorited: boolean; onPress: () => void };
+
+/**
+ * Estrela de favorito sobre a capa — mesmo visual do detalhe do evento, no
+ * tamanho SM. O rótulo cita o título: no carrossel há vários botões iguais.
+ */
+function FavoriteButton({ event, favorite, style }: { event: Event; favorite?: FavoriteToggle; style: object }) {
+	if (!favorite) return null;
+
 	return (
 		<IconButton
-			icon="bell"
+			icon="star"
 			size="SM"
-			variant="Outline"
-			disabled={!onPress}
-			accessibilityLabel="Ativar notificações do evento"
-			onPress={onPress}
+			variant={favorite.isFavorited ? 'Filled' : 'Tonal'}
+			iconFilled={favorite.isFavorited}
+			accessibilityLabel={`${favorite.isFavorited ? 'Remover dos favoritos' : 'Favoritar'}: ${event.title}`}
+			onPress={favorite.onPress}
 			style={style}
 		/>
 	);
@@ -177,7 +186,7 @@ function AttendeesGroup({ attendees }: { attendees: Event['attendeeAvatars'] }) 
 	);
 }
 
-function FeaturedCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () => void }) {
+function FeaturedCard({ event, favorite }: { event: Event; favorite?: FavoriteToggle }) {
 	const tags = event.tags ?? [];
 	const hasFooter = tags.length > 0 || (event.attendeeAvatars?.length ?? 0) > 0;
 	const dateTime = formatEventDateTime(event.date);
@@ -187,7 +196,7 @@ function FeaturedCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: 
 			<View style={styles.featuredImageWrap}>
 				<EventImage event={event} style={styles.featuredImage} placeholderColor={palette.primary[200]} />
 				<PrivacyTag privacy={event.privacy} />
-				<NotifyButton style={styles.featuredNotifyPosition} onPress={onNotifyPress} />
+				<FavoriteButton event={event} favorite={favorite} style={styles.featuredFavoritePosition} />
 			</View>
 
 			{/* 1 linha: `Featured` tem altura fixa (288) — um título de 2 linhas
@@ -297,12 +306,12 @@ function MapPreviewPrivacyIcon({ privacy }: { privacy: EventPrivacy }) {
 function MiniCard({
 	event,
 	onPress,
-	onNotifyPress,
+	favorite,
 	accessibleLabel,
 }: {
 	event: Event;
 	onPress?: () => void;
-	onNotifyPress?: () => void;
+	favorite?: FavoriteToggle;
 	accessibleLabel: string;
 }) {
 	const tag = event.tags?.[0];
@@ -344,7 +353,8 @@ function MiniCard({
 				{tag ? <Chip label={tag} categoryType="macro" size="sm" isSelected /> : <View />}
 				<AttendeesGroup attendees={event.attendeeAvatars} />
 			</View>}
-			<NotifyButton style={styles.miniNotifyPosition} onPress={onNotifyPress} />
+			{/* Irmão do Pressable do card, não filho: tocar na estrela não abre o evento. */}
+			<FavoriteButton event={event} favorite={favorite} style={styles.miniFavoritePosition} />
 		</View>
 	);
 }
@@ -490,7 +500,7 @@ const styles = StyleSheet.create({
 	},
 	featuredImage: { width: '100%', height: '100%' },
 	privacyTagWrap: { position: 'absolute', top: spacing[12], left: spacing[12], zIndex: layout.eventCard.overlayZIndex },
-	featuredNotifyPosition: {
+	featuredFavoritePosition: {
 		position: 'absolute',
 		top: spacing[12],
 		right: spacing[12],
@@ -572,7 +582,7 @@ const styles = StyleSheet.create({
 	},
 	miniImage: { width: '100%', height: '100%' },
 	overlayBadge: { position: 'absolute', top: spacing[8], left: spacing[8], zIndex: layout.eventCard.overlayZIndex },
-	miniNotifyPosition: {
+	miniFavoritePosition: {
 		position: 'absolute',
 		top: spacing[8],
 		right: spacing[8],
