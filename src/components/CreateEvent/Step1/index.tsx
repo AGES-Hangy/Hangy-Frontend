@@ -1,14 +1,12 @@
 import type { ViewInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, type ScrollViewInstance, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, type ScrollViewInstance, StyleSheet, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
 import { spacing } from '@/constants/layout';
-import { colors } from '@/constants/colors';
-import { typography } from '@/constants/typography';
-import { useImageUpload } from '@/hooks/useImageUpload';
 import { useTags } from '@/hooks/useTags';
+import { moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
 
 import { describeMissing, ErrorSummary } from '@/components/CreateEvent/ErrorSummary';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
@@ -23,9 +21,17 @@ type Step1Props = {
   missing: MissingField[];
   /** Quantos toques em "Continuar". Cada incremento é uma tentativa nova. */
   submitCount: number;
+  /** Só definido enquanto a capa está sendo enviada. */
+  coverProgress?: number;
+  coverError: string | null;
+  /** A capa foi recusada ao publicar: rolar até o campo e levar o foco a ele. */
+  focusCover: boolean;
   onChangeTitle: (value: string) => void;
   onChangeDescription: (value: string) => void;
-  onChangeCover: (uri: string | null) => void;
+  onPickCover: () => void;
+  onCancelCover: () => void;
+  onRemoveCover: () => void;
+  onCoverFocused: () => void;
   onToggleTag: (id: string) => void;
 };
 
@@ -34,16 +40,22 @@ export function Step1({
   scrollRef,
   missing,
   submitCount,
+  coverProgress,
+  coverError,
+  focusCover,
   onChangeTitle,
   onChangeDescription,
-  onChangeCover,
+  onPickCover,
+  onCancelCover,
+  onRemoveCover,
+  onCoverFocused,
   onToggleTag,
 }: Step1Props) {
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
-  const { pickImage, error: coverError } = useImageUpload();
 
   const containerRef = useRef<ViewInstance>(null);
   const titleRef = useRef<ViewInstance>(null);
+  const coverRef = useRef<ViewInstance>(null);
   const tagsRef = useRef<ViewInstance>(null);
   const fieldRefs: Record<MissingField, React.RefObject<ViewInstance | null>> = {
     title: titleRef,
@@ -62,6 +74,24 @@ export function Step1({
   const showTitleError = (submitAttempted || titleBlurred) && isTitleMissing;
   const showSummary = submitAttempted && missing.length > 0;
 
+  const scrollToField = (node: ViewInstance) => {
+    const scroll = scrollRef.current;
+    // Content container, não o nó externo: na web o `measureLayout` do RNW
+    // devolve `y` relativo à viewport, já descontado o scroll atual, e o alvo
+    // sairia errado com a página rolada. E não `scroll.getInnerViewNode()`
+    // para chegar nesse container: na New Architecture (Fabric) esse método
+    // devolve um número de tag nativa, e `measureLayout` exige uma ref de
+    // componente nativo — passar o número faz a chamada virar no-op
+    // silencioso. Como o Step1 é o único filho do ScrollView, sua própria
+    // raiz já é esse container.
+    const contentNode = containerRef.current;
+    if (!scroll || !contentNode) return;
+
+    node.measureLayout(contentNode, (_x, y) => {
+      scroll.scrollTo({ y: Math.max(y - SCROLL_MARGIN, 0), animated: true });
+    });
+  };
+
   // Só `submitCount` nas dependências: o efeito reage ao toque em "Continuar",
   // não às mudanças do formulário, e lê o `missing` do render em que o contador
   // subiu.
@@ -76,29 +106,39 @@ export function Step1({
     // da lista é a que precisa entrar em foco.
     const firstMissing = missing[0];
     const node = fieldRefs[firstMissing].current;
-    const scroll = scrollRef.current;
-    // Content container, não o nó externo: na web o `measureLayout` do RNW
-    // devolve `y` relativo à viewport, já descontado o scroll atual, e o alvo
-    // sairia errado com a página rolada. E não `scroll.getInnerViewNode()`
-    // para chegar nesse container: na New Architecture (Fabric) esse método
-    // devolve um número de tag nativa, e `measureLayout` exige uma ref de
-    // componente nativo — passar o número faz a chamada virar no-op
-    // silencioso. Como o Step1 é o único filho do ScrollView, sua própria
-    // raiz já é esse container.
-    const contentNode = containerRef.current;
-    if (!node || !scroll || !contentNode) return;
+    if (!node) return;
 
     // Medido agora, e não no `onLayout`: o ErrorSummary entra acima dos campos
     // neste mesmo render, então qualquer posição guardada antes do toque já
     // nasce defasada.
-    node.measureLayout(contentNode, (_x, y) => {
-      scroll.scrollTo({ y: Math.max(y - SCROLL_MARGIN, 0), animated: true });
-    });
+    scrollToField(node);
   }, [submitCount]);
 
-  const handlePickCover = async () => {
-    const picked = await pickImage();
-    if (picked) onChangeCover(picked.uri);
+  const coverState = coverError
+    ? 'error'
+    : coverProgress !== undefined ? 'uploading' : data.coverUri ? 'filled' : 'empty';
+  const previousCoverStateRef = useRef(coverState);
+
+  // No web, o botão acionado (adicionar, cancelar, remover) some quando o
+  // FileUpload troca de estado, e o foco do teclado cai no `body`. Só na troca,
+  // e não ao montar, para não tirar o foco de quem acabou de abrir a etapa.
+  useEffect(() => {
+    if (previousCoverStateRef.current === coverState) return;
+    previousCoverStateRef.current = coverState;
+    const node = coverRef.current;
+    if (node) restoreLostFocus(node);
+  }, [coverState]);
+
+  // No `onLayout`, e não num efeito: o 400 da capa chega na etapa 2, então o
+  // Step1 monta no mesmo render em que `focusCover` liga, e a posição do campo
+  // só é confiável depois do primeiro layout.
+  const handleCoverLayout = () => {
+    const node = coverRef.current;
+    if (!focusCover || !node) return;
+
+    scrollToField(node);
+    moveAccessibilityFocus(node);
+    onCoverFocused();
   };
 
   return (
@@ -135,20 +175,17 @@ export function Step1({
         />
       </View>
 
-      <View style={styles.field}>
+      <View style={styles.field} ref={coverRef} onLayout={handleCoverLayout}>
         <FileUpload
           label="Capa"
           badge="Opcional"
           value={data.coverUri ? { uri: data.coverUri } : null}
+          progress={coverProgress}
           error={coverError ?? undefined}
-          onPick={handlePickCover}
-          onRemove={() => onChangeCover(null)}
+          onPick={onPickCover}
+          onCancel={onCancelCover}
+          onRemove={onRemoveCover}
         />
-        {data.coverUri && (
-          <Text style={styles.coverNotice}>
-            Capa selecionada apenas para prévia. Remova-a para publicar sem capa; o envio de imagens ainda não está disponível.
-          </Text>
-        )}
       </View>
 
       <View style={styles.field} ref={tagsRef}>
@@ -169,10 +206,5 @@ export function Step1({
 const styles = StyleSheet.create({
   field: {
     marginBottom: spacing[24],
-  },
-  coverNotice: {
-    ...typography.bodyS,
-    color: colors.text.secondary,
-    marginTop: spacing[8],
   },
 });
