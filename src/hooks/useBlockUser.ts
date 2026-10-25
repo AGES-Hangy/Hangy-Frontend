@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
+import { invalidateRelationships } from '@/utils/relationshipChanges';
 import { invalidateFeed } from '@/hooks/useFeed';
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
@@ -23,6 +24,7 @@ export function useBlockUser() {
     try {
       await apiFetch<void>(endpoints.userBlock(userId), { method: 'POST' });
       invalidateFeed({ discardCache: true });
+      invalidateRelationships();
       return 'done';
     } catch (caught) {
       // O `apiFetch` já avisa a sessão expirada e volta para o Login.
@@ -30,6 +32,7 @@ export function useBlockUser() {
       // Já bloqueado: o resultado que a pessoa pediu já vale.
       if (isApiErrorLike(caught) && caught.status === 409) {
         invalidateFeed({ discardCache: true });
+        invalidateRelationships();
         return 'done';
       }
       if (isApiErrorLike(caught) && caught.status === 404) return 'unavailable';

@@ -1,6 +1,8 @@
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
+import { onRelationshipsChanged } from '@/utils/relationshipChanges';
 import { endpoints } from '@/constants/api';
 import type { EventParticipantItem, ParticipantsPage, ParticipationStatus } from '@/types/event';
 import { apiFetch } from '@/utils/http';
@@ -56,7 +58,9 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
   /** Evento encerrado ou sem permissão: a tela vira somente leitura. */
   const [isReadOnly, setIsReadOnly] = useState(false);
 
+  const revision = useRef(0);
   const load = useCallback(async () => {
+    const request = ++revision.current;
     if (!eventId) {
       setLoadedEventId(undefined);
       setConfirmed([]);
@@ -68,11 +72,20 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
       return;
     }
 
+    setConfirmed([]);
+    setPending([]);
+    setConfirmedCount(0);
+    setPendingCount(0);
+    setIsFull(false);
+    setIsReadOnly(false);
+    inFlight.current.clear();
+    setProcessing(new Set());
     setIsLoading(true);
     setError(null);
 
     try {
       const confirmedPage = await apiFetch<ParticipantsPage>(endpoints.eventParticipants(eventId));
+      if (request !== revision.current) return;
       setConfirmed(confirmedPage.items);
       setConfirmedCount(confirmedPage.counts.CONFIRMED ?? confirmedPage.items.length);
 
@@ -81,10 +94,12 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
           const pendingPage = await apiFetch<ParticipantsPage>(
             endpoints.eventParticipants(eventId, 'PENDING'),
           );
+          if (request !== revision.current) return;
           setPending(pendingPage.items);
           setPendingCount(pendingPage.counts.PENDING ?? pendingPage.items.length);
           setPendingVisible(true);
         } catch {
+          if (request !== revision.current) return;
           // O papel de organizador pode ter mudado entre telas: um 403 aqui
           // não invalida os confirmados que já carregaram, só esconde a seção.
           setPending([]);
@@ -97,6 +112,7 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
         setPendingVisible(false);
       }
     } catch (caught) {
+      if (request !== revision.current) return;
       // Um 403 no GET dos confirmados não traz lista para exibir. Não manter
       // uma lista antiga nem fingir que o evento está vazio.
       const load403 =
@@ -118,14 +134,17 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
         setError(describeLoadError(caught));
       }
     } finally {
+      if (request !== revision.current) return;
       setLoadedEventId(eventId);
       setIsLoading(false);
     }
   }, [eventId, isOrganizer]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(useCallback(() => {
+    void load();
+    return () => { ++revision.current; };
+  }, [load]));
+  useEffect(() => onRelationshipsChanged(() => { void load(); }), [load]);
 
   const markProcessing = useCallback((participantId: string, active: boolean) => {
     setProcessing((current) => {
@@ -147,6 +166,7 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
       status: ParticipationStatus,
       successMessage: string | null,
     ) => {
+      const request = revision.current;
       const participantId = participant.participant_id;
       if (!eventId || !isOrganizer || isReadOnly || inFlight.current.has(participantId)) return;
 
@@ -179,8 +199,14 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
           body: JSON.stringify({ status }),
         });
 
+        if (request !== revision.current) return;
         if (successMessage) addToast({ type: 'success', message: successMessage });
       } catch (caught) {
+        if (request !== revision.current) return;
+        if (typeof caught === 'object' && caught !== null && (caught as { status?: number }).status === 404) {
+          void load();
+          return;
+        }
         // Reverte apenas esta pessoa: restaurar um snapshot completo apagaria
         // o sucesso de outra ação que terminou enquanto esta estava em voo.
         if (status === 'CONFIRMED') {
@@ -201,6 +227,7 @@ export function useEventParticipants(eventId: string | undefined, isOrganizer: b
         if (failure.readOnly) setIsReadOnly(true);
         if (failure.shouldReload) load();
       } finally {
+        if (request !== revision.current) return;
         inFlight.current.delete(participantId);
         markProcessing(participantId, false);
       }

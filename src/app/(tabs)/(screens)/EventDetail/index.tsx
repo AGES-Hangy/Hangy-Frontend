@@ -231,7 +231,9 @@ export default function EventDetail() {
       reload();
     } catch (err) {
       const apiError = err as ParticipationError;
-      if (apiError.status === 409) {
+      if (apiError.status === 404) {
+        addToast({ type: 'warning', message: 'Este evento não está mais disponível.' });
+      } else if (apiError.status === 409) {
         addToast({ type: 'warning', message: 'Este evento está lotado' });
       } else {
         addToast({ type: 'error', message: 'Não foi possível concluir. Tente de novo.' });

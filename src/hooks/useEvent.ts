@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
+import { onRelationshipsChanged } from '@/utils/relationshipChanges';
 import { endpoints } from '@/constants/api';
 import type { EventDetail } from '@/types/event';
 import { apiFetch } from '@/utils/http';
@@ -41,6 +42,7 @@ export function useEvent(eventId: string | undefined) {
       return;
     }
 
+    setEvent(null);
     setIsLoading(true);
     setError(null);
 
@@ -64,7 +66,13 @@ export function useEvent(eventId: string | undefined) {
   // dispara um novo GET para não mostrar a resposta anterior à aprovação.
   useFocusEffect(useCallback(() => {
     void load();
+    return () => { ++latestRequest.current; };
   }, [load]));
+
+  useEffect(() => onRelationshipsChanged(() => {
+    setEvent(null);
+    void load();
+  }), [load]);
 
   // Enquanto o estado for de outro evento, mostra carregando em vez dele.
   const isStale = loadedId !== eventId;
