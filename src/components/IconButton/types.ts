@@ -30,6 +30,13 @@ export type IconButtonProps = {
   size?: IconButtonSize;
   /** Bloqueia o toque e aplica o estado desabilitado. */
   disabled?: boolean;
+  /**
+   * Preenche o ícone — para toggles cujo estado ativo é o ícone cheio (ex.:
+   * estrela de favorito). No `Filled` o ícone cheio (traço e
+   * preenchimento) usa o fundo do `Tonal`; nas outras variantes, a cor do traço. Só vale para `icon` por nome; um
+   * elemento pronto já controla o próprio preenchimento.
+   */
+  iconFilled?: boolean;
   onPress?: () => void;
   /** Escape hatch de layout. Não use para sobrescrever cor ou raio. */
   style?: StyleProp<ViewStyle>;

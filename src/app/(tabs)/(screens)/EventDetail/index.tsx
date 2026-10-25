@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,18 +11,20 @@ import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/Badge';
-import { OfflineBanner } from '@/components/OfflineBanner';
 import { PHOTO_GRID_COLUMNS, PHOTO_GRID_GAP, PhotoTile } from '@/components/PhotoTile';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventShare } from '@/hooks/useEventShare';
 import { useExperiencePhotos } from '@/hooks/useExperiencePhotos';
 import type { PickedImage } from '@/hooks/useImageUpload';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useFavoriteEvent } from '@/hooks/useFavoriteEvent';
 import { useInviteAccept, type InviteAcceptError } from '@/hooks/useInviteAccept';
 import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
@@ -120,6 +122,22 @@ export default function EventDetail() {
   useEffect(() => {
     if (pickError) addToast({ type: 'warning', message: pickError });
   }, [pickError]);
+  const { user } = useCurrentUser();
+  const { isFavorited, toggle: toggleFavorite } = useFavoriteEvent(
+    event?.event_id,
+    event?.viewer.is_favorited ?? false,
+    {
+      eventTitle: event?.title,
+      onUnavailable: () => (router.canGoBack() ? router.back() : router.replace('/Home')),
+    },
+  );
+
+  // Sem TopAppBar, o banner precisa da área segura para não ficar sob a barra de status.
+  const offlineBanner = isOffline ? (
+    <View style={[styles.offlineBanner, { top: insets.top }]}>
+      <OfflineBanner />
+    </View>
+  ) : null;
 
   // Sem barra superior: os botões desta tela ficam por cima da capa, e uma
   // TopAppBar em cima disso viraria uma segunda linha de ações.
@@ -171,6 +189,7 @@ export default function EventDetail() {
     return (
       <View style={styles.errorScreen}>
         <EmptyState context="MyEvents" title="Confirmando sua participação..." text="Só um instante." cta={false} />
+        {offlineBanner}
       </View>
     );
   }
@@ -186,11 +205,12 @@ export default function EventDetail() {
           ctaLabel="Voltar para o início"
           onCtaPress={() => router.replace('/Home')}
         />
+        {offlineBanner}
       </View>
     );
   }
 
-  if (isLoading) return <EventDetailSkeleton />;
+  if (isLoading) return <EventDetailSkeleton offlineBanner={offlineBanner} />;
 
   if (error || !event) {
     const failure = error ?? {
@@ -209,10 +229,12 @@ export default function EventDetail() {
           ctaLabel={failure.canRetry ? 'Tentar de novo' : 'Voltar'}
           onCtaPress={failure.canRetry ? reload : router.back}
         />
+        {offlineBanner}
       </View>
     );
   }
 
+  const canFavorite = user?.userType === 'PERSONAL' && event.status !== 'CANCELLED';
   const action = MAIN_ACTION[event.viewer.available_action] ?? null;
   const preview = event.participants_preview;
   const pendingCount = event.pending_requests_count ?? 0;
@@ -406,7 +428,7 @@ export default function EventDetail() {
             <Rect x="0" y="0" width="100%" height="100%" fill="url(#scrim)" />
           </Svg>
 
-          <View style={[styles.heroActions, { top: insets.top + spacing[16] }]}>
+          <View style={[styles.heroActions, { top: insets.top + (isOffline ? spacing[64] : spacing[16]) }]}>
             <IconButton
               icon="x"
               variant="Tonal"
@@ -415,13 +437,16 @@ export default function EventDetail() {
             />
 
             <View style={styles.heroActionsRight}>
-              <IconButton
-                icon="star"
-                variant="Tonal"
-                accessibilityLabel="Favoritar evento"
-                // Favoritar é outra US; o botão existe no frame desta tela.
-                onPress={() => addToast({ type: 'info', message: 'Favoritar chega em outra US.' })}
-              />
+              {canFavorite && (
+                <IconButton
+                  icon="star"
+                  variant={isFavorited ? 'Filled' : 'Tonal'}
+                  iconFilled={isFavorited}
+                  accessibilityLabel={isFavorited ? 'Remover dos favoritos' : 'Favoritar evento'}
+                  disabled={isOffline}
+                  onPress={toggleFavorite}
+                />
+              )}
               {event.viewer.is_organizer && (
                 <IconButton
                   icon="settings"
@@ -655,13 +680,13 @@ export default function EventDetail() {
         isLoading={removingPhotoId !== null}
       />
 
-      {canAddPhoto && isOffline && <OfflineBanner />}
+      {offlineBanner}
     </View>
   );
 }
 
 /** Esqueleto do carregamento: capa, título e blocos, nunca tela em branco. */
-function EventDetailSkeleton() {
+function EventDetailSkeleton({ offlineBanner }: { offlineBanner: ReactNode }) {
   return (
     <View style={styles.screen} accessibilityLabel="Carregando evento" accessibilityRole="progressbar">
       <View style={styles.skeletonHero} />
@@ -678,6 +703,7 @@ function EventDetailSkeleton() {
           <View style={[styles.skeletonBlock, styles.skeletonLineShort]} />
         </View>
       </View>
+      {offlineBanner}
     </View>
   );
 }
@@ -715,6 +741,12 @@ const styles = StyleSheet.create({
   heroActionsRight: {
     flexDirection: 'row',
     gap: spacing[8],
+  },
+  offlineBanner: {
+    position: 'absolute',
+    pointerEvents: 'box-none',
+    left: 0,
+    right: 0,
   },
   heroIdentity: {
     position: 'absolute',

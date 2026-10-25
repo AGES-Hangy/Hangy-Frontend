@@ -9,6 +9,7 @@
 
 import {
   ArrowLeft,
+  Ban,
   Bell,
   Calendar,
   CalendarX,
@@ -51,6 +52,7 @@ import {
 
 export const icons = {
   'arrow-left': ArrowLeft,
+  ban: Ban,
   bell: Bell,
   calendar: Calendar,
   'calendar-x': CalendarX,

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+
+import { useFocusEffect } from 'expo-router';
 
 import { endpoints } from '@/constants/api';
 import { ApiError, apiFetch } from '@/utils/http';
@@ -47,6 +49,8 @@ export function useConnections() {
   const [hasMore, setHasMore] = useState(false);
   const [search, setSearch] = useState('');
 
+  const connectionsRequest = useRef(0);
+  const pendingRequest = useRef(0);
   const cursorRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,6 +59,7 @@ export function useConnections() {
   const fetchConnections = useCallback(async (searchTerm: string, replace: boolean) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
+    const request = ++connectionsRequest.current;
 
     const cursor = replace ? null : cursorRef.current;
 
@@ -69,6 +74,7 @@ export function useConnections() {
       const path = endpoints.connections({ cursor, search: searchTerm || undefined });
       const data = await apiFetch<ConnectionsPage>(path);
 
+      if (request !== connectionsRequest.current) return;
       cursorRef.current = data.next_cursor;
       setHasMore(data.next_cursor !== null);
 
@@ -79,8 +85,10 @@ export function useConnections() {
         return [...prev, ...fresh];
       });
     } catch (err) {
+      if (request !== connectionsRequest.current) return;
       setError(mapError(err));
     } finally {
+      if (request !== connectionsRequest.current) return;
       loadingRef.current = false;
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -88,12 +96,14 @@ export function useConnections() {
   }, []);
 
   const fetchPending = useCallback(async () => {
+    const request = ++pendingRequest.current;
     try {
       let cursor: string | null = null;
       let allItems: PendingConnectionItem[] = [];
       do {
         const path = endpoints.connectionsPending(cursor);
         const data = await apiFetch<PendingPage>(path);
+        if (request !== pendingRequest.current) return;
         allItems = [...allItems, ...data.items];
         cursor = data.next_cursor;
       } while (cursor);
@@ -127,13 +137,22 @@ export function useConnections() {
     }, DEBOUNCE_MS);
   }, [fetchConnections]);
 
-  useEffect(() => {
-    reload();
+  // A tela permanece montada ao abrir um perfil. Ao voltar de um bloqueio,
+  // remova o cache antes de buscar: nem uma falha pode reexibir a pessoa.
+  useFocusEffect(useCallback(() => {
+    setConnections([]);
+    setPendingConnections([]);
+    void reload();
     return () => {
+      // Respostas de antes da saída não podem sobrescrever a próxima carga.
+      ++connectionsRequest.current;
+      ++pendingRequest.current;
+      loadingRef.current = false;
+      setIsLoading(false);
+      setIsLoadingMore(false);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reload]));
 
   const filteredPending = pendingConnections.filter(item =>
     !debouncedSearchRef.current ||

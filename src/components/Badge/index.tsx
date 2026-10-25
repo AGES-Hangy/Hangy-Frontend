@@ -156,4 +156,5 @@ const styles = StyleSheet.create({
 
 export type { BadgeFamily, BadgeProps, PrivacyBadgeValue, StatusBadgeValue } from './types';
 export { getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from './utils';
+export { resolvePrivacyVariant } from './types';
 export type { BackendPrivacy, BackendStatus } from './utils';

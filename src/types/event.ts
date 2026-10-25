@@ -50,6 +50,7 @@ export interface EventViewer {
   participation_status: ParticipationStatus | null;
   can_see_participants: boolean;
   available_action: ViewerAction;
+  is_favorited: boolean;
 }
 
 export interface ParticipantsPreview {
@@ -139,8 +140,14 @@ export interface NearbyEventItem {
   event_id: string;
   title: string;
   event_date: string;
+  /** Em `APPROXIMATE` é o centro da área, não o ponto do evento. */
   location: { latitude: number; longitude: number };
+  /** Endereço em `EXACT`; bairro e cidade em `APPROXIMATE` (`null` sem bairro). */
   location_name: string | null;
+  /** Ausente enquanto o backend não entrega a task 119 — tratar como `EXACT`. */
+  location_precision?: LocationPrecision;
+  /** Raio da área em metros; só faz sentido em `APPROXIMATE`. */
+  location_radius_m?: number | null;
   cover_photo_url: string | null;
   /**
    * Vem do contrato do backend #86, ainda sem merge. Opcional até o endpoint
@@ -149,7 +156,8 @@ export interface NearbyEventItem {
   privacy?: EventPrivacy;
   /** Distância até o centro da busca, calculada pelo backend. */
   distance_m: number;
-  participants_count: number;
+  /** `null` em evento privado para quem não foi aprovado. */
+  participants_count: number | null;
   is_confirmed: boolean;
 }
 

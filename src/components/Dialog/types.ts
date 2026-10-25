@@ -7,7 +7,8 @@ export type DialogVariant =
   | 'DiscardEvent'
   | 'DeleteAccount'
   | 'RemoveTagArea'
-  | 'DiscardChanges';
+  | 'DiscardChanges'
+  | 'Unblock';
 
 export type DialogProps = {
   visible: boolean;
