@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
@@ -14,21 +14,24 @@ import { IconButton } from '@/components/IconButton';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/Badge';
-import { PhotoTile } from '@/components/PhotoTile';
+import { PHOTO_GRID_COLUMNS, PHOTO_GRID_GAP, PhotoTile } from '@/components/PhotoTile';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useExperiencePhotos } from '@/hooks/useExperiencePhotos';
+import type { PickedImage } from '@/hooks/useImageUpload';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useFavoriteEvent } from '@/hooks/useFavoriteEvent';
 import { useInviteAccept, type InviteAcceptError } from '@/hooks/useInviteAccept';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
 import { formatDateTime } from '@/utils/datetime';
 import { getToken } from '@/utils/auth';
+import type { ApiError } from '@/utils/http';
 import { PENDING_INVITE_KEY } from '@/constants/invite';
 
 /**
@@ -45,6 +48,8 @@ const HERO_HEIGHT = 237;
 const SCRIM_HEIGHT = 150;
 /** Opacidade do degradê no ponto mais escuro, sobre `color/bg/inverse`. */
 const SCRIM_OPACITY = 0.82;
+/** Altura da barra de progresso sobre a miniatura em envio. */
+const UPLOAD_PROGRESS_HEIGHT = spacing[4];
 
 /**
  * Ação principal do rodapé. Vem pronta de `viewer.available_action` — a tela
@@ -83,8 +88,42 @@ export default function EventDetail() {
   const { share, isLoading: isSharing } = useEventShare(resolvedEventId);
   const { join, cancel, isSubmitting } = useParticipation(event?.event_id ?? resolvedEventId ?? '');
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const { user } = useCurrentUser();
   const { isOffline } = useNetworkStatus();
+  const { width: windowWidth } = useWindowDimensions();
+  // A experiência exige descrição, e o frame não tem campo para ela: vai a do
+  // evento, preenchida na criação. Sem descrição (opcional lá), vai o título.
+  const experienceDescription = event?.description?.trim() || event?.title || '';
+  const {
+    photos,
+    pickPhoto,
+    pickError,
+    isPicking,
+    uploadPhoto,
+    removePhoto,
+    dropPhoto,
+    resetExperience,
+    removingPhotoId,
+  } = useExperiencePhotos(resolvedEventId, experienceDescription);
+  // 400/403 no envio: a ação some até o servidor mudar de ideia (novo evento).
+  const [isPhotoActionHidden, setIsPhotoActionHidden] = useState(false);
+  // 409 `Photo limit reached`: o botão continua lá, mas desabilitado.
+  const [isPhotoLimitReached, setIsPhotoLimitReached] = useState(false);
+  // Fotos cujo `DELETE` voltou 403: a lixeira some só delas.
+  const [undeletablePhotoIds, setUndeletablePhotoIds] = useState<string[]>([]);
+  const [photoToRemove, setPhotoToRemove] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsPhotoActionHidden(false);
+    setIsPhotoLimitReached(false);
+    setUndeletablePhotoIds([]);
+    setPhotoToRemove(null);
+  }, [event?.event_id]);
+
+  // Arquivo recusado no aparelho: fora de JPG/PNG ou acima de 5 MB.
+  useEffect(() => {
+    if (pickError) addToast({ type: 'warning', message: pickError });
+  }, [pickError]);
+  const { user } = useCurrentUser();
   const { isFavorited, toggle: toggleFavorite } = useFavoriteEvent(
     event?.event_id,
     event?.viewer.is_favorited ?? false,
@@ -225,6 +264,106 @@ export default function EventDetail() {
       ? event.viewer.participation_status
       : undefined;
 
+  const isFinished = event.status === 'FINISHED';
+  // Só quem confirmou presença num evento encerrado publica — fora disso a
+  // ação nem aparece, para a UI não oferecer o que a API vai negar.
+  const canAddPhoto =
+    isFinished && event.viewer.participation_status === 'CONFIRMED' && !isPhotoActionHidden;
+  const photoTileSize =
+    (windowWidth - spacing[16] * 2 - PHOTO_GRID_GAP * (PHOTO_GRID_COLUMNS - 1)) / PHOTO_GRID_COLUMNS;
+
+  function startUpload(picked: PickedImage) {
+    uploadPhoto(picked).catch((err) => handleUploadError(err as ApiError, picked));
+  }
+
+  async function handleAddPhoto() {
+    const picked = await pickPhoto();
+    if (picked) startUpload(picked);
+  }
+
+  /** Tabela de tratamento de erro da task — envio da foto. */
+  function handleUploadError(apiError: ApiError, picked: PickedImage) {
+    if (apiError.status === 401 || apiError.kind === 'cancelled') return;
+    const retry = { actionLabel: 'Tentar de novo', onAction: () => startUpload(picked) };
+
+    if (apiError.kind === 'timeout') {
+      addToast({ type: 'error', message: 'A conexão demorou demais', ...retry });
+      return;
+    }
+    if (apiError.kind === 'network') {
+      addToast({ type: 'error', message: 'Sem conexão com a internet' });
+      return;
+    }
+
+    switch (apiError.status) {
+      case 400:
+        addToast({ type: 'info', message: 'Você pode adicionar fotos depois que o evento terminar' });
+        setIsPhotoActionHidden(true);
+        return;
+      case 403:
+        addToast({ type: 'warning', message: 'Só quem participou pode adicionar fotos' });
+        setIsPhotoActionHidden(true);
+        return;
+      case 404:
+        if (apiError.detail === 'Experience not found') {
+          // Experiência guardada sumiu no servidor: esquece e recarrega.
+          resetExperience();
+          reload();
+          return;
+        }
+        addToast({ type: 'error', message: 'Evento não encontrado ou não disponível para você' });
+        router.back();
+        return;
+      case 409:
+        if (apiError.detail === 'Photo limit reached') {
+          addToast({ type: 'warning', message: 'Você atingiu o limite de fotos para este evento' });
+          setIsPhotoLimitReached(true);
+          return;
+        }
+        // `Experience already exists`: o usuário já tem registro neste evento
+        // e a API não devolve o id dele — tentar de novo não resolve.
+        addToast({ type: 'error', message: 'Não foi possível enviar a foto.' });
+        return;
+      case 413:
+        addToast({ type: 'warning', message: 'A foto precisa ter até 5 MB' });
+        return;
+      case 415:
+        addToast({ type: 'warning', message: 'Use uma foto em JPG ou PNG' });
+        return;
+      default:
+        addToast({ type: 'error', message: 'Não foi possível enviar a foto. Tente de novo.', ...retry });
+    }
+  }
+
+  async function handleRemoveConfirm() {
+    const photoId = photoToRemove;
+    if (!photoId) return;
+    try {
+      if (!await removePhoto(photoId)) return;
+      setIsPhotoLimitReached(false);
+      setPhotoToRemove(null);
+    } catch (err) {
+      const apiError = err as ApiError;
+      if (apiError.kind === 'cancelled') return;
+      setPhotoToRemove(null);
+      if (apiError.status === 401) return;
+      if (apiError.status === 403) {
+        addToast({ type: 'warning', message: 'Você não pode remover esta foto' });
+        setUndeletablePhotoIds((ids) => [...ids, photoId]);
+      } else if (apiError.status === 404) {
+        // `Photo not found`: silencioso, a foto só sai da grade.
+        dropPhoto(photoId);
+        setIsPhotoLimitReached(false);
+      } else if (apiError.kind === 'timeout') {
+        addToast({ type: 'error', message: 'A conexão demorou demais' });
+      } else if (apiError.kind === 'network') {
+        addToast({ type: 'error', message: 'Sem conexão com a internet' });
+      } else {
+        addToast({ type: 'error', message: 'Não foi possível remover a foto. Tente de novo.' });
+      }
+    }
+  }
+
   async function handleJoin() {
     try {
       await join();
@@ -351,6 +490,15 @@ export default function EventDetail() {
         </View>
 
         <View style={styles.body}>
+          {isFinished && (
+            <View style={styles.section}>
+              <View style={styles.finishedBanner}>
+                <Icon name="info" size={20} color={palette.info.default} absoluteStrokeWidth />
+                <Text style={styles.finishedBannerText}>Este evento já aconteceu.</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.section}>
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
@@ -428,6 +576,46 @@ export default function EventDetail() {
             </View>
           )}
 
+          {/* Fotos que o usuário adicionou nesta visita. Enquanto envia, a
+              miniatura otimista mostra o progresso; o resto da tela segue
+              utilizável. A lixeira só aparece depois do 201 — antes disso a
+              foto ainda não é do servidor. */}
+          {photos.length > 0 && (
+            <View style={[styles.section, styles.photoGrid]}>
+              {photos.map((photo, index) => {
+                const position = `Foto ${index + 1} de ${photos.length}`;
+                const isUploading = photo.photoId === null;
+                const percent = Math.round(photo.progress * 100);
+                const canRemove =
+                  !isUploading &&
+                  !isOffline &&
+                  removingPhotoId !== photo.photoId &&
+                  !undeletablePhotoIds.includes(photo.photoId as string);
+
+                return (
+                  <View key={photo.localId} style={{ width: photoTileSize }}>
+                    <PhotoTile
+                      uri={photo.uri}
+                      accessibilityLabel={isUploading ? `${position}, enviando` : position}
+                      removeAccessibilityLabel={`Remover ${position.toLowerCase()}`}
+                      onRemove={canRemove ? () => setPhotoToRemove(photo.photoId) : undefined}
+                    />
+                    {isUploading && (
+                      <View
+                        style={styles.uploadTrack}
+                        accessibilityRole="progressbar"
+                        accessibilityLabel={`Enviando ${position.toLowerCase()}`}
+                        accessibilityValue={{ min: 0, max: 100, now: percent }}
+                      >
+                        <View style={[styles.uploadFill, { width: `${percent}%` }]} />
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           <View style={styles.section}>
             <View style={styles.divider} />
           </View>
@@ -450,7 +638,18 @@ export default function EventDetail() {
         </View>
       </ScrollView>
 
-      {action && (
+      {canAddPhoto ? (
+        <View style={[styles.cta, { paddingBottom: insets.bottom + spacing[20] }]}>
+          <Button
+            label="Adicionar foto ao meu registro"
+            icon="camera"
+            // Offline e limite atingido: escrita desabilitada, não escondida.
+            disabled={isOffline || isPhotoLimitReached || isPicking}
+            onPress={handleAddPhoto}
+            style={styles.ctaButton}
+          />
+        </View>
+      ) : action && (
         <View style={[styles.cta, { paddingBottom: insets.bottom + spacing[20] }]}>
           <Button
             label={actionLabel ?? action.label}
@@ -476,6 +675,17 @@ export default function EventDetail() {
         onConfirm={handleCancelConfirm}
         onCancel={() => setShowCancelDialog(false)}
         isLoading={isSubmitting}
+      />
+
+      <Dialog
+        visible={photoToRemove !== null}
+        variant="DeleteEvent"
+        title="Remover foto?"
+        description="A foto deixa de aparecer no evento e no seu perfil."
+        confirmLabel="Remover"
+        onConfirm={handleRemoveConfirm}
+        onCancel={() => setPhotoToRemove(null)}
+        isLoading={removingPhotoId !== null}
       />
 
       {offlineBanner}
@@ -570,6 +780,38 @@ const styles = StyleSheet.create({
   /** Padding lateral de tela — sempre 16, como manda o guia. */
   section: {
     paddingHorizontal: spacing[16],
+  },
+
+  finishedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+    padding: spacing[16],
+    borderRadius: radius.md,
+    backgroundColor: palette.info.bg,
+  },
+  finishedBannerText: {
+    flex: 1,
+    ...typography.bodyM,
+    color: palette.info.default,
+  },
+
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: PHOTO_GRID_GAP,
+  },
+  uploadTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: UPLOAD_PROGRESS_HEIGHT,
+    backgroundColor: colors.surface.sunken,
+  },
+  uploadFill: {
+    height: '100%',
+    backgroundColor: colors.action.primary,
   },
 
   infoCard: {

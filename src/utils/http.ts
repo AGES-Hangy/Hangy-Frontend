@@ -12,7 +12,7 @@ import { getToken, removeToken } from '@/utils/auth';
 import { resolveMock, resolveUploadMock } from '@/mocks/eventApi';
 
 /** Por que a chamada falhou — separa "o servidor respondeu" de "nem chegou lá". */
-export type ApiErrorKind = 'http' | 'network' | 'timeout';
+export type ApiErrorKind = 'http' | 'network' | 'timeout' | 'cancelled';
 
 /**
  * Falha de uma chamada à API. Carrega o `status` e o `detail` que o backend
@@ -151,6 +151,8 @@ export async function apiFetch<T>(
 
 /** Arquivo local a enviar: URI `file://` no nativo, `blob:` na web. */
 export interface UploadFile {
+  /** Blob preservado para retries na Web, independente da prévia. */
+  file?: Blob;
   uri: string;
   mimeType: string;
 }
@@ -166,6 +168,7 @@ export interface ApiUploadOptions {
  * falha e não deve virar mensagem de erro.
  */
 export class UploadCancelledError extends Error {
+  readonly kind = 'cancelled';
   constructor() {
     super('cancelled');
     this.name = 'UploadCancelledError';
@@ -176,7 +179,7 @@ async function buildUploadBody(file: UploadFile): Promise<FormData> {
   const name = `upload.${file.mimeType === 'image/png' ? 'png' : 'jpg'}`;
   const form = new FormData();
   if (Platform.OS === 'web') {
-    const blob = await (await fetch(file.uri)).blob();
+    const blob = file.file ?? await (await fetch(file.uri)).blob();
     form.append('file', blob, name);
   } else {
     // O FormData do React Native lê o arquivo de `{ uri, name, type }`; o tipo
@@ -310,7 +313,7 @@ export async function apiUpload<T>(
       return await rejectOnAbort(resolveUploadMock<T>(path, file, { onProgress: reportProgress, signal }), signal);
     }
 
-    const token = await getToken();
+    const token = await getToken().catch(() => { throw new ApiError('network', null, null); });
     const body = await buildUploadBody(file);
     if (signal?.aborted) throw new UploadCancelledError();
 
@@ -318,7 +321,7 @@ export async function apiUpload<T>(
     const parsed = parseJson(text);
 
     if (status === 401) {
-      await handleUnauthorized();
+      try { await handleUnauthorized(); } catch { /* A limpeza não pode esconder o 401. */ }
       throw new ApiError('http', 401, detailOf(parsed?.body), parsed?.body ?? null);
     }
 

@@ -58,6 +58,12 @@ export const endpoints = {
    */
   account: () => '/users/me',
   event: (eventId: string) => `/events/${eventId}`,
+  /** Registro do participante num evento encerrado (task 073 [BE]). */
+  eventExperiences: (eventId: string) => `/events/${eventId}/experiences`,
+  /** Envio do arquivo de uma foto, em `multipart/form-data` (task 225 [BE]). */
+  experienceImages: (experienceId: string) => `/experiences/${experienceId}/images`,
+  /** Remoção de uma foto — só o autor ou o organizador (task 226 [BE]). */
+  experienceImage: (photoId: string) => `/experiences/images/${photoId}`,
   /**
    * Eventos ao redor de um ponto (task 119). A coordenada é o centro do mapa e
    * só existe nesta query — a posição do usuário não é persistida no backend.

@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { classifyUploadError } from '@/utils/apiErrors';
 import { announce } from '@/utils/accessibility';
 import { apiUpload } from '@/utils/http';
+import { resizeUploadImage } from '@/utils/resizeUploadImage';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // 'image/jpg' não é um mimeType padrão, mas algumas câmeras/dispositivos
@@ -22,6 +23,7 @@ export interface PickedImage {
   uri: string;
   mimeType: string;
   fileSize: number | null;
+  file?: Blob;
 }
 
 /** Imagem já enviada: `uri` é a prévia local, `url` é o que vai para a API. */
@@ -32,11 +34,12 @@ export interface UploadedImage {
 
 export interface ImageUploadOptions {
   /** Rota de `endpoints` que recebe o arquivo. */
-  endpoint: string;
+  endpoint?: string;
   /** Campo da resposta 201 que traz a URL hospedada. */
-  urlField: string;
+  urlField?: string;
   /** Recorte pedido no seletor nativo. Sem ele, a imagem vem como foi escolhida. */
   aspect?: [number, number];
+  resizeOversized?: boolean;
   messages: {
     invalidFile: string;
     permissionDenied: string;
@@ -152,7 +155,7 @@ function openFilePickerWeb(): WebFilePicker {
       return;
     }
 
-    settle({ uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size });
+    settle({ uri: URL.createObjectURL(file), mimeType: file.type, fileSize: file.size, file });
   });
   input.addEventListener('cancel', () => settle(null));
 
@@ -192,6 +195,7 @@ export function useImageUpload(options: ImageUploadOptions) {
   optionsRef.current = options;
 
   const [error, setError] = useState<string | null>(null);
+  const [isPicking, setIsPicking] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   /** De 0 a 100; `null` quando a plataforma não informa o total. */
   const [progress, setProgress] = useState<number | null>(null);
@@ -202,6 +206,8 @@ export function useImageUpload(options: ImageUploadOptions) {
   const objectUrlsRef = useRef(new Set<string>());
   const currentUriRef = useRef<string | null>(null);
   const pickRef = useRef<PendingPick | null>(null);
+  const uploadsRef = useRef(new Set<AbortController>());
+  const preparationRef = useRef<object | null>(null);
 
   /** Só revoga o que este hook criou: URIs do nativo e URLs do servidor passam reto. */
   const releaseUri = useCallback((uri: string | null) => {
@@ -225,6 +231,8 @@ export function useImageUpload(options: ImageUploadOptions) {
   const abortPick = useCallback(() => {
     pickRef.current?.web?.abort();
     pickRef.current = null;
+    preparationRef.current = null;
+    if (mountedRef.current) setIsPicking(false);
   }, []);
 
   /** O FileUpload não é região viva: todo erro mostrado também é anunciado. */
@@ -240,6 +248,8 @@ export function useImageUpload(options: ImageUploadOptions) {
       abortPick();
       abortAttempt();
       releaseAll();
+      uploadsRef.current.forEach(controller => controller.abort());
+      uploadsRef.current.clear();
     };
   }, [abortPick, abortAttempt, releaseAll]);
 
@@ -256,13 +266,14 @@ export function useImageUpload(options: ImageUploadOptions) {
 
     const pick: PendingPick = { startedAt: Date.now(), web: null };
     pickRef.current = pick;
+    setIsPicking(true);
     const isCurrentPick = () => mountedRef.current && pickRef.current === pick;
 
     try {
       const { aspect, messages } = optionsRef.current;
       setError(null);
 
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = Platform.OS === 'web' ? { granted: true } : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!isCurrentPick()) return null;
       if (!permission.granted) {
         showError(messages.permissionDenied);
@@ -284,8 +295,14 @@ export function useImageUpload(options: ImageUploadOptions) {
         return null;
       }
       return picked;
+    } catch {
+      if (isCurrentPick()) showError(optionsRef.current.messages.failed);
+      return null;
     } finally {
-      if (pickRef.current === pick) pickRef.current = null;
+      if (pickRef.current === pick) {
+        pickRef.current = null;
+        if (mountedRef.current) setIsPicking(false);
+      }
     }
   }, [abortPick, releaseUri, showError]);
 
@@ -293,7 +310,7 @@ export function useImageUpload(options: ImageUploadOptions) {
     const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
     // Sem o tamanho confirmado, não dá pra garantir o limite de 5 MB — trata
     // como inválido em vez de deixar passar.
-    const isWithinSizeLimit = picked.fileSize !== null && picked.fileSize <= MAX_FILE_SIZE_BYTES;
+    const isWithinSizeLimit = picked.fileSize !== null && picked.fileSize > 0 && picked.fileSize <= MAX_FILE_SIZE_BYTES;
     if (isAcceptedType && isWithinSizeLimit) return true;
 
     releaseUri(picked.uri);
@@ -303,10 +320,36 @@ export function useImageUpload(options: ImageUploadOptions) {
 
   /** Só escolhe e valida, sem enviar. */
   const pickImage = useCallback(async (): Promise<PickedImage | null> => {
-    const picked = await chooseImage();
-    if (!picked || !isAcceptable(picked)) return null;
-    return picked;
-  }, [chooseImage, isAcceptable]);
+    if (preparationRef.current) return null;
+    let picked = await chooseImage();
+    if (!picked) return null;
+    const preparation = {};
+    preparationRef.current = preparation;
+    const isCurrent = () => mountedRef.current && preparationRef.current === preparation;
+    setIsPicking(true);
+    try {
+      if (optionsRef.current.resizeOversized && ACCEPTED_MIME_TYPES.includes(picked.mimeType) &&
+          picked.fileSize !== null && picked.fileSize > MAX_FILE_SIZE_BYTES) {
+        const original = picked;
+        try {
+          picked = await resizeUploadImage(original, MAX_FILE_SIZE_BYTES);
+          if (picked && Platform.OS === 'web' && picked.uri.startsWith('blob:')) objectUrlsRef.current.add(picked.uri);
+        } finally { releaseUri(original.uri); }
+      }
+      if (!isCurrent()) { if (picked) releaseUri(picked.uri); return null; }
+      if (!picked) { showError(optionsRef.current.messages.invalidFile); return null; }
+      if (!isAcceptable(picked)) return null;
+      return picked;
+    } catch {
+      if (isCurrent()) showError(optionsRef.current.messages.failed);
+      return null;
+    } finally {
+      if (preparationRef.current === preparation) {
+        preparationRef.current = null;
+        if (mountedRef.current) setIsPicking(false);
+      }
+    }
+  }, [chooseImage, isAcceptable, releaseUri, showError]);
 
   /** Também desiste de um seletor pendente, que sem `cancel` pode nunca resolver. */
   const cancelUpload = useCallback(() => {
@@ -321,6 +364,7 @@ export function useImageUpload(options: ImageUploadOptions) {
    * devolve `null` e a imagem anterior da tela continua valendo.
    */
   const pickAndUpload = useCallback(async (): Promise<UploadedImage | null> => {
+    if (!optionsRef.current.endpoint || !optionsRef.current.urlField) return null;
     const picked = await chooseImage();
     if (!picked) return null;
 
@@ -330,6 +374,7 @@ export function useImageUpload(options: ImageUploadOptions) {
     if (!isAcceptable(picked)) return null;
 
     const { endpoint, urlField, messages } = optionsRef.current;
+    if (!endpoint || !urlField) { releaseUri(picked.uri); return null; }
     const controller = new AbortController();
     controllerRef.current = controller;
     const attempt = attemptRef.current;
@@ -396,7 +441,25 @@ export function useImageUpload(options: ImageUploadOptions) {
     setError(null);
   }, [cancelUpload, releaseAll]);
 
+  // Fotos da experiência podem enviar mais de um arquivo; capas mantêm pickAndUpload.
+  const cancelUploads = useCallback(() => {
+    abortPick();
+    uploadsRef.current.forEach(controller => controller.abort());
+    uploadsRef.current.clear();
+  }, [abortPick]);
+
+  const uploadImage = useCallback(<T,>(path: string, image: PickedImage, onProgress?: (value: number) => void) => {
+    const controller = new AbortController();
+    uploadsRef.current.add(controller);
+    const promise = apiUpload<T>(path, image, {
+      signal: controller.signal,
+      onProgress: value => { if (value !== null) onProgress?.(value); },
+    }).finally(() => uploadsRef.current.delete(controller));
+    return { promise, cancel: () => controller.abort() };
+  }, []);
+
   return {
+    uploadImage, cancelUploads, releaseImage: releaseUri, isPicking,
     pickImage,
     pickAndUpload,
     cancelUpload,
