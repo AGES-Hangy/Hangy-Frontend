@@ -1,3 +1,4 @@
+import type { TextInstance, ViewInstance } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -112,9 +113,9 @@ export default function UserProfile() {
   const isRelationshipPending = isConnectionPending || isFollowPending;
   const [openDialog, setOpenDialog] = useState<RelationshipDialog | null>(null);
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
-  const relationshipButtonRef = useRef<View>(null);
+  const relationshipButtonRef = useRef<ViewInstance>(null);
   // O nome ou, sem nome, o cabeçalho: o destino do foco quando o botão some.
-  const headerFocusRef = useRef<View | Text>(null);
+  const headerFocusRef = useRef<ViewInstance | TextInstance>(null);
   // Ligado ao fechar o diálogo ou ao responder; consumido quando o botão volta
   // a aceitar foco.
   const returnFocusPending = useRef(false);

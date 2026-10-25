@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { AccessibilityInfo, Platform, type View } from 'react-native';
+import { AccessibilityInfo, Platform, type ViewInstance } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import type { UserEventsTabState } from '@/hooks/useUserEvents';
@@ -23,7 +23,7 @@ function loadedAnnouncement(count: number, isEnd: boolean) {
  */
 export function useProfileEventsLoadMore({ tabs, loadMore, isOffline }: Options) {
   const { addToast } = useToast();
-  const loadMoreButtonRef = useRef<View>(null);
+  const loadMoreButtonRef = useRef<ViewInstance>(null);
   // "Ver mais" em andamento: a aba e quantos itens ela tinha, para anunciar
   // quantos chegaram e devolver o foco ao botão.
   const pendingLoadMore = useRef<{ tab: UserEventsTab; countBefore: number } | null>(null);

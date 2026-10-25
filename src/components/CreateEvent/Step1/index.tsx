@@ -1,5 +1,6 @@
+import type { ViewInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, type ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, type ScrollViewInstance, StyleSheet, Text, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
@@ -17,7 +18,7 @@ const SCROLL_MARGIN = spacing[16];
 
 type Step1Props = {
   data: CreateEventFormData;
-  scrollRef: React.RefObject<ScrollView | null>;
+  scrollRef: React.RefObject<ScrollViewInstance | null>;
   /** Pendências da etapa, calculadas pelo container. */
   missing: MissingField[];
   /** Quantos toques em "Continuar". Cada incremento é uma tentativa nova. */
@@ -41,10 +42,10 @@ export function Step1({
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
   const { pickImage, error: coverError } = useImageUpload();
 
-  const containerRef = useRef<View>(null);
-  const titleRef = useRef<View>(null);
-  const tagsRef = useRef<View>(null);
-  const fieldRefs: Record<MissingField, React.RefObject<View | null>> = {
+  const containerRef = useRef<ViewInstance>(null);
+  const titleRef = useRef<ViewInstance>(null);
+  const tagsRef = useRef<ViewInstance>(null);
+  const fieldRefs: Record<MissingField, React.RefObject<ViewInstance | null>> = {
     title: titleRef,
     tags: tagsRef,
   };
