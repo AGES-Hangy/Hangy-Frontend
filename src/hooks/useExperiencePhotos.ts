@@ -30,7 +30,17 @@ let nextLocalId = 0;
 export function useExperiencePhotos(eventId: string | undefined, description: string) {
   const {
     pickImage, uploadImage, cancelUploads, releaseImage, isPicking, error: pickError,
-  } = useImageUpload({ aspect: null, resizeOversized: true });
+  } = useImageUpload({
+    resizeOversized: true,
+    messages: {
+      invalidFile: 'Arquivo inválido — use JPG ou PNG\naté 5 MB',
+      permissionDenied: 'Permita o acesso às fotos para escolher uma foto',
+      failed: 'Não foi possível preparar a imagem. Tente de novo.',
+      connection: 'Sem conexão com a internet',
+      uploading: 'Enviando foto',
+      uploaded: 'Foto enviada',
+    },
+  });
   const [photos, setPhotos] = useState<ExperiencePhoto[]>([]);
   const [removingPhotoId, setRemovingPhotoId] = useState<string | null>(null);
   const experience = useRef<{ eventId: string; request: Promise<string> } | null>(null);

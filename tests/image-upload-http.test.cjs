@@ -14,26 +14,28 @@ function client({getToken=async()=> 'token',removeToken=async()=>{}}={}) {
   }
   const exports={};
   vm.runInNewContext(ts.transpile(fs.readFileSync(path.join(__dirname,'../src/utils/http.ts'),'utf8'),{module:ts.ModuleKind.CommonJS}),{
-    exports,XMLHttpRequest:XHR,setTimeout,clearTimeout,AbortController,
-    require:name=> name==='expo-router'?{router:{replace:path=>redirects.push(path)}}:name==='@/constants/api'?{API_BASE_URL:'http://test',API_TIMEOUT_MS:15000,API_UPLOAD_TIMEOUT_MS:120000,USE_API_MOCKS:false}:name==='@/utils/auth'?{getToken,removeToken}: {},
+    exports,XMLHttpRequest:XHR,setTimeout,clearTimeout,AbortController,FormData,
+    fetch:async()=>{throw Error('Retry must use the stored Blob');},
+    require:name=> name==='react-native'?{Platform:{OS:'web'}}:name==='expo-router'?{router:{replace:path=>redirects.push(path)}}:name==='@/constants/api'?{API_BASE_URL:'http://test',API_TIMEOUT_MS:15000,UPLOAD_RESPONSE_TIMEOUT_MS:120000,UPLOAD_STALL_TIMEOUT_MS:30000,USE_API_MOCKS:false}:name==='@/utils/auth'?{getToken,removeToken}: {},
   });
   return {exports,get xhr(){return xhr;},redirects};
 }
-test('upload has a mobile-sized timeout, auth, and browser-generated multipart boundary',async()=>{
- const c=client(),body={file:'test'},progress=[];const h=c.exports.apiUpload('/images',body,{onProgress:p=>progress.push(p)});await tick();
- assert.equal(c.xhr.timeout,120000);assert.equal(c.xhr.headers.Authorization,'Bearer token');assert.equal(c.xhr.headers['Content-Type'],undefined);assert.equal(c.xhr.body,body);
+const file=()=>({uri:'blob:released',mimeType:'image/png',file:new Blob(['photo'],{type:'image/png'})});
+test('upload keeps auth and browser multipart boundary; retry reads the stored Blob',async()=>{
+ const c=client(),progress=[];const promise=c.exports.apiUpload('/images',file(),{onProgress:p=>progress.push(p)});await tick();
+ assert.equal(c.xhr.headers.Authorization,'Bearer token');assert.equal(c.xhr.headers['Content-Type'],undefined);assert.equal(c.xhr.body.get('file').size,5);
  c.xhr.upload.onprogress({lengthComputable:true,loaded:50,total:100});assert.deepEqual(progress,[0.5]);
- c.xhr.status=201;c.xhr.responseText='{"photo_id":"p"}';await c.xhr.onload();assert.equal((await h.promise).photo_id,'p');
+ c.xhr.status=201;c.xhr.responseText='{"photo_id":"p"}';c.xhr.onload();assert.equal((await promise).photo_id,'p');
 });
 test('storage failure while reading token rejects instead of hanging forever',async()=>{
- const c=client({getToken:async()=>{throw Error('storage');}});await assert.rejects(c.exports.apiUpload('/images',{}).promise,e=>e.kind==='network');
+ const c=client({getToken:async()=>{throw Error('storage');}});await assert.rejects(c.exports.apiUpload('/images',file()),e=>e.kind==='network');
 });
-test('cancelled request is distinct from offline errors',async()=>{
- const c=client();const h=c.exports.apiUpload('/images',{});await tick();h.cancel();await assert.rejects(h.promise,e=>e.kind==='cancelled');
+test('cancelled request is distinct from offline errors and late progress stops',async()=>{
+ const c=client(),controller=new AbortController();const promise=c.exports.apiUpload('/images',file(),{signal:controller.signal});await tick();controller.abort();await assert.rejects(promise,e=>e.kind==='cancelled');assert.equal(c.xhr.upload.onprogress,null);
 });
 test('401 redirects once and rejects even if removing token fails',async()=>{
  for(const failure of [false,true]){
-  const c=client({removeToken:async()=>{if(failure)throw Error('storage');}});const h=c.exports.apiUpload('/images',{});const rejection=assert.rejects(h.promise,e=>e.status===401);await tick();c.xhr.status=401;c.xhr.responseText='{"detail":"Expired"}';await c.xhr.onload();await rejection;
+  const c=client({removeToken:async()=>{if(failure)throw Error('storage');}});const promise=c.exports.apiUpload('/images',file());const rejection=assert.rejects(promise,e=>e.status===401);await tick();c.xhr.status=401;c.xhr.responseText='{"detail":"Expired"}';c.xhr.onload();await rejection;
   assert.deepEqual(c.redirects,failure?[]:['/Login']);
  }
 });

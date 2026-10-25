@@ -7,8 +7,10 @@ export type CreateEventFormData = {
   // Etapa 1
   title: string;
   description: string;
-  /** URI local da capa, usada somente para prévia até existir upload real. */
+  /** URI local da capa (`file://` ou `blob:`): só para a prévia, nunca vai para a API. */
   coverUri: string | null;
+  /** URL devolvida pelo envio da capa: a única que vai em `cover_photo_url`. */
+  coverUrl: string | null;
   /** IDs de tags (macro e micro), no máximo 5. */
   tagIds: string[];
   // Etapa 2

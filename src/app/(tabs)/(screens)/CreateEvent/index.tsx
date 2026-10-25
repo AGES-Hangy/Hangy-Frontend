@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
@@ -18,6 +18,8 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
+import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
+import { announce } from '@/utils/accessibility';
 
 import { Step1 } from '@/components/CreateEvent/Step1';
 import { Step2, type Step2Handle } from '@/components/CreateEvent/Step2';
@@ -29,6 +31,7 @@ const EMPTY_FORM: CreateEventFormData = {
   title: '',
   description: '',
   coverUri: null,
+  coverUrl: null,
   tagIds: [],
   date: null,
   time: null,
@@ -52,16 +55,36 @@ export default function CreateEvent() {
   const [form, setForm] = useState<CreateEventFormData>(EMPTY_FORM);
   const [submitCount, setSubmitCount] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
+  /** Capa recusada pela API ao publicar; aparece como erro do FileUpload. */
+  const [coverRejected, setCoverRejected] = useState<string | null>(null);
+  const [focusCover, setFocusCover] = useState(false);
+
+  const {
+    pickAndUpload: pickAndUploadCover,
+    cancelUpload: cancelCoverUpload,
+    clearImage: clearCoverImage,
+    reset: resetCoverUpload,
+    isUploading: isCoverUploading,
+    progress: coverProgress,
+    error: coverUploadError,
+  } = useEventCoverUpload();
 
   // A tela é uma aba de `Tabs` (ver (tabs)/_layout.tsx) e continua montada ao
   // trocar de aba — sem isto, sair e reabrir manteria o formulário preenchido
   // ou, pior, cairia direto no passo 2 de uma criação anterior.
   const resetForm = useCallback(() => {
+    resetCoverUpload();
     setForm(EMPTY_FORM);
     setStep(1);
     setSubmitCount(0);
     setLocalError(null);
-  }, []);
+    setCoverRejected(null);
+    setFocusCover(false);
+  }, [resetCoverUpload]);
+
+  // Pelo mesmo motivo, sair da tela não desmonta o hook: o envio em andamento
+  // é cancelado aqui, e o formulário fica como estava.
+  useFocusEffect(useCallback(() => () => cancelCoverUpload(), [cancelCoverUpload]));
 
   const handleDiscard = useCallback(() => {
     setShowDiscardConfirm(false);
@@ -89,7 +112,15 @@ export default function CreateEvent() {
 
   const setTitle = (title: string) => setForm((f) => ({ ...f, title }));
   const setDescription = (description: string) => setForm((f) => ({ ...f, description }));
-  const setCoverUri = (coverUri: string | null) => setForm((f) => ({ ...f, coverUri }));
+  const pickCover = async () => {
+    setCoverRejected(null);
+    const uploaded = await pickAndUploadCover();
+    if (uploaded) setForm((f) => ({ ...f, coverUri: uploaded.uri, coverUrl: uploaded.url }));
+  };
+  const removeCover = () => {
+    clearCoverImage();
+    setForm((f) => ({ ...f, coverUri: null, coverUrl: null }));
+  };
   const toggleTag = (id: string) =>
     setForm((f) => {
       if (f.tagIds.includes(id)) return { ...f, tagIds: f.tagIds.filter((t) => t !== id) };
@@ -98,6 +129,7 @@ export default function CreateEvent() {
     });
 
   const handleContinue = () => {
+    if (isCoverUploading) return;
     setLocalError(null);
     setSubmitCount((c) => c + 1);
     if (missing.length === 0) {
@@ -107,6 +139,7 @@ export default function CreateEvent() {
   };
 
   const handlePublish = async () => {
+    if (isCoverUploading) return;
     setLocalError(null);
     const valid = step2Ref.current?.submit();
     if (!valid) return;
@@ -116,11 +149,6 @@ export default function CreateEvent() {
       requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
       AccessibilityInfo.announceForAccessibility(message);
     };
-
-    if (form.coverUri) {
-      showLocalError('Remova a capa para publicar sem imagem. O envio de capas ainda não está disponível.');
-      return;
-    }
 
     if (!form.locationCoordinates) {
       showLocalError('Selecione um local da lista ou do mapa antes de publicar.');
@@ -136,7 +164,7 @@ export default function CreateEvent() {
     const result = await publishEvent({
       title: form.title,
       description: form.description || null,
-      cover_photo_url: null,
+      cover_photo_url: form.coverUrl,
       tag_ids: form.tagIds,
       event_date: eventDate.toISOString(),
       end_date: endDate.toISOString(),
@@ -147,18 +175,29 @@ export default function CreateEvent() {
       max_participants: form.unlimited ? null : form.participantLimit,
       privacy: form.privacy,
     });
-    if (!result) return;
+    if (result.kind === 'invalid-cover') {
+      removeCover();
+      setCoverRejected(INVALID_COVER_MESSAGE);
+      setStep(1);
+      setFocusCover(true);
+      // Sempre, e não só o foco: se o foco não mudar de lugar, este anúncio é
+      // o único jeito de o leitor de tela saber da recusa.
+      announce(INVALID_COVER_MESSAGE);
+      return;
+    }
+    if (result.kind === 'failed') return;
+    const { event_id: eventId } = result.event;
 
     // O backend não cria o link junto com o evento, e `GET /events/{id}/share`
     // responde 404 para um evento por convite que ainda não tem um — é o link
     // gerado aqui que a tela de publicado lê para compartilhar.
-    if (form.privacy === 'INVITE_ONLY') await generateInviteLink(result.event_id);
+    if (form.privacy === 'INVITE_ONLY') await generateInviteLink(eventId);
 
     // `replace` troca a entrada de criação no histórico: fechar a tela de
     // publicado não devolve o usuário ao formulário.
     router.replace({
       pathname: '/EventPublished',
-      params: { eventId: result.event_id, privacy: form.privacy },
+      params: { eventId, privacy: form.privacy },
     });
     resetForm();
   };
@@ -184,9 +223,15 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               missing={missing}
               submitCount={submitCount}
+              coverProgress={isCoverUploading ? (coverProgress ?? 0) : undefined}
+              coverError={coverUploadError ?? coverRejected}
+              focusCover={focusCover}
               onChangeTitle={setTitle}
               onChangeDescription={setDescription}
-              onChangeCover={setCoverUri}
+              onPickCover={pickCover}
+              onCancelCover={cancelCoverUpload}
+              onRemoveCover={removeCover}
+              onCoverFocused={() => setFocusCover(false)}
               onToggleTag={toggleTag}
             />
           ) : (
@@ -244,6 +289,7 @@ export default function CreateEvent() {
             size="LG"
             style={styles.primaryButton}
             onPress={step === 1 ? handleContinue : handlePublish}
+            disabled={isCoverUploading}
             isLoading={step === 2 && isPublishing}
           />
         </View>
