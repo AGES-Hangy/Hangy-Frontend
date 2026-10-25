@@ -16,6 +16,8 @@ export interface Event {
   requesterName?: string;
   /** Tags do evento — chips no rodapé de `Featured` e `Mini`. */
   tags?: string[];
+  /** Se quem está vendo favoritou o evento — `is_favorited` do feed. */
+  isFavorited?: boolean;
   /** Prévia de quem confirmou — pilha de avatares no rodapé de `Featured` e `Mini`. */
   attendeeAvatars?: (ImageProps['source'] | null)[];
 }
@@ -32,6 +34,12 @@ export interface EventCardProps {
   /** Ações locais/da tela para cards de solicitação. */
   onAcceptRequest?: () => void;
   onRejectRequest?: () => void;
-  /** Sino de notificações em `Featured` e `Mini`. Sem isto o sino fica decorativo. */
-  onNotifyPress?: () => void;
+  /**
+   * Estrela de favorito em `Featured` e `Mini`, igual à do detalhe do evento.
+   * Sem isto a estrela não aparece — quem não pode favoritar (estabelecimento)
+   * não vê um botão morto.
+   */
+  onFavoritePress?: () => void;
+  /** Estado da estrela: fundo roxo e estrela cheia quando `true`. */
+  isFavorited?: boolean;
 }

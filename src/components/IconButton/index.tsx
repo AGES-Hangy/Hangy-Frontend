@@ -34,11 +34,18 @@ type Visual = {
   backgroundColor?: string;
   borderColor?: string;
   iconColor: string;
+  /** Cor do ícone cheio (`iconFilled`), no traço e no preenchimento; sem valor, usa `iconColor`. */
+  filledIconColor?: string;
 };
 
 const VARIANTS: Record<IconButtonVariant, { default: Visual; disabled: Visual }> = {
   Filled: {
-    default: { backgroundColor: colors.action.primary, iconColor: colors.text.inverse },
+    // O ícone cheio repete o fundo do Tonal: o toggle ativo é o inverso do inativo.
+    default: {
+      backgroundColor: colors.action.primary,
+      iconColor: colors.text.inverse,
+      filledIconColor: palette.primary[100],
+    },
     disabled: { backgroundColor: palette.neutral[200], iconColor: colors.text.disabled },
   },
   Tonal: {
@@ -90,11 +97,13 @@ export function IconButton({
   variant = 'Ghost',
   size = 'MD',
   disabled = false,
+  iconFilled = false,
   onPress,
   style,
 }: IconButtonProps) {
   const metrics = ICON_BUTTON_SIZES[size];
   const visual = disabled ? VARIANTS[variant].disabled : VARIANTS[variant].default;
+  const iconColor = iconFilled ? (visual.filledIconColor ?? visual.iconColor) : visual.iconColor;
   const hitSlop = Math.max(0, (MIN_TOUCH_SIZE - metrics.diameter) / 2);
 
   return (
@@ -121,7 +130,12 @@ export function IconButton({
       ]}
     >
       {isIconName(icon) ? (
-        <Icon name={icon} size={metrics.icon} color={visual.iconColor} />
+        <Icon
+          name={icon}
+          size={metrics.icon}
+          color={iconColor}
+          fill={iconFilled ? iconColor : 'none'}
+        />
       ) : (
         <View style={{ width: metrics.icon, height: metrics.icon }}>{icon}</View>
       )}
