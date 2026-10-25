@@ -97,12 +97,13 @@ export default function EventDetail() {
     photos,
     pickPhoto,
     pickError,
+    isPicking,
     uploadPhoto,
     removePhoto,
     dropPhoto,
     resetExperience,
     removingPhotoId,
-  } = useExperiencePhotos(event?.event_id, experienceDescription);
+  } = useExperiencePhotos(resolvedEventId, experienceDescription);
   // 400/403 no envio: a ação some até o servidor mudar de ideia (novo evento).
   const [isPhotoActionHidden, setIsPhotoActionHidden] = useState(false);
   // 409 `Photo limit reached`: o botão continua lá, mas desabilitado.
@@ -282,6 +283,7 @@ export default function EventDetail() {
 
   /** Tabela de tratamento de erro da task — envio da foto. */
   function handleUploadError(apiError: ApiError, picked: PickedImage) {
+    if (apiError.status === 401 || apiError.kind === 'cancelled') return;
     const retry = { actionLabel: 'Tentar de novo', onAction: () => startUpload(picked) };
 
     if (apiError.kind === 'timeout') {
@@ -337,17 +339,21 @@ export default function EventDetail() {
     const photoId = photoToRemove;
     if (!photoId) return;
     try {
-      await removePhoto(photoId);
+      if (!await removePhoto(photoId)) return;
+      setIsPhotoLimitReached(false);
       setPhotoToRemove(null);
     } catch (err) {
-      setPhotoToRemove(null);
       const apiError = err as ApiError;
+      if (apiError.kind === 'cancelled') return;
+      setPhotoToRemove(null);
+      if (apiError.status === 401) return;
       if (apiError.status === 403) {
         addToast({ type: 'warning', message: 'Você não pode remover esta foto' });
         setUndeletablePhotoIds((ids) => [...ids, photoId]);
       } else if (apiError.status === 404) {
         // `Photo not found`: silencioso, a foto só sai da grade.
         dropPhoto(photoId);
+        setIsPhotoLimitReached(false);
       } else if (apiError.kind === 'timeout') {
         addToast({ type: 'error', message: 'A conexão demorou demais' });
       } else if (apiError.kind === 'network') {
@@ -638,7 +644,7 @@ export default function EventDetail() {
             label="Adicionar foto ao meu registro"
             icon="camera"
             // Offline e limite atingido: escrita desabilitada, não escondida.
-            disabled={isOffline || isPhotoLimitReached}
+            disabled={isOffline || isPhotoLimitReached || isPicking}
             onPress={handleAddPhoto}
             style={styles.ctaButton}
           />

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
 import { apiUpload, type ApiUploadHandle, type UploadProgressHandler } from '@/utils/http';
+import { resizeUploadImage } from '@/utils/resizeUploadImage';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // 'image/jpg' não é um mimeType padrão, mas algumas câmeras/dispositivos
@@ -18,6 +19,8 @@ export interface PickedImage {
   uri: string;
   mimeType: string;
   fileSize: number | null;
+  /** Arquivo mantido para repetir um upload na Web sem depender da URL da prévia. */
+  file?: Blob;
 }
 
 export interface ImageUploadOptions {
@@ -26,6 +29,8 @@ export interface ImageUploadOptions {
    * `null` deixa a foto sem recorte, como nas fotos do registro de um evento.
    */
   aspect?: [number, number] | null;
+  /** Só fotos de experiências: os consumidores de capa mantêm seu comportamento. */
+  resizeOversized?: boolean;
 }
 
 /**
@@ -106,13 +111,8 @@ function pickFileWeb(): Promise<PickedImage | null> {
         return;
       }
 
-      const previousUrl = (globalThis as any).__hangyLastObjectUrl as string | undefined;
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
-
       const objectUrl = URL.createObjectURL(file);
-      (globalThis as any).__hangyLastObjectUrl = objectUrl;
-
-      settle({ uri: objectUrl, mimeType: file.type, fileSize: file.size });
+      settle({ uri: objectUrl, mimeType: file.type, fileSize: file.size, file });
     });
 
     window.addEventListener('focus', handleFocus);
@@ -141,47 +141,82 @@ function uploadFileName(mimeType: string) {
  * A URI de `pickImage` é só prévia local e nunca deve ir num campo de URL
  * (ex.: `cover_photo_url`): o arquivo sobe por `uploadImage`.
  */
-export function useImageUpload({ aspect = COVER_ASPECT }: ImageUploadOptions = {}) {
+export function useImageUpload({ aspect = COVER_ASPECT, resizeOversized = false }: ImageUploadOptions = {}) {
   const [error, setError] = useState<string | null>(null);
+  const [isPicking, setIsPicking] = useState(false);
+  const picking = useRef(false);
+  const mounted = useRef(true);
+  const objectUrls = useRef(new Set<string>());
   const invalidMessage = aspect ? INVALID_FILE_MESSAGE : INVALID_PHOTO_MESSAGE;
   // Envios em voo, para não deixar um XHR rodando depois que a tela sai.
   const activeUploads = useRef(new Set<() => void>());
 
-  useEffect(() => {
-    const uploads = activeUploads.current;
-    return () => {
-      uploads.forEach((cancel) => cancel());
-      uploads.clear();
-    };
+  const cancelUploads = useCallback(() => {
+    activeUploads.current.forEach((cancel) => cancel());
+    activeUploads.current.clear();
   }, []);
 
+  const releaseImage = useCallback((uri: string) => {
+    if (objectUrls.current.delete(uri)) URL.revokeObjectURL(uri);
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    const urls = objectUrls.current;
+    return () => {
+      mounted.current = false;
+      cancelUploads();
+      urls.forEach((uri) => URL.revokeObjectURL(uri));
+      urls.clear();
+    };
+  }, [cancelUploads]);
+
   async function pickImage(): Promise<PickedImage | null> {
+    if (picking.current || !mounted.current) return null;
+    picking.current = true;
+    setIsPicking(true);
     setError(null);
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setError(
-        aspect
-          ? 'Permita o acesso às fotos para escolher uma capa'
-          : 'Permita o acesso às fotos para escolher uma foto',
-      );
+    try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!mounted.current) return null;
+        if (!permission.granted) {
+          setError(aspect ? 'Permita o acesso às fotos para escolher uma capa' : 'Permita o acesso às fotos para escolher uma foto');
+          return null;
+        }
+      }
+      let picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative(aspect);
+      if (!picked) return null;
+      if (Platform.OS === 'web' && picked.uri.startsWith('blob:')) objectUrls.current.add(picked.uri);
+      if (!mounted.current) { releaseImage(picked.uri); return null; }
+      if (!ACCEPTED_MIME_TYPES.includes(picked.mimeType) || picked.fileSize === null || picked.fileSize <= 0) {
+        releaseImage(picked.uri);
+        setError(invalidMessage);
+        return null;
+      }
+      if (picked.fileSize > MAX_FILE_SIZE_BYTES && resizeOversized) {
+        const original = picked;
+        try {
+          picked = await resizeUploadImage(original, MAX_FILE_SIZE_BYTES);
+        } finally {
+          releaseImage(original.uri);
+        }
+        if (picked && Platform.OS === 'web' && picked.uri.startsWith('blob:')) objectUrls.current.add(picked.uri);
+      }
+      if (!picked || picked.fileSize === null || picked.fileSize > MAX_FILE_SIZE_BYTES) {
+        if (picked) releaseImage(picked.uri);
+        if (mounted.current) setError(invalidMessage);
+        return null;
+      }
+      if (!mounted.current) { releaseImage(picked.uri); return null; }
+      return picked;
+    } catch {
+      if (mounted.current) setError('Não foi possível preparar a imagem. Tente de novo.');
       return null;
+    } finally {
+      picking.current = false;
+      if (mounted.current) setIsPicking(false);
     }
-
-    const picked = Platform.OS === 'web' ? await pickFileWeb() : await pickFileNative(aspect);
-    if (!picked) return null;
-
-    const isAcceptedType = ACCEPTED_MIME_TYPES.includes(picked.mimeType);
-    // Sem o tamanho confirmado, não dá pra garantir o limite de 5 MB — trata
-    // como inválido em vez de deixar passar.
-    const isWithinSizeLimit = picked.fileSize !== null && picked.fileSize <= MAX_FILE_SIZE_BYTES;
-
-    if (!isAcceptedType || !isWithinSizeLimit) {
-      setError(invalidMessage);
-      return null;
-    }
-
-    return picked;
   }
 
   /**
@@ -206,19 +241,19 @@ export function useImageUpload({ aspect = COVER_ASPECT }: ImageUploadOptions = {
       const name = uploadFileName(image.mimeType);
       if (Platform.OS === 'web') {
         // Na web a URI é um object URL: o Blob precisa ser buscado antes.
-        body.append('file', await (await fetch(image.uri)).blob(), name);
+        body.append('file', image.file ?? await (await fetch(image.uri)).blob(), name);
       } else {
         // No nativo o React Native monta a parte do arquivo a partir da URI.
         body.append('file', { uri: image.uri, name, type: image.mimeType } as unknown as Blob);
       }
 
+      if (wasCancelled || !mounted.current) throw new Error('Upload cancelled');
       request = apiUpload<T>(path, body, { onProgress });
-      if (wasCancelled) request.cancel();
       return request.promise;
     })().finally(() => activeUploads.current.delete(cancel));
 
     return { promise, cancel };
   }
 
-  return { pickImage, uploadImage, error };
+  return { pickImage, uploadImage, cancelUploads, releaseImage, isPicking, error };
 }

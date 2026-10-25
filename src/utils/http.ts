@@ -4,8 +4,11 @@ import { API_BASE_URL, API_TIMEOUT_MS, USE_API_MOCKS } from '@/constants/api';
 import { getToken, removeToken } from '@/utils/auth';
 import { resolveMock } from '@/mocks/eventApi';
 
+/** Tempo local para enviar arquivos em rede móvel, sem mudar o timeout das consultas. */
+const API_UPLOAD_TIMEOUT_MS = 120000;
+
 /** Por que a chamada falhou — separa "o servidor respondeu" de "nem chegou lá". */
-export type ApiErrorKind = 'http' | 'network' | 'timeout';
+export type ApiErrorKind = 'http' | 'network' | 'timeout' | 'cancelled';
 
 /**
  * Falha de uma chamada à API. Carrega o `status` e o `detail` que o backend
@@ -142,7 +145,7 @@ export type UploadProgressHandler = (fraction: number) => void;
 
 export interface ApiUploadHandle<T> {
   promise: Promise<T>;
-  /** Aborta o envio em voo; a `promise` rejeita com `ApiError` de rede. */
+  /** Aborta o envio em voo; a `promise` rejeita com `ApiError` de cancelamento. */
   cancel: () => void;
 }
 
@@ -180,12 +183,12 @@ export function apiUpload<T>(
     void (async () => {
       const token = await getToken();
       if (wasCancelled) {
-        reject(new ApiError('network', null, null));
+        reject(new ApiError('cancelled', null, null));
         return;
       }
 
       xhr.open(method, `${API_BASE_URL}${path}`);
-      xhr.timeout = API_TIMEOUT_MS;
+      xhr.timeout = API_UPLOAD_TIMEOUT_MS;
       xhr.setRequestHeader('Accept', 'application/json');
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
@@ -203,7 +206,11 @@ export function apiUpload<T>(
             : null;
 
         if (xhr.status === 401) {
-          await handleUnauthorized();
+          try {
+            await handleUnauthorized();
+          } catch {
+            // A falha da limpeza de sessão não pode deixar o upload pendente.
+          }
           reject(new ApiError('http', 401, detail, responseBody));
           return;
         }
@@ -216,11 +223,11 @@ export function apiUpload<T>(
         resolve(responseBody as T);
       };
       xhr.onerror = () => reject(new ApiError('network', null, null));
-      xhr.onabort = () => reject(new ApiError('network', null, null));
+      xhr.onabort = () => reject(new ApiError('cancelled', null, null));
       xhr.ontimeout = () => reject(new ApiError('timeout', null, null));
 
       xhr.send(body);
-    })();
+    })().catch(() => reject(new ApiError('network', null, null)));
   });
 
   return {
