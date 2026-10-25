@@ -64,9 +64,10 @@ export function EmptyState({
   fill = false,
   title,
   text: textOverride,
+  icon,
 }: EmptyStateProps) {
   const config = EMPTY_STATE_CONFIG[context];
-  const Icon = icons[config.icon];
+  const Icon = icons[icon ?? config.icon];
   const text =
     textOverride ?? (config.textByCta ? config.textByCta[cta ? 'true' : 'false'] : config.text);
   const resolvedCtaLabel = ctaLabel ?? config.defaultCtaLabel;
