@@ -212,7 +212,7 @@ export default function BlockedUsers() {
             <View style={styles.footer}>
               <ActivityIndicator color={colors.action.primary} accessibilityLabel="Carregando mais" />
             </View>
-          ) : null
+          ) : undefined
         }
         onEndReached={hasMore ? () => { void loadMore(); } : undefined}
         onEndReachedThreshold={0.3}

@@ -1,3 +1,4 @@
+import type { TextInputInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -23,7 +24,7 @@ export default function PasswordResetCode() {
 	const { email: emailParam } = useLocalSearchParams<{ email?: string }>();
 	const email = typeof emailParam === 'string' ? emailParam : '';
 	const [code, setCode] = useState('');
-	const codeInputRef = useRef<TextInput>(null);
+	const codeInputRef = useRef<TextInputInstance>(null);
 	const [secondsLeft, setSecondsLeft] = useState(RESEND_DELAY_SECONDS);
 	const [isResending, setIsResending] = useState(false);
 	const [resendError, setResendError] = useState<string | null>(null);

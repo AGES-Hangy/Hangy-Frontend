@@ -1,3 +1,4 @@
+import type { TextInstance, ViewInstance } from 'react-native';
 import { Fragment } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -32,7 +33,7 @@ export function ProfileHeader({
   actions,
 }: ProfileHeaderProps) {
   const avatarSource = photoUrl ? { uri: photoUrl } : undefined;
-  const attachFocus = (node: View | Text | null) => {
+  const attachFocus = (node: ViewInstance | TextInstance | null) => {
     if (focusRef) focusRef.current = node;
   };
 

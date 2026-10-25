@@ -1,5 +1,5 @@
 import type { ReactElement, Ref } from 'react';
-import type { StyleProp, View, ViewStyle } from 'react-native';
+import type { StyleProp, ViewInstance, ViewStyle } from 'react-native';
 
 import type { IconName } from '@/components/Icon';
 
@@ -44,5 +44,5 @@ export type ButtonProps = {
    */
   style?: StyleProp<ViewStyle>;
   /** Repassado ao `Pressable` interno, por exemplo para devolver o foco de acessibilidade ao botão. */
-  ref?: Ref<View>;
+  ref?: Ref<ViewInstance>;
 };

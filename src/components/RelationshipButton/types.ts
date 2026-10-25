@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import type { StyleProp, View, ViewStyle } from 'react-native';
+import type { StyleProp, ViewInstance, ViewStyle } from 'react-native';
 
 import type { UserType } from '@/types/event';
 import type { ConnectionAnswerResult, ConnectionDirection, ConnectionStatus } from '@/types/user';
@@ -24,5 +24,5 @@ export type RelationshipButtonProps = {
   isLoading?: boolean;
   /** Escape hatch de layout (ex.: `{ alignSelf: 'stretch' }`). Não use para cor, raio ou tipografia. */
   style?: StyleProp<ViewStyle>;
-  ref?: Ref<View>;
+  ref?: Ref<ViewInstance>;
 };

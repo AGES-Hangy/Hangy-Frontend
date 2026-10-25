@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import type { View } from 'react-native';
+import type { ViewInstance } from 'react-native';
 
 import type { UserPhoto } from '@/types/user';
 
@@ -15,5 +15,5 @@ export type ProfilePhotoGridProps = {
   hasMore: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
-  loadMoreButtonRef: Ref<View>;
+  loadMoreButtonRef: Ref<ViewInstance>;
 };
