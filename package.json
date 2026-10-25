@@ -13,7 +13,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/live-participation.test.cjs tests/favorite-event.test.cjs"
+    "test": "node --test tests/live-participation.test.cjs tests/favorite-event.test.cjs tests/block-state.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.33",

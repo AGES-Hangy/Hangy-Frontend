@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 
+import { invalidateRelationships } from '@/utils/relationshipChanges';
+import { invalidateFeed } from '@/hooks/useFeed';
 import { endpoints } from '@/constants/api';
 import { isApiErrorLike } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
@@ -29,11 +31,17 @@ export function useUnblockUser() {
 
     try {
       await apiFetch<void>(endpoints.userBlock(userId), { method: 'DELETE' });
+      invalidateFeed({ discardCache: true });
+      invalidateRelationships();
       return { kind: 'done' };
     } catch (caught) {
       // O `apiFetch` já avisa a sessão expirada e volta para o Login.
       if (isApiErrorLike(caught) && caught.status === 401) return { kind: 'expired' };
-      if (isApiErrorLike(caught) && caught.status === 404) return { kind: 'gone' };
+      if (isApiErrorLike(caught) && caught.status === 404) {
+        invalidateFeed({ discardCache: true });
+        invalidateRelationships();
+        return { kind: 'gone' };
+      }
 
       const failure =
         isApiErrorLike(caught) && caught.kind === 'network'

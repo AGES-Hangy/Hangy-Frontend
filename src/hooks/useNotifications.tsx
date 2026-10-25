@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AppState } from 'react-native';
+
+import { invalidateRelationships, onRelationshipsChanged } from '@/utils/relationshipChanges';
 
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
@@ -57,14 +60,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [canRetryError, setCanRetryError] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [processingIds, setProcessingIds] = useState<ReadonlySet<string>>(new Set());
+  const revision = useRef(0);
   const cursorRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
   const loadingMoreRef = useRef(false);
 
   const refreshUnreadCount = useCallback(async () => {
+    const request = revision.current;
     try {
       const response = await apiFetch<UnreadNotificationCount>(endpoints.notificationsUnreadCount());
-      setUnreadCount(response.unread_count);
+      if (request === revision.current) setUnreadCount(response.unread_count);
     } catch {
       // A tela ainda pode carregar a contagem da resposta de GET /notifications.
       // Falha no contador não substitui a lista nem a contagem já carregadas.
@@ -73,6 +78,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const loadNotifications = useCallback(async () => {
     if (loadingRef.current) return;
+    const request = revision.current;
     loadingRef.current = true;
     setIsLoading(true);
     setError(null);
@@ -82,11 +88,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     try {
       const page = await apiFetch<NotificationsPage>(endpoints.notifications({ limit: PAGE_SIZE }));
+      if (request !== revision.current) return;
       setNotifications(page.items);
       setUnreadCount(page.unread_count);
       cursorRef.current = page.next_cursor;
       setNextCursor(page.next_cursor);
     } catch (caught) {
+      if (request !== revision.current) return;
       const failure = describeNotificationsLoadError(caught);
       if (failure.kind === 'invalid') {
         cursorRef.current = null;
@@ -97,6 +105,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setErrorScope('notifications');
       setCanRetryError(failure.canRetry);
     } finally {
+      if (request !== revision.current) return;
       loadingRef.current = false;
       setIsLoading(false);
     }
@@ -105,6 +114,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const loadMore = useCallback(async () => {
     const cursor = cursorRef.current;
     if (!cursor || loadingMoreRef.current) return;
+    const request = revision.current;
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
     setError(null);
@@ -114,6 +124,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     try {
       const page = await apiFetch<NotificationsPage>(endpoints.notifications({ limit: PAGE_SIZE, cursor }));
+      if (request !== revision.current) return;
       setNotifications((current) => {
         const existing = new Set(current.map((item) => item.notification_id));
         return [...current, ...page.items.filter((item) => !existing.has(item.notification_id))];
@@ -126,6 +137,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setErrorScope(null);
       setCanRetryError(false);
     } catch (caught) {
+      if (request !== revision.current) return;
       const failure = describeNotificationsLoadError(caught);
       if (failure.kind === 'invalid') {
         cursorRef.current = null;
@@ -136,12 +148,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setErrorScope('pagination');
       setCanRetryError(failure.canRetry);
     } finally {
+      if (request !== revision.current) return;
       loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
   }, [addToast]);
 
   const markAsRead = useCallback(async (id: string) => {
+    const request = revision.current;
     const original = notifications.find((item) => item.notification_id === id);
     if (!original || original.read) return;
 
@@ -153,6 +167,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     try {
       await apiFetch<void>(endpoints.notificationRead(id), { method: 'PATCH' });
     } catch (caught) {
+      if (request !== revision.current) return;
       if (caught instanceof ApiError && caught.status === 401) return;
       if (caught instanceof ApiError && caught.status === 404) {
         setNotifications((current) => current.filter((item) => item.notification_id !== id));
@@ -173,6 +188,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [addToast, loadNotifications, notifications]);
 
   const markAllAsRead = useCallback(async () => {
+    const request = revision.current;
     const previous = notifications;
     const previousUnreadCount = unreadCount;
     if (!previousUnreadCount) return;
@@ -183,6 +199,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     try {
       await apiFetch<void>(endpoints.notificationsReadAll(), { method: 'PATCH' });
     } catch (caught) {
+      if (request !== revision.current) return;
       if (caught instanceof ApiError && caught.status === 401) return;
       if (caught instanceof ApiError && caught.status === 403) {
         console.info('[notifications] não foi possível marcar todas como lidas:', caught.detail);
@@ -200,6 +217,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     id: string,
     status: 'CONFIRMED' | 'REJECTED',
   ) => {
+    const request = revision.current;
     const notification = notifications.find((item) => item.notification_id === id);
     const eventId = notification?.payload.event_id;
     const senderId = notification?.payload.sender?.id;
@@ -215,6 +233,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     try {
       // A notificação não traz o participant_id: acha-se o pendente pelo remetente.
       const page = await apiFetch<ParticipantsPage>(endpoints.eventParticipants(eventId, 'PENDING'));
+      if (request !== revision.current) return;
       const participant: EventParticipantItem | undefined = page.items.find((item) => item.user.id === senderId);
       if (!participant) throw new ApiError('http', 404, 'Participant not found');
 
@@ -223,6 +242,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       });
+      if (request !== revision.current) return;
       addToast({
         type: 'success',
         message: status === 'CONFIRMED' ? 'Solicitação aprovada.' : 'Solicitação recusada.',
@@ -235,6 +255,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (caught) {
+      if (request !== revision.current) return;
       if (caught instanceof ApiError && caught.status === 401) return;
       console.warn('[notifications] falha ao responder solicitação de participação:', {
         step,
@@ -265,6 +286,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         addToast({ type: failure.tone, message: failure.message || 'Não foi possível concluir a solicitação.' });
       }
     } finally {
+      if (request !== revision.current) return;
       setProcessingIds((current) => {
         const next = new Set(current);
         next.delete(id);
@@ -274,8 +296,29 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [addToast, loadNotifications, notifications]);
 
   useEffect(() => {
+    const invalidate = () => {
+      ++revision.current;
+      loadingRef.current = false;
+      loadingMoreRef.current = false;
+      cursorRef.current = null;
+      setNextCursor(null);
+      setNotifications([]);
+      setUnreadCount(0);
+      setProcessingIds(new Set());
+      setIsLoadingMore(false);
+      void loadNotifications();
+    };
     void refreshUnreadCount();
-  }, [refreshUnreadCount]);
+    const unsubscribe = onRelationshipsChanged(invalidate);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') invalidateRelationships();
+    });
+    return () => {
+      ++revision.current;
+      unsubscribe();
+      subscription.remove();
+    };
+  }, [loadNotifications, refreshUnreadCount]);
 
   const value = useMemo(() => ({
     notifications,

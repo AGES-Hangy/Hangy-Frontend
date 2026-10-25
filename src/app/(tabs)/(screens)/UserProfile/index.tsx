@@ -600,7 +600,7 @@ export default function UserProfile() {
         visible={isBlockDialogOpen}
         variant="LeaveEvent"
         title={name ? `Bloquear ${name}?` : 'Bloquear este usuário?'}
-        description="Essa pessoa não vai mais ver seu perfil, encontrar você na busca nem falar com você. A conexão entre vocês será desfeita e não volta se você desbloquear depois."
+        description="Essa pessoa não vai mais ver seu perfil, encontrar você na busca nem falar com você. A conexão será desfeita, vocês sairão dos eventos um do outro e as notificações entre vocês serão removidas. Desbloquear não restaura nada automaticamente."
         confirmLabel="Bloquear"
         cancelLabel="Cancelar"
         isLoading={isBlocking}
