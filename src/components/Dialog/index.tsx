@@ -1,3 +1,4 @@
+import type { TextInstance } from 'react-native';
 import { useRef } from 'react';
 import {
   ActivityIndicator,
@@ -63,6 +64,15 @@ const VARIANTS = {
     confirmLabel: 'Descartar',
     destructive: true,
   },
+  // "Usuários bloqueados - desbloquear (confirmação)", Variant=Confirm. O título
+  // leva o nome de quem é desbloqueado e vem por `title`.
+  Unblock: {
+    title: 'Desbloquear usuário?',
+    description:
+      'Essa pessoa poderá ver seu perfil e encontrar você na busca de novo. A conexão que vocês tinham não volta.',
+    confirmLabel: 'Desbloquear',
+    destructive: false,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({
@@ -85,7 +95,7 @@ export function Dialog({
     description: description ?? variantConfig.description,
     confirmLabel: confirmLabel ?? variantConfig.confirmLabel,
   };
-  const titleRef = useRef<Text>(null);
+  const titleRef = useRef<TextInstance>(null);
 
   function focusTitle() {
     if (Platform.OS === 'web') return;

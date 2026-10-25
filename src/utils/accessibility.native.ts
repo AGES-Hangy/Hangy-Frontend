@@ -1,4 +1,4 @@
-import { AccessibilityInfo, type View } from 'react-native';
+import { AccessibilityInfo, type ViewInstance } from 'react-native';
 
 export type Politeness = 'polite' | 'assertive';
 
@@ -7,9 +7,9 @@ export function announce(message: string, _politeness: Politeness = 'polite'): v
   AccessibilityInfo.announceForAccessibility(message);
 }
 
-export function moveAccessibilityFocus(node: View): void {
+export function moveAccessibilityFocus(node: ViewInstance): void {
   AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
 }
 
 // Só o web perde o foco do teclado para o `body` quando o botão focado some.
-export function restoreLostFocus(_node: View): void {}
+export function restoreLostFocus(_node: ViewInstance): void {}

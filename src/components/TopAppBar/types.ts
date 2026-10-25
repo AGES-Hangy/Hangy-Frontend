@@ -47,4 +47,5 @@ export interface TopAppBarProps {
    * para o título continuar centralizado na tela.
    */
   action?: TopAppBarAction;
-}
+  secondaryAction?: TopAppBarAction;
+ }

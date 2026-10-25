@@ -1,7 +1,8 @@
+import type { ViewInstance } from 'react-native';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  type ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
@@ -39,7 +40,7 @@ export type Step2Handle = {
 
 export type Step2Props = {
   data: CreateEventFormData;
-  scrollRef: React.RefObject<ScrollView | null>;
+  scrollRef: React.RefObject<ScrollViewInstance | null>;
   onChangeDate: (v: Date | null) => void;
   onChangeTime: (v: Date | null) => void;
   onChangeLocation: (v: string) => void;
@@ -89,9 +90,9 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 ) {
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  const containerRef = useRef<View>(null);
-  const dateRowRef = useRef<View>(null);
-  const locationRef = useRef<View>(null);
+  const containerRef = useRef<ViewInstance>(null);
+  const dateRowRef = useRef<ViewInstance>(null);
+  const locationRef = useRef<ViewInstance>(null);
 
   const isDateMissing = !data.date;
   const isTimeMissing = !data.time;

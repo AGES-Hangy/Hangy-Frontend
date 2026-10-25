@@ -159,8 +159,8 @@ export default function Connections() {
         keyExtractor={entryKey}
         renderItem={({ item }) => <Row entry={item} />}
         ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        ListFooterComponent={ListFooter}
+        ListEmptyComponent={ListEmpty ?? undefined}
+        ListFooterComponent={ListFooter ?? undefined}
         ItemSeparatorComponent={RowSeparator}
         onEndReached={hasMore ? () => { void loadMore(); } : undefined}
         onEndReachedThreshold={0.3}

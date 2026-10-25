@@ -35,6 +35,9 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * Pelo mesmo motivo cobre `GET /users/{id}` e `GET /users/{id}/events` (tasks
  * 075 e 228 [BE]), usados pelo perfil de outro usuário.
  *
+ * `GET /events/nearby` (mapa Ao Vivo, task 119 [BE]) também mora aqui — ver
+ * `EVENTOS_PROXIMOS` para os cenários do mapa.
+ *
  * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
  * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
  *
@@ -47,6 +50,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | ----------- | ------------------------------------------------------- |
  * | qualquer    | Caminho feliz, na visão do organizador                   |
  * | `guest`     | Visitante comum num evento público (ação `CONFIRM`)      |
+ * | `favorite-*` | Igual a `guest`, com erro só ao favoritar (veja "Favoritar") |
  * | `private`   | Evento privado sem participação: sem lista de confirmados, local aproximado (bairro) |
  * | `private-no-area` | Igual a `private`, mas sem bairro: "Local aproximado" |
  * | `private-confirmed` | Evento privado já aprovado: local exato          |
@@ -122,7 +126,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * `GET /users/{id}/events` devolve as abas de quem visita, `history` (encerrados)
  * e `created` (criados e não encerrados), com `interests` e `confirmed` em
  * `null`. Com `tab` e `cursor` vem só a continuação daquela aba. Com o id da
- * conta logada (`me`), vêm as quatro abas do dono, com privados (veja abaixo).
+ * conta logada (`conta-mock`), vêm as quatro abas do dono, com privados (veja abaixo).
  *
  * Conectar (`POST /connections`), responder (`PATCH /connections/{id}`),
  * cancelar ou desfazer (`DELETE /connections/{id}`), seguir (`POST`/`DELETE
@@ -175,7 +179,7 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `connected-legacy` | Conectada, sem 281           | Nenhuma                                            |
  * | `business-legacy`  | Estabelecimento, sem 281     | Seguir: `204`, +1                                  |
  *
- * Perfil próprio (`GET /users/me/photos`, `GET /users/me/events` e os
+ * Perfil próprio (`GET /users/me/photos`, `GET /users/conta-mock/events` e os
  * contadores de `GET /users/me/profile`): o cenário vem de
  * `EXPO_PUBLIC_MOCK_OWN_PROFILE`, lida quando o Metro inicia. Trocar o valor
  * exige reiniciar o Metro (sem precisar de `-c`).
@@ -191,27 +195,63 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `own-events-flaky` | Como em `full`                                       | 1ª carga OK, recargas `500`; "Ver mais" demora 3 s   | Como em `full`                                                                         |
  * | `photos-grow`      | 45 na 1ª carga; 46 (uma nova no topo) a partir da 2ª | Como em `full`                                       | 45 fotos na 1ª chamada; 46 a partir da 2ª                                              |
  *
- * Com `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`, o perfil comercial lê o
- * `GET /users/me` (o id da conta é `me`), que ganha os campos do perfil público:
- * 1204 seguidores (0 em `empty`). As abas do dono são `history` e `created`, como
- * as de quem visita. `profile-error` e `profile-flaky` contam a partir da 2ª
- * chamada do `GET /users/me` (supõe que a 1ª é a do `useCurrentUser` do Perfil):
- * `500` sempre, ou depois da 2ª. Editar perfil só em `full` (o `useCurrentUser`
- * dele também chama o `GET /users/me` e entra na conta).
+ * O id da conta é `conta-mock`, e não `me`, para o perfil próprio
+ * (`GET /users/conta-mock`) e o usuário logado (`GET /users/me`, do
+ * `useCurrentUser`) serem rotas diferentes. Cada cenário conta só as chamadas
+ * da própria rota; o `GET /users/me` do `useCurrentUser` (de qualquer tela,
+ * inclusive o EventDetail) não entra mais na contagem.
  *
- * Os contadores não sabem quem chamou: `GET /users/me` e `GET /users/{id
- * próprio}` são o mesmo caminho, e o `/UserProfile` também chama o
- * `GET /users/me` (`useCurrentUser`); com o id próprio, chama ainda o
- * `GET /users/me/events` antes de redirecionar para o Perfil. Com
- * `profile-error`, `profile-flaky` ou `own-events-flaky`, recarregar a página
- * (zera os contadores) e abrir o Perfil antes de qualquer `/UserProfile`. O
- * `/UserProfile?id=me` não combina com esses três cenários: ele gasta a 1ª carga
- * dos eventos do dono e, em conta de estabelecimento, as duas primeiras chamadas
- * do `GET /users/me`.
+ * Com `EXPO_PUBLIC_MOCK_USER_TYPE=BUSINESS`, o perfil comercial lê o
+ * `GET /users/conta-mock`: 1204 seguidores (0 em `empty`). As abas do dono são
+ * `history` e `created`, como as de quem visita. Nessa rota, `profile-error`
+ * responde `500` sempre e `profile-flaky`, a partir da 2ª chamada. A leitura do
+ * Editar perfil (`GET /businesses/me`) não falha.
+ *
+ * O `/UserProfile?id=conta-mock` chama o `GET /users/conta-mock/events` antes de
+ * redirecionar para o Perfil, e em conta de estabelecimento também o
+ * `GET /users/conta-mock`: ele gasta a 1ª carga de `own-events-flaky` e a 1ª
+ * chamada de `profile-flaky`. Nesses cenários, abrir o Perfil antes.
+ *
+ * Usuários bloqueados (`GET /users/me/blocked` e `DELETE /users/{id}/block`):
+ * o cenário vem de `EXPO_PUBLIC_MOCK_BLOCKED`, lida quando o Metro inicia.
+ * Desbloquear tira a pessoa do `GET` seguinte; recarregar o app desfaz.
+ *
+ * | Valor           | Lista                                                   |
+ * | --------------- | ------------------------------------------------------- |
+ * | `full` (padrão) | 25 pessoas, em duas páginas com o `limit` da tela (20)  |
+ * | `empty`         | Lista vazia                                             |
+ * | `error`         | `500` na primeira página                                |
+ * | `error-page`    | Primeira página OK, `500` na seguinte                   |
+ *
+ * | `user_id`        | Desbloquear                                    |
+ * | ---------------- | ---------------------------------------------- |
+ * | qualquer pessoa  | `204`, sai da lista                            |
+ * | `unblock-gone`   | `404` (já desbloqueada), sai da lista          |
+ * | `unblock-boom`   | `500`                                          |
  *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
  * (modo avião).
+ *
+ * ## Favoritar (`POST`/`DELETE /events/{id}/favorite`)
+ *
+ * Os dois respondem `204` e são idempotentes, como no backend, e alteram o
+ * `viewer.is_favorited` do detalhe e a aba Interesses do dono, que saem da mesma
+ * lista. Ela começa com `samba-cidade-baixa` e `brique-redencao` (vazia em
+ * `empty`); um favorito fora desses dois entra na aba com os dados do detalhe.
+ * Conta de estabelecimento recebe `403`, e evento cancelado, `404`; o favorito
+ * feito antes do cancelamento sai da aba. O evento encerrado (`finished`) aceita
+ * o favorito, mas não entra na aba.
+ *
+ * Nos cenários abaixo o detalhe carrega como o de `guest`, na visão de visitante:
+ *
+ * | `event_id`           | Favoritar ou desfavoritar                           |
+ * | -------------------- | --------------------------------------------------- |
+ * | `favorite-gone`      | `404`, e o GET seguinte do detalhe também vem `404` |
+ * | `favorite-boom`      | `500`                                               |
+ * | `favorite-forbidden` | `403`                                               |
+ * | `favorite-offline`   | Falha de rede                                       |
+ * | `favorite-slow`      | Timeout, após `API_TIMEOUT_MS`                      |
  */
 
 /** Latência de mentira, para os estados de carregamento aparecerem de verdade. */
@@ -241,6 +281,39 @@ const cenarioPerfilProprio: CenarioPerfilProprio =
   valorDoCenarioPerfilProprio && CENARIOS_PERFIL_PROPRIO.includes(valorDoCenarioPerfilProprio)
     ? (valorDoCenarioPerfilProprio as CenarioPerfilProprio)
     : 'full';
+
+type CenarioBloqueados = 'full' | 'empty' | 'error' | 'error-page';
+const CENARIOS_BLOQUEADOS: readonly string[] = ['full', 'empty', 'error', 'error-page'];
+const valorDoCenarioBloqueados = process.env.EXPO_PUBLIC_MOCK_BLOCKED;
+const cenarioBloqueados: CenarioBloqueados =
+  valorDoCenarioBloqueados && CENARIOS_BLOQUEADOS.includes(valorDoCenarioBloqueados)
+    ? (valorDoCenarioBloqueados as CenarioBloqueados)
+    : 'full';
+
+const NOMES_BLOQUEADOS = [
+  'Bruno Lima', 'Carla Menezes', 'Diego Arruda', 'Elisa Cardoso', 'Fábio Nunes',
+  'Gabriela Torres', 'Henrique Sales', 'Isadora Pires', 'João Batista', 'Karen Moura',
+  'Leonardo Faria', 'Mariana Castro', 'Nathalia Rocha', 'Otávio Mendes', 'Paula Ribeiro',
+  'Quésia Barros', 'Rafael Antunes', 'Sabrina Costa', 'Tiago Moreira', 'Úrsula Campos',
+  'Vinícius Prado', 'Wesley Dias',
+];
+
+function bloqueadosIniciais() {
+  if (cenarioBloqueados === 'empty') return [];
+  const dia = 24 * 60 * 60 * 1000;
+  const pessoas = NOMES_BLOQUEADOS.map((name, index) => ({
+    user_id: `blocked-${index + 1}`,
+    name,
+    photo_url: index % 3 === 0 ? null : `https://picsum.photos/seed/blocked-${index + 1}/150`,
+    blocked_at: new Date(Date.now() - (index + 1) * dia).toISOString(),
+  }));
+  return [
+    { user_id: 'unblock-gone', name: 'Pessoa já desbloqueada', photo_url: null, blocked_at: new Date().toISOString() },
+    { user_id: 'unblock-boom', name: 'Pessoa com erro no servidor', photo_url: null, blocked_at: new Date().toISOString() },
+    ...pessoas,
+    { user_id: 'blocked-long-name', name: 'Maria Eduarda Albuquerque de Vasconcelos Figueiredo', photo_url: null, blocked_at: new Date(Date.now() - 40 * dia).toISOString() },
+  ];
+}
 
 const wait = (ms = MOCK_LATENCY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -334,6 +407,17 @@ function estadoInicial() {
     chamadasDeUsuario: {} as Record<string, number>,
     relacoesDeUsuario: {} as Record<string, RelacaoDoUsuario>,
     usuariosIndisponiveis: [] as string[],
+    /** `GET /users/me/blocked`, na ordem da lista; nunca encolhe, para o cursor continuar valendo. */
+    bloqueados: bloqueadosIniciais(),
+    /** Quem já foi desbloqueado: some do `GET` seguinte. */
+    desbloqueados: [] as string[],
+    // Fonte do `is_favorited` e da aba Interesses do dono. Os ids iniciais repetem
+    // os de `EVENTOS_DE_INTERESSE_DO_DONO` porque `db` nasce antes de a constante
+    // ser declarada; nenhum em `empty`.
+    favoritos: cenarioPerfilProprio === 'empty' ? [] : ['samba-cidade-baixa', 'brique-redencao'],
+    eventosIndisponiveis: [] as string[],
+    // `cancelled` vale para o mock inteiro; o favoritar só responde `404` para o evento cancelado.
+    eventosCancelados: [] as string[],
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -354,6 +438,7 @@ let db = estadoInicial();
 /** Zera o mock, para percorrer o fluxo de novo sem recarregar o app. */
 export function resetMock() {
   db = estadoInicial();
+  ancoraDoMapa = null;
 }
 
 const DESCRICAO = [
@@ -369,7 +454,12 @@ const NOME_DA_TAG: Record<string, string> = { t1: 'Esportes', t2: 'Futebol' };
 /** Cenários de evento privado visto por quem não organiza. */
 const CENARIOS_PRIVADOS = ['private', 'private-no-area', 'private-confirmed'];
 
-const ehVisitante = (eventId: string) => eventId === 'guest' || CENARIOS_PRIVADOS.includes(eventId);
+/** Erros só no favoritar, com o detalhe igual ao de `guest`: visitante, o caso principal do favoritar. */
+const CENARIOS_DE_FAVORITAR = ['favorite-gone', 'favorite-boom', 'favorite-forbidden', 'favorite-offline', 'favorite-slow'];
+
+const ehVisitanteDeEventoPublico = (eventId: string) => eventId === 'guest' || CENARIOS_DE_FAVORITAR.includes(eventId);
+
+const ehVisitante = (eventId: string) => ehVisitanteDeEventoPublico(eventId) || CENARIOS_PRIVADOS.includes(eventId);
 
 function detalhe(eventId: string): EventDetail {
   const ehOrganizador = !ehVisitante(eventId);
@@ -397,7 +487,7 @@ function detalhe(eventId: string): EventDetail {
       : (overrides?.location_name ?? 'DRY Moments'),
     location_precision: localAproximado ? 'APPROXIMATE' : 'EXACT',
     location_radius_m: localAproximado ? 500 : null,
-    privacy: ehPrivado ? 'PRIVATE' : eventId === 'guest' ? 'PUBLIC' : 'INVITE_ONLY',
+    privacy: ehPrivado ? 'PRIVATE' : ehVisitanteDeEventoPublico(eventId) ? 'PUBLIC' : 'INVITE_ONLY',
     status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
     // `null` gravado pelo PATCH é "sem capa": com `??`, a padrão voltaria.
     cover_photo_url: overrides ? overrides.cover_photo_url : 'https://picsum.photos/seed/hangy-evento/900/600',
@@ -415,6 +505,7 @@ function detalhe(eventId: string): EventDetail {
           : ehPrivado
             ? 'REQUEST'
             : 'CONFIRM',
+      is_favorited: db.favoritos.includes(eventId),
     },
     participants_preview: localAproximado
       ? null
@@ -461,6 +552,102 @@ function participantes(eventId: string, statusFiltro: string | null): Participan
   };
 }
 
+/**
+ * Eventos do `GET /events/nearby` (tasks 118 e 274). Ficam a uma distância fixa
+ * de uma âncora, não num endereço — assim aparecem onde quer que o mapa abra
+ * (Porto Alegre, posição do simulador, etc.). A âncora é o centro da primeira
+ * busca e não acompanha as seguintes: senão cada pan/zoom (que refaz a busca)
+ * moveria os pins junto, e o pin "fugiria" ao ser centralizado. Só muda se a
+ * busca for para longe (`DISTANCIA_PARA_REANCORAR_M`), ex.: o GPS chegou depois
+ * da busca na posição padrão. Cada `event_id` é um dos cenários do detalhe,
+ * então tocar no preview abre o detalhe coerente.
+ *
+ * | `event_id`          | No mapa                                                   |
+ * | ------------------- | --------------------------------------------------------- |
+ * | `guest`             | Público, pin normal, botão de confirmar presença           |
+ * | `private`           | Privado não aprovado: selo de cadeado, área de 500 m       |
+ * | `private-no-area`   | Igual, sem bairro: preview com "Local aproximado"          |
+ * | `private-confirmed` | Privado já aprovado: `EXACT`, pin normal, sem selo nem área |
+ * | `sem-precisao`      | Sem `location_precision` (backend antigo): conta como `EXACT` |
+ *
+ * Os eventos ficam entre ~400 m e ~900 m da âncora: com zoom bem fechado longe
+ * deles o raio da busca não os alcança e cai no estado vazio do mapa.
+ */
+const EVENTOS_PROXIMOS: {
+  event_id: string;
+  title: string;
+  /** Deslocamento em metros a partir do centro da busca (norte e leste positivos). */
+  norte: number;
+  leste: number;
+  location_name: string | null;
+  location_precision?: 'EXACT' | 'APPROXIMATE';
+  privacy: 'PUBLIC' | 'PRIVATE';
+  is_confirmed: boolean;
+}[] = [
+  { event_id: 'guest', title: 'Show no Opinião', norte: 450, leste: -350, location_name: 'Bar Opinião', location_precision: 'EXACT', privacy: 'PUBLIC', is_confirmed: false },
+  { event_id: 'private', title: 'Futebol no Planet', norte: -300, leste: 500, location_name: 'Jardim Botânico, Porto Alegre', location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false },
+  { event_id: 'private-no-area', title: 'Aniversário surpresa', norte: -700, leste: -400, location_name: null, location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false },
+  { event_id: 'private-confirmed', title: 'Churrasco da turma', norte: 600, leste: 550, location_name: 'Rua Tenente-Coronel Fabrício Pilar, 520', location_precision: 'EXACT', privacy: 'PRIVATE', is_confirmed: true },
+  { event_id: 'sem-precisao', title: 'Feira do Bom Fim', norte: 150, leste: -850, location_name: 'Parque da Redenção', privacy: 'PUBLIC', is_confirmed: false },
+];
+
+const METROS_POR_GRAU = 111320;
+const DISTANCIA_PARA_REANCORAR_M = 20000;
+
+/** Centro da primeira busca — onde os eventos do mapa ficam presos. */
+let ancoraDoMapa: { latitude: number; longitude: number } | null = null;
+
+/** Distância aproximada em metros (equirretangular) — basta para o mock. */
+function distanciaEmMetros(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const norte = (b.latitude - a.latitude) * METROS_POR_GRAU;
+  const leste = (b.longitude - a.longitude) * METROS_POR_GRAU * Math.cos((a.latitude * Math.PI) / 180);
+  return Math.hypot(norte, leste);
+}
+
+function eventosProximos(path: string) {
+  const params = new URLSearchParams(path.split('?')[1] ?? '');
+  const latitude = Number(params.get('latitude'));
+  const longitude = Number(params.get('longitude'));
+  const raio = Number(params.get('radius_m'));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    throw new MockApiError(422, 'Invalid coordinates');
+  }
+  if (raio > 50000) throw new MockApiError(422, 'Radius exceeds maximum');
+
+  const centro = { latitude, longitude };
+  if (!ancoraDoMapa || distanciaEmMetros(ancoraDoMapa, centro) > DISTANCIA_PARA_REANCORAR_M) {
+    ancoraDoMapa = centro;
+  }
+  const ancora = ancoraDoMapa;
+  const metrosPorGrauDeLongitude = METROS_POR_GRAU * Math.cos((ancora.latitude * Math.PI) / 180);
+  const items = EVENTOS_PROXIMOS.map((evento) => {
+    const aproximado = evento.location_precision === 'APPROXIMATE';
+    const location = {
+      latitude: ancora.latitude + evento.norte / METROS_POR_GRAU,
+      longitude: ancora.longitude + evento.leste / metrosPorGrauDeLongitude,
+    };
+    // Até o centro da busca, como no backend (não até a âncora).
+    const distancia = distanciaEmMetros(centro, location);
+    return {
+      event_id: evento.event_id,
+      title: evento.title,
+      event_date: '2026-10-30T19:00:00Z',
+      location,
+      location_name: evento.location_name,
+      ...(evento.location_precision ? { location_precision: evento.location_precision } : {}),
+      location_radius_m: aproximado ? 500 : null,
+      privacy: evento.privacy,
+      cover_photo_url: `https://picsum.photos/seed/hangy-${evento.event_id}/300/300`,
+      // Igual ao backend: distância de evento aproximado já vem arredondada.
+      distance_m: aproximado ? Math.round(distancia / 100) * 100 : Math.round(distancia),
+      participants_count: aproximado ? null : 12,
+      is_confirmed: evento.is_confirmed,
+    };
+  }).filter((item) => item.distance_m <= raio);
+
+  return { items };
+}
+
 /** `/events/aa11/participants/p11` -> `['events', 'aa11', 'participants', 'p11']` */
 function segmentos(path: string) {
   return path.split('?')[0].split('/').filter(Boolean);
@@ -468,7 +655,9 @@ function segmentos(path: string) {
 
 function erroDoCenario(eventId: string) {
   if (eventId === 'cancelled') throw new MockApiError(410, 'Event was cancelled');
-  if (eventId === 'missing') throw new MockApiError(404, 'Event not found');
+  if (eventId === 'missing' || db.eventosIndisponiveis.includes(eventId)) {
+    throw new MockApiError(404, 'Event not found');
+  }
   if (eventId === 'boom') throw new MockApiError(500, 'Internal server error');
   if (eventId === 'offline') throw new MockNetworkError();
 }
@@ -484,6 +673,28 @@ function erroCompartilhar(eventId: string) {
   }
   if (eventId === 'boom') throw new MockApiError(500, 'Internal server error');
   if (eventId === 'offline') throw new MockNetworkError();
+}
+
+/**
+ * Como o backend, favoritar responde `404` também para o evento cancelado, em
+ * vez do `410` do `GET /events/{id}`.
+ */
+async function erroFavoritar(eventId: string) {
+  if (MOCK_USER_TYPE === 'BUSINESS') throw new MockApiError(403, 'Only personal accounts can favorite events');
+  if (db.eventosCancelados.includes(eventId) || db.eventosIndisponiveis.includes(eventId)) {
+    throw new MockApiError(404, 'Event not found');
+  }
+  if (eventId === 'favorite-gone') {
+    db.eventosIndisponiveis.push(eventId);
+    throw new MockApiError(404, 'Event not found');
+  }
+  if (eventId === 'favorite-boom') throw new MockApiError(500, 'Internal server error');
+  if (eventId === 'favorite-forbidden') throw new MockApiError(403, 'Only personal accounts can favorite events');
+  if (eventId === 'favorite-offline') throw new MockNetworkError();
+  if (eventId === 'favorite-slow') {
+    await wait(API_TIMEOUT_MS);
+    throw new MockTimeoutError();
+  }
 }
 
 function compartilhar(eventId: string): EventShare {
@@ -801,6 +1012,7 @@ const EVENTOS_CRIADOS_DO_DONO: UserEventItem[] = [
   },
 ];
 
+/** Itens dos favoritos iniciais; os demais favoritos saem do `detalhe()`. */
 const EVENTOS_DE_INTERESSE_DO_DONO: UserEventItem[] = [
   {
     event_id: 'samba-cidade-baixa',
@@ -864,11 +1076,42 @@ function historicoDoDono(): UserEventItem[] {
   }));
 }
 
+function itemDoDetalhe(eventId: string): UserEventItem {
+  const evento = detalhe(eventId);
+  return {
+    event_id: evento.event_id,
+    title: evento.title,
+    event_date: evento.event_date,
+    location_name: evento.location_name,
+    cover_photo_url: evento.cover_photo_url,
+    privacy: evento.privacy,
+    participation_status: evento.viewer.participation_status,
+  };
+}
+
+/**
+ * Na ordem do backend: data crescente, com desempate pelo id. Como lá, a aba só
+ * lista publicados e não encerrados: o favorito de um evento cancelado, encerrado
+ * ou indisponível continua guardado, mas sai da lista.
+ */
+function interessesDoDono(): UserEventItem[] {
+  return db.favoritos
+    .filter(
+      (eventId) =>
+        eventId !== 'finished' &&
+        !db.eventosCancelados.includes(eventId) &&
+        !db.eventosIndisponiveis.includes(eventId),
+    )
+    .map((eventId) => EVENTOS_DE_INTERESSE_DO_DONO.find((evento) => evento.event_id === eventId) ?? itemDoDetalhe(eventId))
+    .sort((a, b) => Date.parse(a.event_date) - Date.parse(b.event_date) || a.event_id.localeCompare(b.event_id));
+}
+
 function eventosDoDono(aba: UserEventsTab): UserEventItem[] {
+  // Os favoritos já começam vazios em `empty`, e favoritar lá precisa aparecer.
+  if (aba === 'interests') return interessesDoDono();
   if (cenarioPerfilProprio === 'empty') return [];
   if (aba === 'history') return historicoDoDono();
   if (aba === 'created') return EVENTOS_CRIADOS_DO_DONO;
-  if (aba === 'interests') return EVENTOS_DE_INTERESSE_DO_DONO;
   return EVENTOS_CONFIRMADOS_DO_DONO;
 }
 
@@ -888,21 +1131,39 @@ function contadoresDoDono() {
 }
 
 /**
- * Campos do perfil público (`GET /users/{id}`) da conta de estabelecimento,
- * lidos do mesmo `perfil.estabelecimento` e das mesmas tags que o Editar perfil
- * grava, para a volta da edição mostrar o dado novo.
+ * Perfil público da conta (`GET /users/{id da conta}`), lido do mesmo `perfil`
+ * e das mesmas tags que o Editar perfil grava, para a volta da edição mostrar o
+ * dado novo.
  */
-function perfilPublicoDoEstabelecimento() {
-  return {
-    description: perfil.estabelecimento.description,
+function perfilPublicoDaConta(): UserProfile {
+  const comum = {
+    id: ID_DA_CONTA,
     photo_url: null,
     tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
-    connections_count: 0,
-    followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
     connection_status: null,
     connection_id: null,
     connection_direction: null,
     is_following: false,
+  };
+
+  if (MOCK_USER_TYPE === 'BUSINESS') {
+    return {
+      ...comum,
+      user_type: 'BUSINESS',
+      name: perfil.estabelecimento.business_name,
+      description: perfil.estabelecimento.description,
+      connections_count: 0,
+      followers_count: cenarioPerfilProprio === 'empty' ? 0 : SEGUIDORES_INICIAIS,
+    };
+  }
+
+  return {
+    ...comum,
+    user_type: 'PERSONAL',
+    name: perfil.pessoa.name,
+    description: perfil.pessoa.description,
+    connections_count: contadoresDoDono().connections_count,
+    followers_count: null,
   };
 }
 
@@ -953,6 +1214,9 @@ async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
  */
 const MOCK_USER_TYPE = process.env.EXPO_PUBLIC_MOCK_USER_TYPE === 'BUSINESS' ? 'BUSINESS' : 'PERSONAL';
 
+/** Diferente de `me` para o `GET /users/{id}` próprio não cair no `GET /users/me`. */
+const ID_DA_CONTA = 'conta-mock';
+
 const ARVORE_DE_TAGS = [
   ['Esportes', ['Futebol', 'Vôlei', 'Corrida', 'Basquete', 'Ciclismo']],
   ['Gastronomia', ['Café', 'Brunch', 'Churrasco', 'Vinhos']],
@@ -989,7 +1253,7 @@ const perfil = {
     city: 'Porto Alegre',
   },
   estabelecimento: {
-    user_id: 'me',
+    user_id: ID_DA_CONTA,
     business_name: 'Quiero Café',
     cnpj: '12345678000199',
     description: 'Cafeteria de especialidade na Cidade Baixa.',
@@ -1023,7 +1287,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
     const { pessoa, estabelecimento } = perfil;
     return {
       resposta: {
-        id: 'me',
+        id: ID_DA_CONTA,
         email: perfil.email,
         user_type: MOCK_USER_TYPE,
         name: MOCK_USER_TYPE === 'BUSINESS' ? estabelecimento.business_name : pessoa.name,
@@ -1074,7 +1338,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
       return {
         resposta: {
           profile: {
-            id: 'me',
+            id: ID_DA_CONTA,
             name: pessoa.name,
             description: pessoa.description,
             photo_url: null,
@@ -1098,7 +1362,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
       if (typeof body.city === 'string') pessoa.city = body.city;
       return {
         resposta: {
-          id: 'me',
+          id: ID_DA_CONTA,
           name: pessoa.name,
           description: pessoa.description,
           city: pessoa.city,
@@ -1147,6 +1411,40 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
 
+  if (partes.join('/') === 'users/me/blocked' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const limit = Number(params.get('limit') ?? 20);
+    // Cursor = último `user_id` da página anterior, e não um offset: desbloquear
+    // alguém já carregado não pode empurrar a página seguinte e pular pessoas.
+    const cursor = params.get('cursor');
+    const depoisDe = cursor ? db.bloqueados.findIndex((pessoa) => pessoa.user_id === cursor) : -1;
+    const ativos = (pessoas: typeof db.bloqueados) =>
+      pessoas.filter((pessoa) => !db.desbloqueados.includes(pessoa.user_id));
+    if (!Number.isInteger(limit) || limit < 1 || (cursor && depoisDe === -1)) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+    if (cenarioBloqueados === 'error' || (cenarioBloqueados === 'error-page' && cursor)) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    const restantes = ativos(db.bloqueados.slice(depoisDe + 1));
+    const pagina = restantes.slice(0, limit);
+    const temMais = restantes.length > limit;
+    return {
+      items: pagina,
+      next_cursor: temMais ? pagina[pagina.length - 1].user_id : null,
+    } as T;
+  }
+
+  if (partes[0] === 'users' && partes[2] === 'block' && partes.length === 3 && method === 'DELETE') {
+    const userId = partes[1] ?? '';
+    if (userId === 'unblock-boom') throw new MockApiError(500, 'Internal server error');
+    const estavaBloqueado =
+      db.bloqueados.some((pessoa) => pessoa.user_id === userId) && !db.desbloqueados.includes(userId);
+    db.desbloqueados.push(userId);
+    if (userId === 'unblock-gone' || !estavaBloqueado) throw new MockApiError(404, 'User not found');
+    return undefined as T;
+  }
+
   const respostaDePerfil = resolverPerfil(partes, method, init);
   // Por cima da resposta do PR #62 (TID072), que vem zerada: os contadores
   // seguem `EXPO_PUBLIC_MOCK_OWN_PROFILE`, como as abas e as fotos do dono.
@@ -1162,23 +1460,21 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     const { connections_count, counts } = contadoresDoDono();
     return { profile: { ...resposta.profile, connections_count }, counts } as T;
   }
-  // Em conta de estabelecimento, o id do mock é `me`: o `GET /users/{id próprio}`
-  // do perfil comercial cai no `GET /users/me` do PR #62 (TID072), que ganha por
-  // cima os campos do perfil público. Os cenários de erro valem a partir da
-  // segunda chamada: supõem que a primeira é a do `useCurrentUser` do Perfil
-  // (ordem e limitações no comentário do topo).
-  if (respostaDePerfil && partes.join('/') === 'users/me' && method === 'GET' && MOCK_USER_TYPE === 'BUSINESS') {
-    const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
-    db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
-    if (cenarioPerfilProprio === 'profile-error' && chamadas > 1) {
-      throw new MockApiError(500, 'Internal server error');
-    }
-    if (cenarioPerfilProprio === 'profile-flaky' && chamadas > 2) {
-      throw new MockApiError(500, 'Internal server error');
-    }
-    return { ...(respostaDePerfil.resposta as Record<string, unknown>), ...perfilPublicoDoEstabelecimento() } as T;
-  }
   if (respostaDePerfil) return respostaDePerfil.resposta as T;
+
+  if (partes[0] === 'users' && partes[1] === ID_DA_CONTA && partes.length === 2 && method === 'GET') {
+    // A pessoa física lê os contadores pelo `GET /users/me/profile`, que já
+    // tem os cenários de erro; aqui eles valem só para o perfil comercial.
+    if (MOCK_USER_TYPE === 'BUSINESS') {
+      const chamadas = (db.chamadasDeUsuario['perfil-do-estabelecimento'] ?? 0) + 1;
+      db.chamadasDeUsuario['perfil-do-estabelecimento'] = chamadas;
+      if (cenarioPerfilProprio === 'profile-error') throw new MockApiError(500, 'Internal server error');
+      if (cenarioPerfilProprio === 'profile-flaky' && chamadas > 1) {
+        throw new MockApiError(500, 'Internal server error');
+      }
+    }
+    return perfilPublicoDaConta() as T;
+  }
 
   // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
   // também ainda não subiu — o cadastro (task 056) precisa disto pra dar de
@@ -1190,6 +1486,11 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
       url: 'https://hangy.app/termos/2026-08-01',
       summary: 'Termos de uso e política de privacidade do Hangy.',
     } as T;
+  }
+
+  // Antes do detalhe: `/events/nearby` também tem dois segmentos.
+  if (partes[0] === 'events' && partes[1] === 'nearby' && method === 'GET') {
+    return eventosProximos(path) as T;
   }
 
   if (partes[0] === 'events' && partes.length === 2 && method === 'GET') {
@@ -1251,7 +1552,15 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     db.cancelled = true;
+    db.eventosCancelados.push(eventId);
     return { event_id: eventId, status: 'CANCELLED', updated_at: new Date().toISOString() } as T;
+  }
+
+  if (partes[0] === 'events' && partes[2] === 'favorite' && partes.length === 3 && (method === 'POST' || method === 'DELETE')) {
+    await erroFavoritar(eventId);
+    const semEste = db.favoritos.filter((id) => id !== eventId);
+    db.favoritos = method === 'POST' ? [...semEste, eventId] : semEste;
+    return undefined as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'participants' && partes.length === 4) {
@@ -1300,10 +1609,8 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return { items, next_cursor: fim < todas.length ? String(fim) : null } as T;
   }
 
-  // `me` é o usuário logado, não um perfil visitado: fica fora destas regras,
-  // menos nas abas de eventos, em que é o dono.
-  const ehAbasDoDono = partes[1] === 'me' && partes[2] === 'events' && partes.length === 3;
-  if (partes[0] === 'users' && (partes[1] !== 'me' || ehAbasDoDono) && method === 'GET') {
+  // `/users/me/...` são as rotas da conta logada, não um perfil visitado.
+  if (partes[0] === 'users' && partes[1] !== 'me' && method === 'GET') {
     const userId = partes[1] ?? '';
 
     if (partes.length === 2) {
@@ -1312,7 +1619,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     }
 
     if (partes.length === 3 && partes[2] === 'events') {
-      const ehDono = userId === 'me';
+      const ehDono = userId === ID_DA_CONTA;
       if (!ehDono) {
         await erroDoUsuario(userId, 'eventos');
         if (userId === 'events-boom') throw new MockApiError(500, 'Internal server error');

@@ -1,4 +1,4 @@
-import type { View } from 'react-native';
+import type { ViewInstance } from 'react-native';
 
 // Versão web. A nativa fica em accessibility.native.ts: o react-native-web
 // deixa `announceForAccessibility` vazio e não implementa
@@ -57,22 +57,22 @@ export function announce(message: string, politeness: Politeness = 'polite'): vo
   }, ANNOUNCE_DELAY_MS);
 }
 
-// No web, a ref de uma `View` é o próprio elemento do DOM.
-function toElement(node: View): HTMLElement {
+// No web, a ref de uma `ViewInstance` é o próprio elemento do DOM.
+function toElement(node: ViewInstance): HTMLElement {
   return node as unknown as HTMLElement;
 }
 
-export function moveAccessibilityFocus(node: View): void {
+export function moveAccessibilityFocus(node: ViewInstance): void {
   const element = toElement(node);
   // Sem `tabindex`, uma `div` não recebe foco por script; `-1` não a põe na
   // ordem do Tab. Fica aqui, e não como prop na tela, porque no Android a prop
-  // `tabIndex` muda o `focusable` da View.
+  // `tabIndex` muda o `focusable` da ViewInstance.
   if (!element.hasAttribute('tabindex')) element.setAttribute('tabindex', '-1');
   // Quem chama já rola até o campo com animação.
   element.focus({ preventScroll: true });
 }
 
-export function restoreLostFocus(node: View): void {
+export function restoreLostFocus(node: ViewInstance): void {
   const active = document.activeElement;
   if (active && active !== document.body) return;
   // Sem caixas, o elemento está escondido, por exemplo numa tela que não é a atual.

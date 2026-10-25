@@ -1,5 +1,6 @@
+import type { ViewInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, type ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, type ScrollViewInstance, StyleSheet, View } from 'react-native';
 
 import { FileUpload } from '@/components/FileUpload';
 import { TextField } from '@/components/TextField';
@@ -15,7 +16,7 @@ const SCROLL_MARGIN = spacing[16];
 
 type Step1Props = {
   data: CreateEventFormData;
-  scrollRef: React.RefObject<ScrollView | null>;
+  scrollRef: React.RefObject<ScrollViewInstance | null>;
   /** Pendências da etapa, calculadas pelo container. */
   missing: MissingField[];
   /** Quantos toques em "Continuar". Cada incremento é uma tentativa nova. */
@@ -52,11 +53,11 @@ export function Step1({
 }: Step1Props) {
   const { tags, isLoading: tagsLoading, error: tagsError, refetch } = useTags();
 
-  const containerRef = useRef<View>(null);
-  const titleRef = useRef<View>(null);
-  const coverRef = useRef<View>(null);
-  const tagsRef = useRef<View>(null);
-  const fieldRefs: Record<MissingField, React.RefObject<View | null>> = {
+  const containerRef = useRef<ViewInstance>(null);
+  const titleRef = useRef<ViewInstance>(null);
+  const coverRef = useRef<ViewInstance>(null);
+  const tagsRef = useRef<ViewInstance>(null);
+  const fieldRefs: Record<MissingField, React.RefObject<ViewInstance | null>> = {
     title: titleRef,
     tags: tagsRef,
   };
@@ -73,7 +74,7 @@ export function Step1({
   const showTitleError = (submitAttempted || titleBlurred) && isTitleMissing;
   const showSummary = submitAttempted && missing.length > 0;
 
-  const scrollToField = (node: View) => {
+  const scrollToField = (node: ViewInstance) => {
     const scroll = scrollRef.current;
     // Content container, não o nó externo: na web o `measureLayout` do RNW
     // devolve `y` relativo à viewport, já descontado o scroll atual, e o alvo

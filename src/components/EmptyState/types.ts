@@ -1,3 +1,5 @@
+import type { IconName } from '@/components/Icon';
+
 export type EmptyStateContext = 'Home' | 'Map' | 'Search' | 'Photos' | 'MyEvents' | 'Notifications';
 
 export interface EmptyStateProps {
@@ -18,4 +20,10 @@ export interface EmptyStateProps {
   title?: string;
   /** Sobrescreve o texto do `context`. Ver `title`. */
   text?: string;
+  /**
+   * Sobrescreve o ícone do `context`. Existe para as telas que não têm um
+   * `context` próprio no Design System — como "Usuários bloqueados", que usa
+   * `ban` — sem criar um `context` só para trocar o ícone. Ver `title`.
+   */
+  icon?: IconName;
 }

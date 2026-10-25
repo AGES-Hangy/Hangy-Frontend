@@ -8,12 +8,18 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { colors, palette } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import type { Event } from '@/components/EventCard/types';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useFavoriteEvent } from '@/hooks/useFavoriteEvent';
 import { useFeed, type FeedSection } from '@/hooks/useFeed';
 import { useRefreshable } from '@/hooks/useRefreshable';
 
 export default function Home() {
   const { sections, isLoading, error, isOffline, reload, refresh } = useFeed();
   const { isRefreshing, onRefresh } = useRefreshable(refresh);
+  const { user } = useCurrentUser();
+  // O feed só traz eventos publicados, então basta o tipo da conta.
+  const canFavorite = user?.userType === 'PERSONAL';
 
   if (isLoading) {
     return <FeedSkeleton />;
@@ -56,7 +62,9 @@ export default function Home() {
       <FlatList
         data={visibleSections}
         keyExtractor={(section) => section.tag.id}
-        renderItem={({ item }) => <FeedSectionRow section={item} />}
+        renderItem={({ item }) => (
+          <FeedSectionRow section={item} canFavorite={canFavorite} onEventUnavailable={refresh} />
+        )}
         contentContainerStyle={styles.feedContent}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
@@ -73,7 +81,15 @@ export default function Home() {
   );
 }
 
-function FeedSectionRow({ section }: { section: FeedSection }) {
+function FeedSectionRow({
+  section,
+  canFavorite,
+  onEventUnavailable,
+}: {
+  section: FeedSection;
+  canFavorite: boolean;
+  onEventUnavailable: () => void;
+}) {
   return (
     <View style={styles.section}>
       <SectionHeader
@@ -87,17 +103,40 @@ function FeedSectionRow({ section }: { section: FeedSection }) {
         data={section.items}
         keyExtractor={(event) => event.id}
         renderItem={({ item }) => (
-          <EventCard
-            variant="Mini"
-            event={item}
-            onPress={() => router.push(`/EventDetail?id=${item.id}`)}
-          />
+          <FeedEventCard event={item} canFavorite={canFavorite} onUnavailable={onEventUnavailable} />
         )}
         ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
         showsHorizontalScrollIndicator={false}
         removeClippedSubviews
       />
     </View>
+  );
+}
+
+/** Um card por hook: cada estrela tem o próprio estado e a própria requisição. */
+function FeedEventCard({
+  event,
+  canFavorite,
+  onUnavailable,
+}: {
+  event: Event;
+  canFavorite: boolean;
+  onUnavailable: () => void;
+}) {
+  const { isFavorited, toggle } = useFavoriteEvent(event.id, event.isFavorited ?? false, {
+    eventTitle: event.title,
+    // Evento cancelado ou apagado desde a carga: recarrega para tirá-lo do feed.
+    onUnavailable,
+  });
+
+  return (
+    <EventCard
+      variant="Mini"
+      event={event}
+      onPress={() => router.push(`/EventDetail?id=${event.id}`)}
+      isFavorited={isFavorited}
+      onFavoritePress={canFavorite ? toggle : undefined}
+    />
   );
 }
 

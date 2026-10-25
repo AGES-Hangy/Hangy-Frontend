@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -47,7 +48,7 @@ export default function CreateEvent() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const step2Ref = useRef<Step2Handle>(null);
 
   const [step, setStep] = useState<1 | 2>(1);
