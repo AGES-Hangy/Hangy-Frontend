@@ -44,6 +44,7 @@ import type { CurrentUser } from '@/hooks/useCurrentUser';
 import { useDeleteAccount } from '@/hooks/useDeleteAccount';
 import { invalidateFeed } from '@/hooks/useFeed';
 import { useLogout } from '@/hooks/useLogout';
+import { useProfilePhotoUpload } from '@/hooks/useProfilePhotoUpload';
 import type { TagNode } from '@/hooks/useTags';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
 import { useUpdateProfile } from '@/hooks/useUpdateProfile';
@@ -118,6 +119,17 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
   );
   const [selection, setSelection] = useState<TagSelection>(initialSelection);
   const [tagsApiError, setTagsApiError] = useState<string | null>(null);
+
+  // A foto não entra no formulário: o `POST /users/me/photo` já grava na hora.
+  const photoUpload = useProfilePhotoUpload();
+  const [photoUri, setPhotoUri] = useState<string | null>(profile.photo_url ?? null);
+
+  async function changePhoto() {
+    const uploaded = await photoUpload.pickAndUpload();
+    if (!uploaded) return;
+    setPhotoUri(uploaded.uri);
+    addToast({ type: 'success', message: isBusiness ? 'Logo atualizada.' : 'Foto atualizada.' });
+  }
 
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -326,11 +338,34 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
             </View>
           )}
 
-          {/* ⚠️ Decisão pendente (task 072): o Figma traz "Trocar foto"/"Trocar
-              logo", mas o modelo não tem foto de perfil. Até a decisão, o
-              avatar aparece sem ação de troca e não há upload. */}
           <View style={styles.photo}>
-            {isBusiness ? <Avatar variant="Store" size="MD" /> : <Avatar size="SM" />}
+            {isBusiness ? (
+              <Avatar
+                variant="Store"
+                size="MD"
+                source={photoUri ? { uri: photoUri } : undefined}
+                accessibilityLabel={photoUri ? 'Logo do estabelecimento' : undefined}
+                onCameraPress={photoUpload.isUploading || photoUpload.isPicking ? undefined : () => void changePhoto()}
+                cameraAccessibilityLabel="Trocar logo"
+              />
+            ) : (
+              <Avatar
+                size="SM"
+                source={photoUri ? { uri: photoUri } : undefined}
+                accessibilityLabel={photoUri ? 'Sua foto de perfil' : undefined}
+                onCameraPress={photoUpload.isUploading || photoUpload.isPicking ? undefined : () => void changePhoto()}
+                cameraAccessibilityLabel="Trocar foto"
+              />
+            )}
+            {photoUpload.isUploading ? (
+              <Text style={styles.photoStatus} accessibilityLiveRegion="polite">
+                {photoUpload.progress === null ? 'Enviando foto…' : `Enviando foto… ${photoUpload.progress}%`}
+              </Text>
+            ) : photoUpload.error ? (
+              <Text style={[styles.photoStatus, styles.photoError]} accessibilityRole="alert">
+                {photoUpload.error}
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.section}>
@@ -598,6 +633,15 @@ const styles = StyleSheet.create({
   },
   photo: {
     alignItems: 'center',
+    gap: spacing[8],
+  },
+  photoStatus: {
+    ...typography.bodyS,
+    color: colors.text.tertiary,
+    textAlign: 'center',
+  },
+  photoError: {
+    color: colors.feedback.error,
   },
   section: {
     gap: spacing[4],

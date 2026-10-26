@@ -16,6 +16,7 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/Badge';
 import { PHOTO_GRID_COLUMNS, PHOTO_GRID_GAP, PhotoTile } from '@/components/PhotoTile';
+import { ExperienceDescriptionDialog } from '@/components/ExperienceDescriptionDialog';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
@@ -95,12 +96,10 @@ export default function EventDetail() {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const { isOffline } = useNetworkStatus();
   const { width: windowWidth } = useWindowDimensions();
-  // A experiência exige descrição, e o frame não tem campo para ela: vai a do
-  // evento, preenchida na criação. Sem descrição (opcional lá), vai o título.
-  const experienceDescription = event?.description?.trim() || event?.title || '';
   const {
     photos,
     pickPhoto,
+    releasePhoto,
     pickError,
     isPicking,
     uploadPhoto,
@@ -108,7 +107,12 @@ export default function EventDetail() {
     dropPhoto,
     resetExperience,
     removingPhotoId,
-  } = useExperiencePhotos(resolvedEventId, experienceDescription);
+    experience,
+    experienceStatus,
+    updateDescription,
+  } = useExperiencePhotos(resolvedEventId);
+  // Primeira foto do evento: fica esperando a descrição que cria a experiência.
+  const [pickedAwaitingDescription, setPickedAwaitingDescription] = useState<PickedImage | null>(null);
   // 400/403 no envio: a ação some até o servidor mudar de ideia (novo evento).
   const [isPhotoActionHidden, setIsPhotoActionHidden] = useState(false);
   // 409 `Photo limit reached`: o botão continua lá, mas desabilitado.
@@ -125,6 +129,7 @@ export default function EventDetail() {
     setUndeletablePhotoIds([]);
     setPhotoToRemove(null);
     setViewerIndex(null);
+    setPickedAwaitingDescription(null);
   }, [event?.event_id]);
 
   // Arquivo recusado no aparelho: fora de JPG/PNG ou acima de 5 MB.
@@ -287,19 +292,55 @@ export default function EventDetail() {
   const photoTileSize =
     (windowWidth - spacing[16] * 2 - PHOTO_GRID_GAP * (PHOTO_GRID_COLUMNS - 1)) / PHOTO_GRID_COLUMNS;
 
-  function startUpload(picked: PickedImage) {
-    uploadPhoto(picked).catch((err) => handleUploadError(err as ApiError, picked));
+  /** `description` só vai quando a experiência ainda vai ser criada. */
+  function startUpload(picked: PickedImage, description?: string) {
+    uploadPhoto(picked, description).catch((err) => handleUploadError(err as ApiError, picked, description));
   }
 
   async function handleAddPhoto() {
     const picked = await pickPhoto();
-    if (picked) startUpload(picked);
+    if (!picked) return;
+    // Sem experiência (ou sem saber se há), o primeiro envio pede a descrição.
+    if (experience) startUpload(picked);
+    else setPickedAwaitingDescription(picked);
+  }
+
+  function handleDescriptionConfirm(description: string) {
+    const picked = pickedAwaitingDescription;
+    setPickedAwaitingDescription(null);
+    if (picked) startUpload(picked, description);
+  }
+
+  function handleDescriptionCancel() {
+    if (pickedAwaitingDescription) releasePhoto(pickedAwaitingDescription.uri);
+    setPickedAwaitingDescription(null);
+  }
+
+  async function handleEditDescription(description: string): Promise<boolean> {
+    try {
+      await updateDescription(description);
+      return true;
+    } catch (err) {
+      const apiError = err as ApiError;
+      if (apiError.status === 401 || apiError.kind === 'cancelled') return false;
+      if (apiError.status === 404) {
+        addToast({ type: 'error', message: 'Este registro não existe mais' });
+        resetExperience();
+        reload();
+        return true;
+      }
+      addToast({
+        type: 'error',
+        message: apiError.kind === 'network' ? 'Sem conexão com a internet' : 'Não foi possível salvar. Tente de novo.',
+      });
+      return false;
+    }
   }
 
   /** Tabela de tratamento de erro da task — envio da foto. */
-  function handleUploadError(apiError: ApiError, picked: PickedImage) {
+  function handleUploadError(apiError: ApiError, picked: PickedImage, description?: string) {
     if (apiError.status === 401 || apiError.kind === 'cancelled') return;
-    const retry = { actionLabel: 'Tentar de novo', onAction: () => startUpload(picked) };
+    const retry = { actionLabel: 'Tentar de novo', onAction: () => startUpload(picked, description) };
 
     if (apiError.kind === 'timeout') {
       addToast({ type: 'error', message: 'A conexão demorou demais', ...retry });
@@ -335,8 +376,8 @@ export default function EventDetail() {
           setIsPhotoLimitReached(true);
           return;
         }
-        // `Experience already exists`: o usuário já tem registro neste evento
-        // e a API não devolve o id dele — tentar de novo não resolve.
+        // `Experience already exists` que nem o `GET .../experiences/me`
+        // resolveu — tentar de novo não adianta.
         addToast({ type: 'error', message: 'Não foi possível enviar a foto.' });
         return;
       case 413:
@@ -623,7 +664,7 @@ export default function EventDetail() {
             </View>
           )}
 
-          {/* Fotos que o usuário adicionou nesta visita. Enquanto envia, a
+          {/* Fotos do registro do usuário neste evento. Enquanto envia, a
               miniatura otimista mostra o progresso; o resto da tela segue
               utilizável. A lixeira só aparece depois do 201 — antes disso a
               foto ainda não é do servidor. */}
@@ -696,7 +737,7 @@ export default function EventDetail() {
             label="Adicionar foto ao meu registro"
             icon="camera"
             // Offline e limite atingido: escrita desabilitada, não escondida.
-            disabled={isOffline || isPhotoLimitReached || isPicking}
+            disabled={isOffline || isPhotoLimitReached || isPicking || experienceStatus === 'loading'}
             onPress={handleAddPhoto}
             style={styles.ctaButton}
           />
@@ -735,11 +776,20 @@ export default function EventDetail() {
           id: photo.photoId,
           uri: photo.uri,
           title: event.title,
-          description: experienceDescription,
+          description: experience?.description ?? null,
           canDelete: !isOffline && !undeletablePhotoIds.includes(photo.photoId),
+          canEditDescription: experience !== null && !isOffline,
         }))}
         onClose={closeViewer}
         onDelete={(photo) => deletePhoto(photo.id)}
+        onEditDescription={(_, description) => handleEditDescription(description)}
+      />
+
+      <ExperienceDescriptionDialog
+        visible={pickedAwaitingDescription !== null}
+        mode="create"
+        onConfirm={handleDescriptionConfirm}
+        onCancel={handleDescriptionCancel}
       />
 
       <Dialog

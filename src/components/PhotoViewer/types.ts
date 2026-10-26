@@ -10,6 +10,8 @@ export type PhotoViewerItem = {
   createdAt?: string | null;
   /** Mostra a lixeira desta foto. */
   canDelete?: boolean;
+  /** Mostra o lápis que edita a descrição desta foto. */
+  canEditDescription?: boolean;
 };
 
 export type PhotoViewerProps = {
@@ -22,6 +24,11 @@ export type PhotoViewerProps = {
    * fecha sozinho quando não sobra nenhuma foto. Sem a prop, não há lixeira.
    */
   onDelete?: (photo: PhotoViewerItem) => Promise<boolean>;
+  /**
+   * Salva a nova descrição da experiência da foto. Resolve `true` quando o
+   * servidor aceitou; quem chama atualiza `photos`. Sem a prop, não há lápis.
+   */
+  onEditDescription?: (photo: PhotoViewerItem, description: string) => Promise<boolean>;
   /** Toque no título — ex.: abrir o evento da foto. */
   onPressTitle?: (photo: PhotoViewerItem) => void;
 };

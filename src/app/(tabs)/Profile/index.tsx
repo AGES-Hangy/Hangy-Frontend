@@ -17,6 +17,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMyPhotos } from '@/hooks/useMyPhotos';
+import { updateExperienceDescription } from '@/hooks/useExperiencePhotos';
 import { useMyProfile } from '@/hooks/useMyProfile';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
@@ -97,6 +98,7 @@ export default function Profile() {
     loadMore: loadMorePhotos,
     reload: reloadPhotos,
     removeLocal: removeLocalPhoto,
+    updateLocalDescription,
   } = useMyPhotos({ enabled: isPersonalProfile && hasOpenedGallery });
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const closeViewer = useCallback(() => setViewerIndex(null), []);
@@ -170,6 +172,31 @@ export default function Profile() {
     void reloadProfile();
     addToast({ type: 'success', message: 'Foto excluída.' });
     return true;
+  }
+
+  // Fotos da própria galeria: a pessoa é a autora da experiência de cada uma.
+  async function editPhotoDescription(photo: PhotoViewerItem, description: string) {
+    const experienceId = photos?.find((item) => item.photo_id === photo.id)?.experience_id;
+    if (!experienceId) return false;
+    try {
+      const updated = await updateExperienceDescription(experienceId, description);
+      updateLocalDescription(experienceId, updated.description);
+      addToast({ type: 'success', message: 'Descrição atualizada.' });
+      return true;
+    } catch (caught) {
+      const apiError = caught as ApiError;
+      if (apiError.status === 401) return false;
+      addToast({
+        type: 'error',
+        message:
+          apiError.kind === 'network'
+            ? 'Sem conexão com a internet'
+            : apiError.kind === 'timeout'
+              ? 'A conexão demorou demais'
+              : 'Não foi possível salvar a descrição. Tente de novo.',
+      });
+      return false;
+    }
   }
 
   function openEditProfile() {
@@ -361,9 +388,10 @@ export default function Profile() {
         {isOffline && <OfflineBanner />}
         <PhotoViewer
           initialIndex={viewerIndex}
-          photos={toPhotoViewerItems(photos ?? [], { canDelete: !isOffline })}
+          photos={toPhotoViewerItems(photos ?? [], { canDelete: !isOffline, canEditDescription: !isOffline })}
           onClose={closeViewer}
           onDelete={deletePhoto}
+          onEditDescription={editPhotoDescription}
           onPressTitle={(photo) => {
             const eventId = photos?.find((item) => item.photo_id === photo.id)?.event.id;
             if (!eventId) return;

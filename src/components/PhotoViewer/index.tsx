@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Dialog } from '@/components/Dialog';
+import { ExperienceDescriptionDialog } from '@/components/ExperienceDescriptionDialog';
 import { Icon } from '@/components/Icon';
 import type { IconName } from '@/components/Icon';
 import type { PhotoViewerItem, PhotoViewerProps } from '@/components/PhotoViewer/types';
@@ -41,7 +42,9 @@ export type { PhotoViewerItem, PhotoViewerProps } from '@/components/PhotoViewer
  * cima da foto, e a lixeira no topo quando a pessoa pode excluir. Um toque na
  * foto esconde e mostra essa moldura.
  */
-export function PhotoViewer({ initialIndex, photos, onClose, onDelete, onPressTitle }: PhotoViewerProps) {
+export function PhotoViewer({
+  initialIndex, photos, onClose, onDelete, onEditDescription, onPressTitle,
+}: PhotoViewerProps) {
   const visible = initialIndex !== null && photos.length > 0;
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -51,6 +54,8 @@ export function PhotoViewer({ initialIndex, photos, onClose, onDelete, onPressTi
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<PhotoViewerItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [photoToEdit, setPhotoToEdit] = useState<PhotoViewerItem | null>(null);
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
 
   // Cada abertura começa na foto tocada e com a moldura à mostra.
   useEffect(() => {
@@ -96,6 +101,17 @@ export function PhotoViewer({ initialIndex, photos, onClose, onDelete, onPressTi
     }
   }
 
+  async function saveDescription(description: string) {
+    const photo = photoToEdit;
+    if (!photo || !onEditDescription || isSavingDescription) return;
+    setIsSavingDescription(true);
+    try {
+      if (await onEditDescription(photo, description)) setPhotoToEdit(null);
+    } finally {
+      setIsSavingDescription(false);
+    }
+  }
+
   if (!current) return null;
 
   const title = current.title?.trim() || null;
@@ -103,6 +119,7 @@ export function PhotoViewer({ initialIndex, photos, onClose, onDelete, onPressTi
   const date = current.createdAt ? formatDate(current.createdAt) : '';
   const position = `${Math.min(index, photos.length - 1) + 1} de ${photos.length}`;
   const canDelete = onDelete !== undefined && current.canDelete === true;
+  const canEditDescription = onEditDescription !== undefined && current.canEditDescription === true;
   const hasFooter = title !== null || description !== null || date !== '';
 
   return (
@@ -157,16 +174,25 @@ export function PhotoViewer({ initialIndex, photos, onClose, onDelete, onPressTi
             ) : (
               <View />
             )}
-            {canDelete ? (
-              <ChromeButton
-                icon="trash-2"
-                accessibilityLabel="Excluir foto"
-                onPress={() => setPhotoToDelete(current)}
-                tone="danger"
-              />
-            ) : (
-              <View style={styles.chromeSpacer} />
-            )}
+            <View style={styles.actions}>
+              {canEditDescription && (
+                <ChromeButton
+                  icon="pencil"
+                  accessibilityLabel="Editar descrição"
+                  onPress={() => setPhotoToEdit(current)}
+                />
+              )}
+              {canDelete ? (
+                <ChromeButton
+                  icon="trash-2"
+                  accessibilityLabel="Excluir foto"
+                  onPress={() => setPhotoToDelete(current)}
+                  tone="danger"
+                />
+              ) : (
+                !canEditDescription && <View style={styles.chromeSpacer} />
+              )}
+            </View>
           </View>
         )}
 
@@ -222,6 +248,16 @@ export function PhotoViewer({ initialIndex, photos, onClose, onDelete, onPressTi
           }}
           isLoading={isDeleting}
         />
+        <ExperienceDescriptionDialog
+          visible={photoToEdit !== null}
+          mode="edit"
+          initialValue={photoToEdit?.description ?? ''}
+          onConfirm={(description) => void saveDescription(description)}
+          onCancel={() => {
+            if (!isSavingDescription) setPhotoToEdit(null);
+          }}
+          isLoading={isSavingDescription}
+        />
       </View>
     </Modal>
   );
@@ -275,6 +311,10 @@ const styles = StyleSheet.create({
   },
   chromeSpacer: {
     width: CHROME_BUTTON_SIZE,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing[8],
   },
   counter: {
     paddingHorizontal: spacing[12],

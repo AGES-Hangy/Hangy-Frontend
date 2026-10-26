@@ -65,6 +65,8 @@ export interface PersonalProfile {
   state?: string | null;
   city?: string | null;
   email?: string | null;
+  /** Foto de perfil — trocada à parte, por `POST /users/me/photo`. */
+  photo_url?: string | null;
 }
 
 /** `GET /businesses/me` (task 077). */
@@ -77,6 +79,8 @@ export interface BusinessProfile {
   phone?: string | null;
   instagram?: string | null;
   email?: string | null;
+  /** Logo — trocada à parte, por `POST /users/me/photo`. */
+  photo_url?: string | null;
 }
 
 /**

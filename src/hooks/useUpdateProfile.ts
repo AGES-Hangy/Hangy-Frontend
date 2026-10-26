@@ -57,6 +57,7 @@ export async function fetchProfileForEdit(
   return {
     name: response?.profile.name ?? user.name,
     description: response?.profile.description,
+    photo_url: response?.profile.photo_url ?? account?.photo_url,
     email: user.email,
     date_of_birth: account?.date_of_birth,
     state: account?.state,

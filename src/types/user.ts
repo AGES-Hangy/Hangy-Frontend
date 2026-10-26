@@ -84,6 +84,8 @@ export type UserEventsTabs = Record<UserEventsTab, UserEventsPage | null>;
 export interface UserPhoto {
   photo_id: string;
   photo_url: string;
+  /** Experiência da foto — com ele o autor edita a descrição (`PATCH /experiences/{id}`). */
+  experience_id?: string | null;
   event: { id: string; title: string };
   /** Texto da experiência a que a foto pertence. */
   description?: string | null;

@@ -60,6 +60,10 @@ export const endpoints = {
   event: (eventId: string) => `/events/${eventId}`,
   /** Registro do participante num evento encerrado (task 073 [BE]). */
   eventExperiences: (eventId: string) => `/events/${eventId}/experiences`,
+  /** A experiência do usuário logado no evento, com as fotos — `404 Experience not found` se não houver. */
+  myEventExperience: (eventId: string) => `/events/${eventId}/experiences/me`,
+  /** `PATCH` troca a descrição da experiência; só o autor. */
+  experience: (experienceId: string) => `/experiences/${experienceId}`,
   /** Envio do arquivo de uma foto, em `multipart/form-data` (task 225 [BE]). */
   experienceImages: (experienceId: string) => `/experiences/${experienceId}/images`,
   /** Remoção de uma foto — só o autor ou o organizador (task 226 [BE]). */
@@ -155,6 +159,8 @@ export const endpoints = {
     const query = params.toString();
     return `/users/${encodeURIComponent(userId)}/photos${query ? `?${query}` : ''}`;
   },
+  /** Foto de perfil, em `multipart/form-data` com o campo `file`; vale para os dois tipos de conta. */
+  profilePhoto: () => '/users/me/photo',
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */

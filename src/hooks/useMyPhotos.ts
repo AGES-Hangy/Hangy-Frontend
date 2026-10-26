@@ -91,6 +91,13 @@ export function useMyPhotos({ enabled, userId }: { enabled: boolean; userId?: st
     setPhotos((current) => current?.filter((photo) => photo.photo_id !== photoId) ?? null);
   }, []);
 
+  /** Todas as fotos da mesma experiência dividem a descrição. */
+  const updateLocalDescription = useCallback((experienceId: string, description: string) => {
+    setPhotos((current) => current?.map((photo) => (
+      photo.experience_id === experienceId ? { ...photo, description } : photo
+    )) ?? null);
+  }, []);
+
   return {
     photos,
     isLoading,
@@ -102,5 +109,6 @@ export function useMyPhotos({ enabled, userId }: { enabled: boolean; userId?: st
     loadMore,
     reload,
     removeLocal,
+    updateLocalDescription,
   };
 }
