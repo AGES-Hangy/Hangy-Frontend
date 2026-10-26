@@ -69,6 +69,13 @@ function formatDateValue(date: Date, mode: 'date' | 'time'): string {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
 }
 
+/** Duração vazia abre em 1 h, não no horário atual (que viraria "14 h 37 min"). */
+function defaultDuration(): Date {
+  const value = new Date();
+  value.setHours(1, 0, 0, 0);
+  return value;
+}
+
 function parseDateValue(value: string, mode: 'date' | 'time'): Date | null {
   if (mode === 'time') {
     const match = /^(\d{1,2}):(\d{2})$/.exec(value);
@@ -257,6 +264,7 @@ export function TextField({
   dateValue,
   onChangeDate,
   dateMode = 'date',
+  isDuration = false,
   minimumDate,
   maximumDate,
   maxLength,
@@ -321,10 +329,12 @@ export function TextField({
   };
 
   const openDatePicker = () => {
+    const initialValue = dateValue ?? (isDuration ? defaultDuration() : new Date());
     if (Platform.OS === 'android') {
       DateTimePickerAndroid.open({
-        value: dateValue ?? new Date(),
+        value: initialValue,
         mode: dateMode,
+        is24Hour: isDuration || undefined,
         minimumDate,
         maximumDate,
         // No Android o diálogo se fecha sozinho; só o 'set' confirma a escolha.
@@ -338,7 +348,7 @@ export function TextField({
     // O spinner só chama `onChange` quando o usuário efetivamente gira uma
     // roda — se ele abrir e tocar direto em "Concluir" (aceitando o valor
     // padrão já exibido), sem isto o campo ficava sem valor nenhum.
-    setIosPickerDraft(dateValue ?? new Date());
+    setIosPickerDraft(initialValue);
     setIsIosPickerOpen(true);
   };
 
@@ -565,8 +575,9 @@ export function TextField({
 
               <DateTimePicker
                 value={iosPickerDraft}
-                mode={dateMode}
+                mode={isDuration ? 'countdown' : dateMode}
                 display="spinner"
+                locale={isDuration ? 'pt-BR' : undefined}
                 minimumDate={minimumDate}
                 maximumDate={maximumDate}
                 // O spinner só emite ao rolar. Guardamos o valor em

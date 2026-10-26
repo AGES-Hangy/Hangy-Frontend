@@ -20,6 +20,7 @@ import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
 import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { announce } from '@/utils/accessibility';
+import { endDateFrom } from '@/utils/eventDuration';
 
 import { Step1 } from '@/components/CreateEvent/Step1';
 import { Step2, type Step2Handle } from '@/components/CreateEvent/Step2';
@@ -35,6 +36,7 @@ const EMPTY_FORM: CreateEventFormData = {
   tagIds: [],
   date: null,
   time: null,
+  durationMinutes: null,
   location: '',
   locationCoordinates: null,
   locationNeighborhood: null,
@@ -159,7 +161,8 @@ export default function CreateEvent() {
     if (form.time) {
       eventDate.setHours(form.time.getHours(), form.time.getMinutes(), 0, 0);
     }
-    const endDate = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
+    // O Step2 só libera a publicação com uma duração válida.
+    const endDate = endDateFrom(eventDate, form.durationMinutes!);
 
     const result = await publishEvent({
       title: form.title,
@@ -241,6 +244,7 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               onChangeDate={(v) => setForm((f) => ({ ...f, date: v }))}
               onChangeTime={(v) => setForm((f) => ({ ...f, time: v }))}
+              onChangeDuration={(v) => setForm((f) => ({ ...f, durationMinutes: v }))}
               // Digitar invalida tudo que veio da seleção anterior: bairro e
               // cidade saem sempre do mesmo ponto que as coordenadas.
               onChangeLocation={(v) => setForm((f) => ({

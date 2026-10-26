@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
+import { EventDuration } from '@/components/CreateEvent/EventDuration';
 import { Icon } from '@/components/Icon';
 import { ParticipantLimit } from '@/components/ParticipantLimit';
 import { ProfileTabs } from '@/components/ProfileTabs';
@@ -16,6 +17,7 @@ import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import type { AddressSuggestion } from '@/hooks/useAddressSearch';
+import { isValidDuration } from '@/utils/eventDuration';
 
 import type { CreateEventFormData, Privacy } from '@/components/CreateEvent/types';
 
@@ -43,6 +45,7 @@ export type Step2Props = {
   scrollRef: React.RefObject<ScrollViewInstance | null>;
   onChangeDate: (v: Date | null) => void;
   onChangeTime: (v: Date | null) => void;
+  onChangeDuration: (minutes: number | null) => void;
   onChangeLocation: (v: string) => void;
   onSelectLocation: (suggestion: AddressSuggestion) => void;
   onChangeParticipantLimit: (v: number) => void;
@@ -52,7 +55,7 @@ export type Step2Props = {
   publishError: string | null;
 };
 
-type MissingField = 'dateRow' | 'location';
+type MissingField = 'dateRow' | 'duration' | 'location';
 
 const FIELD_SCROLL_MARGIN = spacing[16];
 
@@ -78,6 +81,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
     scrollRef,
     onChangeDate,
     onChangeTime,
+    onChangeDuration,
     onChangeLocation,
     onSelectLocation,
     onChangeParticipantLimit,
@@ -92,30 +96,41 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 
   const containerRef = useRef<ViewInstance>(null);
   const dateRowRef = useRef<ViewInstance>(null);
+  const durationRef = useRef<ViewInstance>(null);
   const locationRef = useRef<ViewInstance>(null);
 
   const isDateMissing = !data.date;
   const isTimeMissing = !data.time;
   const isLocationMissing = data.location.trim().length === 0 || data.locationCoordinates === null;
   const isDateInPast = data.date !== null && !isFutureDate(data.date, data.time);
+  const isDurationMissing = data.durationMinutes === null;
+  const isDurationInvalid = !isValidDuration(data.durationMinutes);
 
   const showDateRowError = submitAttempted && (isDateMissing || isTimeMissing || isDateInPast);
   const showLocationError = submitAttempted && isLocationMissing;
+  const durationError = !submitAttempted || !isDurationInvalid
+    ? undefined
+    : isDurationMissing
+      ? 'Informe a duração do evento'
+      : 'A duração precisa ser maior que 00:00';
 
   useImperativeHandle(ref, () => ({
     submit: () => {
       setSubmitAttempted(true);
 
-      if (isDateMissing || isDateInPast || isTimeMissing || isLocationMissing) {
+      if (isDateMissing || isDateInPast || isTimeMissing || isDurationInvalid || isLocationMissing) {
         const firstMissing: MissingField =
           isDateMissing || isDateInPast || isTimeMissing
             ? 'dateRow'
-            : 'location';
+            : isDurationInvalid
+              ? 'duration'
+              : 'location';
 
         const messages: string[] = [];
         if (isDateMissing) messages.push('data');
         else if (isDateInPast) messages.push('data futura');
         if (isTimeMissing) messages.push('horário');
+        if (isDurationInvalid) messages.push('duração');
         if (isLocationMissing) messages.push('local');
 
         requestAnimationFrame(() => {
@@ -127,6 +142,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
           const contentNode = containerRef.current;
           const field = {
             dateRow: dateRowRef,
+            duration: durationRef,
             location: locationRef,
           }[firstMissing].current;
           if (scroll && contentNode && field) {
@@ -196,6 +212,15 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
             </Text>
           </View>
         ) : null}
+      </View>
+
+      <View ref={durationRef}>
+        <EventDuration
+          value={data.durationMinutes}
+          onChange={onChangeDuration}
+          error={durationError}
+          disabled={isPublishing}
+        />
       </View>
 
       <View ref={locationRef} style={styles.locationField}>

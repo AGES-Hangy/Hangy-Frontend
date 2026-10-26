@@ -16,6 +16,8 @@ export type CreateEventFormData = {
   // Etapa 2
   date: Date | null;
   time: Date | null;
+  /** Duração em minutos (obrigatória); o `end_date` enviado é o início mais ela. */
+  durationMinutes: number | null;
   location: string;
   /** Coordenadas de um local selecionado e confirmado, nunca inferidas do texto. */
   locationCoordinates: { latitude: number; longitude: number } | null;
