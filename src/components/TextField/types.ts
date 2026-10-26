@@ -93,6 +93,12 @@ export type TextFieldProps = {
   onChangeDate?: (date: Date | null) => void;
   /** `Type=Date`: seletor de data (padrão) ou de hora. */
   dateMode?: 'date' | 'time';
+  /**
+   * `Type=Date` em modo hora: o valor é uma duração (horas e minutos do
+   * `Date`), não um horário. No iOS abre o seletor de timer (rodas "horas" e
+   * "min"); no Android, que não tem esse seletor, o relógio em 24 h.
+   */
+  isDuration?: boolean;
   /** `Type=Date`: limites do seletor. */
   minimumDate?: Date;
   maximumDate?: Date;

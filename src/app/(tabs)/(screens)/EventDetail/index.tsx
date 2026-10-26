@@ -31,6 +31,7 @@ import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
 import { formatDateTime } from '@/utils/datetime';
 import { getToken } from '@/utils/auth';
+import { hasEventEnded } from '@/utils/eventDuration';
 import type { ApiError } from '@/utils/http';
 import { PENDING_INVITE_KEY } from '@/constants/invite';
 
@@ -264,7 +265,8 @@ export default function EventDetail() {
       ? event.viewer.participation_status
       : undefined;
 
-  const isFinished = event.status === 'FINISHED';
+  // Encerrado pelo status ou pelo horário de término, como no backend.
+  const isFinished = hasEventEnded(event);
   // Só quem confirmou presença num evento encerrado publica — fora disso a
   // ação nem aparece, para a UI não oferecer o que a API vai negar.
   const canAddPhoto =

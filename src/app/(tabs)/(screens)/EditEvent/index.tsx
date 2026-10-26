@@ -28,7 +28,9 @@ import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCove
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { announce, moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
+import { durationMinutesBetween, endDateFrom, isValidDuration } from '@/utils/eventDuration';
 
+import { EventDuration } from '@/components/CreateEvent/EventDuration';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import { MAX_TAGS } from '@/components/CreateEvent/types';
 import type { EventDetail } from '@/types/event';
@@ -42,6 +44,8 @@ type EditEventFormData = {
   coverUrl: string | null;
   date: Date | null;
   time: Date | null;
+  /** Duração em minutos (obrigatória); vem da salva, `end_date - event_date`. */
+  durationMinutes: number | null;
   location: string;
   /** `null` enquanto o texto digitado não virou um local da lista ou do mapa. */
   locationCoordinates: { latitude: number; longitude: number } | null;
@@ -51,7 +55,7 @@ type EditEventFormData = {
   tagIds: string[];
 };
 
-type MissingField = 'title' | 'dateRow' | 'location' | 'tags';
+type MissingField = 'title' | 'dateRow' | 'duration' | 'location' | 'tags';
 
 const SCROLL_MARGIN = spacing[16];
 
@@ -64,6 +68,7 @@ function toFormData(event: EventDetail): EditEventFormData {
     coverUrl: event.cover_photo_url,
     date: eventDate,
     time: eventDate,
+    durationMinutes: durationMinutesBetween(event.event_date, event.end_date),
     location: event.location_name ?? '',
     locationCoordinates: event.location,
     // O detalhe não devolve bairro e cidade separados; só são preenchidos (e
@@ -85,6 +90,7 @@ function validate(form: EditEventFormData): MissingField[] {
   const missing: MissingField[] = [];
   if (form.title.trim().length === 0) missing.push('title');
   if (!form.date || !form.time || !isFutureDate(form.date, form.time)) missing.push('dateRow');
+  if (!isValidDuration(form.durationMinutes)) missing.push('duration');
   if (form.location.trim().length === 0 || form.locationCoordinates === null) missing.push('location');
   if (form.tagIds.length === 0) missing.push('tags');
   return missing;
@@ -115,6 +121,7 @@ export default function EditEvent() {
   const containerRef = useRef<ViewInstance>(null);
   const titleRef = useRef<ViewInstance>(null);
   const dateRowRef = useRef<ViewInstance>(null);
+  const durationRef = useRef<ViewInstance>(null);
   const locationRef = useRef<ViewInstance>(null);
   const tagsRef = useRef<ViewInstance>(null);
   const coverRef = useRef<ViewInstance>(null);
@@ -134,7 +141,6 @@ export default function EditEvent() {
 
   const [form, setForm] = useState<EditEventFormData | null>(null);
   const originalRef = useRef<EditEventFormData | null>(null);
-  const durationMsRef = useRef(2 * 60 * 60 * 1000);
   const [submitCount, setSubmitCount] = useState(0);
   /** Capa recusada pela API ao salvar; aparece como erro do FileUpload. */
   const [coverRejected, setCoverRejected] = useState<string | null>(null);
@@ -148,8 +154,6 @@ export default function EditEvent() {
       const initial = toFormData(event);
       setForm(initial);
       originalRef.current = initial;
-      durationMsRef.current =
-        new Date(event.end_date).getTime() - new Date(event.event_date).getTime();
     }
   }, [event, form]);
 
@@ -182,6 +186,7 @@ export default function EditEvent() {
   const fieldRefs: Record<MissingField, React.RefObject<ViewInstance | null>> = {
     title: titleRef,
     dateRow: dateRowRef,
+    duration: durationRef,
     location: locationRef,
     tags: tagsRef,
   };
@@ -192,6 +197,7 @@ export default function EditEvent() {
     const messages: string[] = [];
     if (missing.includes('title')) messages.push('nome');
     if (missing.includes('dateRow')) messages.push('data e horário');
+    if (missing.includes('duration')) messages.push('duração');
     if (missing.includes('location')) messages.push('local');
     if (missing.includes('tags')) messages.push('ao menos uma tag');
     AccessibilityInfo.announceForAccessibility(`Preencha: ${messages.join(', ')}.`);
@@ -350,7 +356,7 @@ export default function EditEvent() {
     const original = originalRef.current;
     const eventDate = new Date(form.date!);
     eventDate.setHours(form.time!.getHours(), form.time!.getMinutes(), 0, 0);
-    const endDate = new Date(eventDate.getTime() + durationMsRef.current);
+    const endDate = endDateFrom(eventDate, form.durationMinutes!);
 
     // Bairro e cidade entram na comparação: escolher de novo o mesmo endereço
     // num evento antigo (sem esses dois) mantém texto e coordenadas, mas
@@ -505,6 +511,21 @@ export default function EditEvent() {
                   </Text>
                 </View>
               )}
+            </View>
+
+            <View style={styles.field} ref={durationRef}>
+              <EventDuration
+                value={form.durationMinutes}
+                onChange={(minutes) => set('durationMinutes', minutes)}
+                error={
+                  showSummary && missing.includes('duration')
+                    ? form.durationMinutes === null
+                      ? 'Informe a duração do evento'
+                      : 'A duração precisa ser maior que 00:00'
+                    : undefined
+                }
+                disabled={isSaving}
+              />
             </View>
 
             <View style={[styles.field, styles.locationField]} ref={locationRef}>
