@@ -1281,6 +1281,8 @@ async function erroDoUsuario(userId: string, rota: 'perfil' | 'eventos') {
  * troca a conta de mentira para estabelecimento.
  */
 const MOCK_USER_TYPE = process.env.EXPO_PUBLIC_MOCK_USER_TYPE === 'BUSINESS' ? 'BUSINESS' : 'PERSONAL';
+/** `EXPO_PUBLIC_MOCK_ROLE=ADMIN` simula a conta administrativa no `GET /users/me`. */
+const MOCK_ROLE = process.env.EXPO_PUBLIC_MOCK_ROLE === 'ADMIN' ? 'ADMIN' : 'USER';
 
 /** Diferente de `me` para o `GET /users/{id}` próprio não cair no `GET /users/me`. */
 const ID_DA_CONTA = 'conta-mock';
@@ -1358,6 +1360,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
         id: ID_DA_CONTA,
         email: perfil.email,
         user_type: MOCK_USER_TYPE,
+        role: MOCK_ROLE,
         name: MOCK_USER_TYPE === 'BUSINESS' ? estabelecimento.business_name : pessoa.name,
         profile:
           MOCK_USER_TYPE === 'BUSINESS'

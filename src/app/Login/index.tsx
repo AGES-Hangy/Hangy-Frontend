@@ -20,6 +20,7 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { PENDING_INVITE_KEY } from '@/constants/invite';
 import { useLogin } from '@/hooks/useLogin';
+import { homeRouteFor } from '@/utils/homeRoute';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -69,8 +70,8 @@ export default function Login() {
         return;
       }
 
-      // A Home é a rota autenticada disponível para ambos os tipos de conta.
-      router.replace('/Home');
+      // Administrador vai ao painel; os demais, à Home.
+      router.replace(homeRouteFor(result.user.role));
     }
   }
 

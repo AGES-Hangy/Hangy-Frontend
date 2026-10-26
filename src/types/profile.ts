@@ -9,11 +9,18 @@
 
 import type { UserType } from '@/types/event';
 
+/**
+ * Papel da conta (task 287 [BE]). Independe de `user_type`: um administrador
+ * continua sendo uma conta pessoal ou de estabelecimento.
+ */
+export type UserRole = 'USER' | 'ADMIN';
+
 /** `GET /users/me`. */
 export interface CurrentUserResponse {
   id: string;
   email: string;
   user_type: UserType;
+  role: UserRole;
   name?: string | null;
   profile?: CurrentUserPersonalData | CurrentUserBusinessData | null;
 }
