@@ -16,4 +16,6 @@ export type ProfilePhotoGridProps = {
   isLoadingMore: boolean;
   onLoadMore: () => void;
   loadMoreButtonRef: Ref<ViewInstance>;
+  /** Toque numa foto — abre o visualizador em tela cheia nela. */
+  onPressPhoto?: (photo: UserPhoto, index: number) => void;
 };

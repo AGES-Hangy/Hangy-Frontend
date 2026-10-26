@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { PhotoViewer } from '@/components/PhotoViewer';
+import type { PhotoViewerItem } from '@/components/PhotoViewer';
 import { ProfileEventList } from '@/components/Profile/ProfileEventList';
 import { ProfileHeader } from '@/components/Profile/ProfileHeader';
 import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
@@ -28,6 +30,9 @@ import { spacing } from '@/constants/layout';
 import type { UserEventsTab } from '@/types/user';
 import { removeToken } from '@/utils/auth';
 import type { LoadError } from '@/utils/apiErrors';
+import { endpoints } from '@/constants/api';
+import { ApiError, apiFetch } from '@/utils/http';
+import { toPhotoViewerItems } from '@/utils/photoViewer';
 
 type OwnProfileTab = 'history' | 'events' | 'gallery';
 type OwnEventsSubTab = Extract<UserEventsTab, 'created' | 'interests' | 'confirmed'>;
@@ -91,7 +96,10 @@ export default function Profile() {
     loadMoreError: photosLoadMoreError,
     loadMore: loadMorePhotos,
     reload: reloadPhotos,
+    removeLocal: removeLocalPhoto,
   } = useMyPhotos({ enabled: isPersonalProfile && hasOpenedGallery });
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const closeViewer = useCallback(() => setViewerIndex(null), []);
   const { unregisterDevice } = useUnregisterDevice();
   const { isOffline } = useNetworkStatus();
   const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
@@ -135,6 +143,34 @@ export default function Profile() {
       void reloadPhotos();
     }
   }, [hasPhotos, photosCount, reloadPhotos]);
+
+  // Fotos da própria galeria: a pessoa é a autora, então pode excluir todas.
+  async function deletePhoto(photo: PhotoViewerItem) {
+    try {
+      await apiFetch<void>(endpoints.experienceImage(photo.id), { method: 'DELETE' });
+    } catch (caught) {
+      const apiError = caught as ApiError;
+      if (apiError.status === 401) return false;
+      // `Photo not found`: já tinha saído, então o pedido vale.
+      if (apiError.status !== 404) {
+        addToast({
+          type: 'error',
+          message:
+            apiError.kind === 'network'
+              ? 'Sem conexão com a internet'
+              : apiError.kind === 'timeout'
+                ? 'A conexão demorou demais'
+                : 'Não foi possível excluir a foto. Tente de novo.',
+        });
+        return false;
+      }
+    }
+    removeLocalPhoto(photo.id);
+    // O contador de Fotos vem do perfil.
+    void reloadProfile();
+    addToast({ type: 'success', message: 'Foto excluída.' });
+    return true;
+  }
 
   function openEditProfile() {
     router.push({ pathname: '/EditProfile', params: user ? { userId: user.userId } : {} });
@@ -240,7 +276,9 @@ export default function Profile() {
       );
     }
 
-    const eventsCount = counts.confirmed + counts.past;
+    // `created` só existe no backend com o contador de criados: sem ele, o
+    // número não aparece em vez de virar `NaN`.
+    const eventsCount = typeof counts.created === 'number' ? counts.created : null;
     const activeEventsTab: UserEventsTab = ownTab === 'history' ? 'history' : eventsSubTab;
     const activeEvents = eventTabs ? eventTabs[activeEventsTab] : null;
 
@@ -259,7 +297,9 @@ export default function Profile() {
                   profile.connections_count === 1 ? 'Conexão' : 'Conexões'
                 }, ver conexões`,
               },
-              { value: eventsCount, label: eventsCount === 1 ? 'Evento' : 'Eventos' },
+              ...(eventsCount === null
+                ? []
+                : [{ value: eventsCount, label: eventsCount === 1 ? 'Evento' : 'Eventos' }]),
               { value: counts.photos, label: counts.photos === 1 ? 'Foto' : 'Fotos' },
             ]}
             name={profile.name?.trim() || null}
@@ -301,6 +341,7 @@ export default function Profile() {
               isLoadingMore={isLoadingMorePhotos}
               onLoadMore={handleLoadMorePhotos}
               loadMoreButtonRef={loadMorePhotosButtonRef}
+              onPressPhoto={(_, index) => setViewerIndex(index)}
             />
           ) : (
             <ProfileEventList
@@ -318,6 +359,18 @@ export default function Profile() {
 
         </ScrollView>
         {isOffline && <OfflineBanner />}
+        <PhotoViewer
+          initialIndex={viewerIndex}
+          photos={toPhotoViewerItems(photos ?? [], { canDelete: !isOffline })}
+          onClose={closeViewer}
+          onDelete={deletePhoto}
+          onPressTitle={(photo) => {
+            const eventId = photos?.find((item) => item.photo_id === photo.id)?.event.id;
+            if (!eventId) return;
+            closeViewer();
+            router.push({ pathname: '/EventDetail', params: { id: eventId } });
+          }}
+        />
       </View>
     );
   }

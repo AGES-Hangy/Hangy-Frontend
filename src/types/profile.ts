@@ -47,7 +47,8 @@ export interface PersonalProfileResponse {
     tags: Array<{ id: string; name: string }>;
     connections_count: number;
   };
-  counts: { past: number; confirmed: number; photos: number };
+  /** `created`: eventos publicados que a pessoa organizou, futuros ou encerrados. */
+  counts: { past: number; confirmed: number; created: number; photos: number };
 }
 
 /**

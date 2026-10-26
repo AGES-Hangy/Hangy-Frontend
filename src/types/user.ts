@@ -35,6 +35,12 @@ export interface UserProfile {
   /** Só se aplica a `BUSINESS`. */
   is_following: boolean;
   connections_count: number;
+  /**
+   * Só em `PERSONAL` (`null` em estabelecimento): eventos que a pessoa criou e
+   * fotos que publicou. Para quem visita, só os de eventos `PUBLIC`.
+   */
+  events_count?: number | null;
+  photos_count?: number | null;
 }
 
 export interface ConnectionRequestResult {
@@ -79,6 +85,8 @@ export interface UserPhoto {
   photo_id: string;
   photo_url: string;
   event: { id: string; title: string };
+  /** Texto da experiência a que a foto pertence. */
+  description?: string | null;
   created_at: string;
 }
 

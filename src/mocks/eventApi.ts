@@ -1020,6 +1020,12 @@ function fotosDoPerfilProprio(): UserPhoto[] {
     photo_id: `foto-${indice + 1}`,
     photo_url: `https://picsum.photos/seed/hangy-foto-${indice + 1}/600/600`,
     event: EVENTOS_DAS_FOTOS[indice % EVENTOS_DAS_FOTOS.length],
+    // Uma sem descrição, uma curta e uma longa, para o rodapé do visualizador.
+    description: [
+      null,
+      'Que tarde! O pôr do sol na orla fechou o dia.',
+      'Começamos cedo, ainda com neblina, e terminamos com todo mundo dividindo o lanche na grama. Valeu demais a companhia de quem foi, e já estamos combinando a próxima: dessa vez com mais gente e com bola reserva.',
+    ][indice % 3],
     created_at: new Date(maisRecente - indice * 60 * 60 * 1000).toISOString(),
   }));
   if (!cresceuAFoto('fotos')) return fotos;
@@ -1179,13 +1185,14 @@ function eventosDoDono(aba: UserEventsTab): UserEventItem[] {
 /** Contadores de `GET /users/me/profile` coerentes com as abas e as fotos do dono. */
 function contadoresDoDono() {
   if (cenarioPerfilProprio === 'empty') {
-    return { connections_count: 0, counts: { past: 0, confirmed: 0, photos: 0 } };
+    return { connections_count: 0, counts: { past: 0, confirmed: 0, created: 0, photos: 0 } };
   }
   return {
     connections_count: 134,
     counts: {
       past: TOTAL_DO_HISTORICO_DO_DONO,
       confirmed: EVENTOS_CONFIRMADOS_DO_DONO.length,
+      created: EVENTOS_CRIADOS_DO_DONO.length,
       photos: TOTAL_DE_FOTOS_DO_PERFIL_PROPRIO + (cresceuAFoto('contadores') ? 1 : 0),
     },
   };
@@ -1406,7 +1413,7 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
             tags: tagsDoUsuario().tags.map(({ id, name }) => ({ id, name })),
             connections_count: 0,
           },
-          counts: { past: 0, confirmed: 0, photos: 0 },
+          counts: { past: 0, confirmed: 0, created: 0, photos: 0 },
         },
       };
     }
