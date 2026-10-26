@@ -91,6 +91,7 @@ export default function TabsLayout() {
             <Tabs.Screen name="(screens)/EditProfile/index" />
             <Tabs.Screen name="(screens)/EventDetail/index" />
             <Tabs.Screen name="(screens)/EventPublished/index" />
+            <Tabs.Screen name="(screens)/Followers/index" />
             <Tabs.Screen name="(screens)/ManageEvent/index" />
             <Tabs.Screen name="(screens)/Notifications/ConnectionRequests/index" />
             <Tabs.Screen name="(screens)/Notifications/ParticipationRequests/index" />

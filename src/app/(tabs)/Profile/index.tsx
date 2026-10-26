@@ -439,7 +439,14 @@ function BusinessOwnProfile({
         <ProfileHeader
           photoUrl={profile.photo_url}
           avatarVariant="Store"
-          stats={[{ value: followers, label: followers === 1 ? 'Seguidor' : 'Seguidores' }]}
+          stats={[
+            {
+              value: followers,
+              label: followers === 1 ? 'Seguidor' : 'Seguidores',
+              onPress: () => router.push('/Followers'),
+              accessibilityLabel: `${followers} ${followers === 1 ? 'Seguidor' : 'Seguidores'}, ver seguidores`,
+            },
+          ]}
           name={name}
           description={profile.description?.trim() || null}
           tags={profile.tags}
