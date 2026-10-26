@@ -124,3 +124,21 @@ export interface BlockedUsersPage {
   items: BlockedUser[];
   next_cursor: string | null;
 }
+
+/** Item de `GET /businesses/me/followers` (task 282 [BE]). */
+export interface Follower {
+  user_id: string;
+  name: string;
+  photo_url: string | null;
+  tags: Array<{ id: string; name: string }>;
+}
+
+/**
+ * `GET /businesses/me/followers`: paginado por cursor, `next_cursor: null` na
+ * última página. `total` é o número geral de seguidores, sem o filtro do `q`.
+ */
+export interface FollowersResponse {
+  items: Follower[];
+  total: number;
+  next_cursor: string | null;
+}

@@ -229,6 +229,19 @@ import { API_TIMEOUT_MS } from '@/constants/api';
  * | `unblock-gone`   | `404` (já desbloqueada), sai da lista          |
  * | `unblock-boom`   | `500`                                          |
  *
+ * Seguidores do estabelecimento (`GET /businesses/me/followers`): o cenário vem
+ * de `EXPO_PUBLIC_MOCK_FOLLOWERS`, lida quando o Metro inicia. A busca (`q`)
+ * filtra por nome, sem diferenciar acento nem maiúscula; `q` com 1 caractere
+ * responde `422`, como no backend. O `total` é sempre o geral.
+ *
+ * | Valor           | Lista                                                   |
+ * | --------------- | ------------------------------------------------------- |
+ * | `full` (padrão) | 45 pessoas, em três páginas com o `limit` da tela (20)  |
+ * | `empty`         | Lista vazia                                             |
+ * | `error`         | `500` na primeira página                                |
+ * | `error-page`    | Primeira página OK, `500` na seguinte                   |
+ * | `forbidden`     | `403 Not a business profile`                            |
+ *
  * `offline` simula só a falha de rede da requisição. O `OfflineBanner` e o
  * botão de relacionamento desabilitado dependem do estado real da rede
  * (modo avião).
@@ -314,6 +327,54 @@ function bloqueadosIniciais() {
     { user_id: 'blocked-long-name', name: 'Maria Eduarda Albuquerque de Vasconcelos Figueiredo', photo_url: null, blocked_at: new Date(Date.now() - 40 * dia).toISOString() },
   ];
 }
+
+type CenarioSeguidores = 'full' | 'empty' | 'error' | 'error-page' | 'forbidden';
+const CENARIOS_SEGUIDORES: readonly string[] = ['full', 'empty', 'error', 'error-page', 'forbidden'];
+const valorDoCenarioSeguidores = process.env.EXPO_PUBLIC_MOCK_FOLLOWERS;
+const cenarioSeguidores: CenarioSeguidores =
+  valorDoCenarioSeguidores && CENARIOS_SEGUIDORES.includes(valorDoCenarioSeguidores)
+    ? (valorDoCenarioSeguidores as CenarioSeguidores)
+    : 'full';
+
+const TAGS_DE_SEGUIDORES = [
+  { id: 'tag-trilha', name: 'Trilha' },
+  { id: 'tag-brunch', name: 'Brunch' },
+  { id: 'tag-samba', name: 'Samba' },
+  { id: 'tag-cinema', name: 'Cinema' },
+  { id: 'tag-feira', name: 'Feira' },
+  { id: 'tag-jazz', name: 'Jazz' },
+];
+
+function seguidoresIniciais() {
+  if (cenarioSeguidores === 'empty') return [];
+  const sobrenomes = ['Souza', 'Oliveira'];
+  const pessoas = sobrenomes.flatMap((sobrenome, rodada) =>
+    NOMES_BLOQUEADOS.map((nome, index) => {
+      const n = rodada * NOMES_BLOQUEADOS.length + index;
+      return {
+        user_id: `follower-${n + 1}`,
+        name: `${nome.split(' ')[0]} ${sobrenome}`,
+        photo_url: n % 4 === 0 ? null : `https://picsum.photos/seed/follower-${n + 1}/150`,
+        // 0 a 3 tags, para a linha aparecer vazia, curta e cortada.
+        tags: TAGS_DE_SEGUIDORES.slice(n % 3, n % 3 + (n % 4)),
+      };
+    }),
+  );
+  return [
+    {
+      user_id: 'follower-long-name',
+      name: 'Maria Eduarda Albuquerque de Vasconcelos Figueiredo',
+      photo_url: null,
+      tags: TAGS_DE_SEGUIDORES,
+    },
+    ...pessoas,
+  ];
+}
+
+const SEGUIDORES_DO_ESTABELECIMENTO = seguidoresIniciais();
+
+/** Comparação de nome da busca: sem acento e sem maiúscula. */
+const semAcento = (texto: string) => texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const wait = (ms = MOCK_LATENCY_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -1432,6 +1493,33 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return {
       items: pagina,
       next_cursor: temMais ? pagina[pagina.length - 1].user_id : null,
+    } as T;
+  }
+
+  if (partes.join('/') === 'businesses/me/followers' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const limit = Number(params.get('limit') ?? 20);
+    const q = (params.get('q') ?? '').trim();
+    const cursor = params.get('cursor');
+    if (cenarioSeguidores === 'forbidden') throw new MockApiError(403, 'Not a business profile');
+    if (q.length === 1) throw new MockApiError(422, 'String should have at least 2 characters');
+    const filtrados = q
+      ? SEGUIDORES_DO_ESTABELECIMENTO.filter((pessoa) => semAcento(pessoa.name).includes(semAcento(q)))
+      : SEGUIDORES_DO_ESTABELECIMENTO;
+    // Cursor = último `user_id` da página anterior, dentro da lista filtrada pelo mesmo `q`.
+    const depoisDe = cursor ? filtrados.findIndex((pessoa) => pessoa.user_id === cursor) : -1;
+    if (!Number.isInteger(limit) || limit < 1 || (cursor && depoisDe === -1)) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+    if (cenarioSeguidores === 'error' || (cenarioSeguidores === 'error-page' && cursor)) {
+      throw new MockApiError(500, 'Internal server error');
+    }
+    const restantes = filtrados.slice(depoisDe + 1);
+    const pagina = restantes.slice(0, limit);
+    return {
+      items: pagina,
+      total: SEGUIDORES_DO_ESTABELECIMENTO.length,
+      next_cursor: restantes.length > limit ? pagina[pagina.length - 1].user_id : null,
     } as T;
   }
 

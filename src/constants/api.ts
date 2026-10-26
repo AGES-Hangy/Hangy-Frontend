@@ -131,6 +131,15 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/blocked${query ? `?${query}` : ''}`;
   },
+  /** Seguidores do estabelecimento logado, paginado por cursor e com busca por nome (task 282 [BE]). */
+  businessFollowers: (options?: { limit?: number; cursor?: string | null; q?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/businesses/me/followers${query ? `?${query}` : ''}`;
+  },
   myPhotos: (options?: { limit?: number; cursor?: string | null }) => {
     const params = new URLSearchParams();
     if (options?.limit !== undefined) params.set('limit', String(options.limit));

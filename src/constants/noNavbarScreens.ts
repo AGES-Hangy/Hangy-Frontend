@@ -9,4 +9,5 @@ export const noNavbarScreens: string[] = [
   'EventPublished',
   'EditProfile',
   'BlockedUsers',
+  'Followers',
 ];
