@@ -69,6 +69,15 @@ export const layout = {
     notificationCountFontSize: 8,
     notificationCountLineHeight: 10,
   },
+  /** Badge/Moderation do Figma: h24 · px8 · gap4 · raio full · borda 1 · ícone 12. */
+  badgeModeration: {
+    height: 24,
+    paddingHorizontal: spacing[8],
+    gap: spacing[4],
+    borderWidth: 1,
+    iconSize: 12,
+    iconStrokeWidth: 2.25,
+  },
   eventCard: {
     pressedOpacity: 0.82,
     featuredWidth: 320,
