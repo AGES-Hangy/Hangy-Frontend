@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Dialog } from '@/components/Dialog';
@@ -52,6 +53,8 @@ const SCRIM_HEIGHT = 150;
 const SCRIM_OPACITY = 0.82;
 /** Altura da barra de progresso sobre a miniatura em envio. */
 const UPLOAD_PROGRESS_HEIGHT = spacing[4];
+/** Avatar de 40 das linhas de pessoa (Conexões, Seguidores); a escala nomeada começa em 48. */
+const ORGANIZER_AVATAR_DIAMETER = 40;
 
 /**
  * Ação principal do rodapé. Vem pronta de `viewer.available_action` — a tela
@@ -243,6 +246,8 @@ export default function EventDetail() {
   const canFavorite = user?.userType === 'PERSONAL' && event.status !== 'CANCELLED';
   const action = MAIN_ACTION[event.viewer.available_action] ?? null;
   const preview = event.participants_preview;
+  // O backend manda `name` nulo quando a conta não tem nome cadastrado.
+  const organizerName = event.organizer.name || 'Organizador';
   const pendingCount = event.pending_requests_count ?? 0;
   // Só o organizador vê o aviso, e só quando há alguém esperando.
   const showPendingBanner = event.viewer.is_organizer && pendingCount > 0;
@@ -548,6 +553,30 @@ export default function EventDetail() {
               </View>
             </View>
           </View>
+
+          {/* Quem organiza não precisa de atalho para o próprio perfil. */}
+          {!event.viewer.is_organizer && (
+            <Pressable
+              onPress={() => router.push({ pathname: '/UserProfile', params: { id: event.organizer.id } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Organizado por ${organizerName}. Ver perfil`}
+              android_ripple={{ color: palette.primary[50] }}
+              style={({ pressed }) => [styles.organizer, pressed && styles.organizerPressed]}
+            >
+              <Avatar
+                variant={event.organizer.user_type === 'BUSINESS' ? 'Store' : 'User'}
+                diameter={ORGANIZER_AVATAR_DIAMETER}
+                source={event.organizer.avatar_url ? { uri: event.organizer.avatar_url } : undefined}
+              />
+              <View style={styles.organizerInfo}>
+                <Text style={styles.organizerCaption}>Organizado por</Text>
+                <Text style={styles.organizerName} numberOfLines={1}>
+                  {organizerName}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={colors.text.tertiary} absoluteStrokeWidth />
+            </Pressable>
+          )}
 
           {/* Sem `participants_preview` o bloco some inteiro — nunca vira
               "0 confirmados". É o caso do evento privado sem participação. */}
@@ -869,6 +898,33 @@ const styles = StyleSheet.create({
   locationHint: {
     ...typography.bodyS,
     color: colors.text.secondary,
+  },
+
+  // A margem + padding de 8 alinham o conteúdo nos 16 da tela e deixam o fundo
+  // do toque com folga, sem encostar na borda.
+  organizer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+    marginHorizontal: spacing[8],
+    paddingHorizontal: spacing[8],
+    paddingVertical: spacing[4],
+    minHeight: 44,
+    borderRadius: radius.md,
+  },
+  organizerPressed: {
+    backgroundColor: palette.primary[50],
+  },
+  organizerInfo: {
+    flex: 1,
+  },
+  organizerCaption: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+  },
+  organizerName: {
+    ...typography.labelM,
+    color: colors.text.primary,
   },
 
   participation: {
