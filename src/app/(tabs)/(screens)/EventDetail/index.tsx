@@ -1,24 +1,42 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
+import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/Badge';
-import { PhotoTile } from '@/components/PhotoTile';
+import { PHOTO_GRID_COLUMNS, PHOTO_GRID_GAP, PhotoTile } from '@/components/PhotoTile';
+import { ExperienceDescriptionDialog } from '@/components/ExperienceDescriptionDialog';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useExperiencePhotos } from '@/hooks/useExperiencePhotos';
+import type { PickedImage } from '@/hooks/useImageUpload';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useFavoriteEvent } from '@/hooks/useFavoriteEvent';
+import { useInviteAccept, type InviteAcceptError } from '@/hooks/useInviteAccept';
+import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
 import { formatDateTime } from '@/utils/datetime';
+import { getToken } from '@/utils/auth';
+import { hasEventEnded } from '@/utils/eventDuration';
+import type { ApiError } from '@/utils/http';
+import { PENDING_INVITE_KEY } from '@/constants/invite';
 
 /**
  * Detalhe do evento — frame `Evento - visão do organizador` do Figma.
@@ -34,6 +52,10 @@ const HERO_HEIGHT = 237;
 const SCRIM_HEIGHT = 150;
 /** Opacidade do degradê no ponto mais escuro, sobre `color/bg/inverse`. */
 const SCRIM_OPACITY = 0.82;
+/** Altura da barra de progresso sobre a miniatura em envio. */
+const UPLOAD_PROGRESS_HEIGHT = spacing[4];
+/** Avatar de 40 das linhas de pessoa (Conexões, Seguidores); a escala nomeada começa em 48. */
+const ORGANIZER_AVATAR_DIAMETER = 40;
 
 /**
  * Ação principal do rodapé. Vem pronta de `viewer.available_action` — a tela
@@ -45,7 +67,7 @@ const MAIN_ACTION: Record<
 > = {
   CONFIRM: { label: 'Confirmar presença', variant: 'Primary' },
   REQUEST: { label: 'Solicitar participação', variant: 'Primary' },
-  CANCEL: { label: 'Cancelar presença', variant: 'Danger' },
+  CANCEL_PRESENCE: { label: 'Cancelar presença', variant: 'Danger' },
   SHARE: { label: 'Compartilhar link', variant: 'Primary', icon: 'share' },
   MANAGE: { label: 'Gerenciar evento', variant: 'Primary', icon: 'settings' },
   NONE: null,
@@ -53,16 +75,156 @@ const MAIN_ACTION: Record<
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const { token: inviteToken } = useLocalSearchParams<{ token?: string }>();
+  const [inviteEventId, setInviteEventId] = useState<string | undefined>(undefined);
+  // Derivado no render, sem passar por efeito: um efeito atrasaria o `id` novo
+  // em um render e o hook de carga chegaria a buscar o evento anterior.
+  const resolvedEventId = inviteToken ? inviteEventId : id;
+  const [inviteStage, setInviteStage] = useState<'idle' | 'accepting' | 'error'>('idle');
+  const [inviteError, setInviteError] = useState<{ title: string; message: string } | null>(null);
+  const { accept } = useInviteAccept();
+
+  // O Expo Router reaproveita esta mesma instância ao navegar de um card de
+  // evento pra outro (mesma rota, `id` diferente na URL), por isso o id vem
+  // direto dos params. No fluxo de convite ele é resolvido a partir do token.
+
   const insets = useSafeAreaInsets();
   const { addToast } = useToast();
-  const { event, isLoading, error, reload } = useEvent(id);
-  const { share, isLoading: isSharing } = useEventShare(id);
+  const { event, isLoading, error, reload } = useEvent(resolvedEventId);
+  const { share, isLoading: isSharing } = useEventShare(resolvedEventId);
+  const { join, cancel, isSubmitting } = useParticipation(event?.event_id ?? resolvedEventId ?? '');
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const { isOffline } = useNetworkStatus();
+  const { width: windowWidth } = useWindowDimensions();
+  const {
+    photos,
+    pickPhoto,
+    releasePhoto,
+    pickError,
+    isPicking,
+    uploadPhoto,
+    removePhoto,
+    dropPhoto,
+    resetExperience,
+    removingPhotoId,
+    experience,
+    experienceStatus,
+    updateDescription,
+  } = useExperiencePhotos(resolvedEventId);
+  // Primeira foto do evento: fica esperando a descrição que cria a experiência.
+  const [pickedAwaitingDescription, setPickedAwaitingDescription] = useState<PickedImage | null>(null);
+  // 400/403 no envio: a ação some até o servidor mudar de ideia (novo evento).
+  const [isPhotoActionHidden, setIsPhotoActionHidden] = useState(false);
+  // 409 `Photo limit reached`: o botão continua lá, mas desabilitado.
+  const [isPhotoLimitReached, setIsPhotoLimitReached] = useState(false);
+  // Fotos cujo `DELETE` voltou 403: a lixeira some só delas.
+  const [undeletablePhotoIds, setUndeletablePhotoIds] = useState<string[]>([]);
+  const [photoToRemove, setPhotoToRemove] = useState<string | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const closeViewer = useCallback(() => setViewerIndex(null), []);
+
+  useEffect(() => {
+    setIsPhotoActionHidden(false);
+    setIsPhotoLimitReached(false);
+    setUndeletablePhotoIds([]);
+    setPhotoToRemove(null);
+    setViewerIndex(null);
+    setPickedAwaitingDescription(null);
+  }, [event?.event_id]);
+
+  // Arquivo recusado no aparelho: fora de JPG/PNG ou acima de 5 MB.
+  useEffect(() => {
+    if (pickError) addToast({ type: 'warning', message: pickError });
+  }, [pickError]);
+  const { user } = useCurrentUser();
+  const { isFavorited, toggle: toggleFavorite } = useFavoriteEvent(
+    event?.event_id,
+    event?.viewer.is_favorited ?? false,
+    {
+      eventTitle: event?.title,
+      onUnavailable: () => (router.canGoBack() ? router.back() : router.replace('/Home')),
+    },
+  );
+
+  // Sem TopAppBar, o banner precisa da área segura para não ficar sob a barra de status.
+  const offlineBanner = isOffline ? (
+    <View style={[styles.offlineBanner, { top: insets.top }]}>
+      <OfflineBanner />
+    </View>
+  ) : null;
 
   // Sem barra superior: os botões desta tela ficam por cima da capa, e uma
   // TopAppBar em cima disso viraria uma segunda linha de ações.
   useTopAppBar(null);
 
-  if (isLoading) return <EventDetailSkeleton />;
+  useEffect(() => {
+    if (!inviteToken) return;
+
+    let cancelled = false;
+
+    async function resolveInvite() {
+      const sessionToken = await getToken();
+
+      if (!sessionToken) {
+        await AsyncStorage.setItem(PENDING_INVITE_KEY, inviteToken as string);
+        router.replace('/Login');
+        return;
+      }
+
+      setInviteStage('accepting');
+      try {
+        const result = await accept(inviteToken as string);
+        if (cancelled) return;
+        setInviteEventId(result.event_id);
+        setInviteStage('idle');
+      } catch (err) {
+        if (cancelled) return;
+        const apiError = err as InviteAcceptError;
+        if (apiError.status === 410) {
+          setInviteError({ title: 'Este convite expirou', message: 'Peça um novo link pra quem te convidou.' });
+        } else if (apiError.status === 403) {
+          addToast({ type: 'error', message: 'Este link de convite não é válido' });
+          router.replace('/Home');
+          return;
+        } else {
+          setInviteError({ title: 'Não foi possível confirmar', message: 'Tente abrir o link de novo.' });
+        }
+        setInviteStage('error');
+      }
+    }
+
+    resolveInvite();
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteToken]);
+
+  if (inviteToken && inviteStage === 'accepting') {
+    return (
+      <View style={styles.errorScreen}>
+        <EmptyState context="MyEvents" title="Confirmando sua participação..." text="Só um instante." cta={false} />
+        {offlineBanner}
+      </View>
+    );
+  }
+
+  if (inviteToken && inviteStage === 'error' && inviteError) {
+    return (
+      <View style={styles.errorScreen}>
+        <EmptyState
+          context="MyEvents"
+          title={inviteError.title}
+          text={inviteError.message}
+          cta
+          ctaLabel="Voltar para o início"
+          onCtaPress={() => router.replace('/Home')}
+        />
+        {offlineBanner}
+      </View>
+    );
+  }
+
+  if (isLoading) return <EventDetailSkeleton offlineBanner={offlineBanner} />;
 
   if (error || !event) {
     const failure = error ?? {
@@ -81,16 +243,218 @@ export default function EventDetail() {
           ctaLabel={failure.canRetry ? 'Tentar de novo' : 'Voltar'}
           onCtaPress={failure.canRetry ? reload : router.back}
         />
+        {offlineBanner}
       </View>
     );
   }
 
+  const canFavorite = user?.userType === 'PERSONAL' && event.status !== 'CANCELLED';
   const action = MAIN_ACTION[event.viewer.available_action] ?? null;
   const preview = event.participants_preview;
+  // O backend manda `name` nulo quando a conta não tem nome cadastrado.
+  const organizerName = event.organizer.name || 'Organizador';
   const pendingCount = event.pending_requests_count ?? 0;
   // Só o organizador vê o aviso, e só quando há alguém esperando.
   const showPendingBanner = event.viewer.is_organizer && pendingCount > 0;
-  const [descriptionLead, ...descriptionRest] = event.description.split('\n');
+  // Quem decide o que aparece no item Local é `location_precision`, nunca
+  // `privacy`: evento privado do qual já participo vem `EXACT`. Campo ausente
+  // (backend sem a task 270) conta como `EXACT`.
+  const isLocationApproximate = event.location_precision === 'APPROXIMATE';
+  const locationLabel = event.location_name || (isLocationApproximate ? 'Local aproximado' : null);
+  // A descrição é opcional na criação e a API devolve `null` sem ela.
+  const [descriptionLead, ...descriptionRest] = (event.description ?? '').split('\n');
+
+  const isPendingCancel = event.viewer.participation_status === 'PENDING';
+  // Mesma ação da API (CANCEL_PRESENCE) serve pra cancelar presença
+  // confirmada ou solicitação pendente — só o rótulo muda, igual no Dialog
+  // abaixo.
+  const actionLabel =
+    action && event.viewer.available_action === 'CANCEL_PRESENCE' && isPendingCancel
+      ? 'Cancelar solicitação'
+      : action?.label;
+  const participationStatusBadge =
+    event.viewer.participation_status === 'CONFIRMED' ||
+    event.viewer.participation_status === 'PENDING' ||
+    event.viewer.participation_status === 'REJECTED'
+      ? event.viewer.participation_status
+      : undefined;
+
+  // Encerrado pelo status ou pelo horário de término, como no backend.
+  const isFinished = hasEventEnded(event);
+  // Só quem confirmou presença num evento encerrado publica — fora disso a
+  // ação nem aparece, para a UI não oferecer o que a API vai negar.
+  const canAddPhoto =
+    isFinished && event.viewer.participation_status === 'CONFIRMED' && !isPhotoActionHidden;
+  // Só as fotos já confirmadas pelo servidor abrem em tela cheia.
+  const uploadedPhotos = photos.filter(
+    (photo): photo is typeof photo & { photoId: string } => photo.photoId !== null,
+  );
+  const photoTileSize =
+    (windowWidth - spacing[16] * 2 - PHOTO_GRID_GAP * (PHOTO_GRID_COLUMNS - 1)) / PHOTO_GRID_COLUMNS;
+
+  /** `description` só vai quando a experiência ainda vai ser criada. */
+  function startUpload(picked: PickedImage, description?: string) {
+    uploadPhoto(picked, description).catch((err) => handleUploadError(err as ApiError, picked, description));
+  }
+
+  async function handleAddPhoto() {
+    const picked = await pickPhoto();
+    if (!picked) return;
+    // Sem experiência (ou sem saber se há), o primeiro envio pede a descrição.
+    if (experience) startUpload(picked);
+    else setPickedAwaitingDescription(picked);
+  }
+
+  function handleDescriptionConfirm(description: string) {
+    const picked = pickedAwaitingDescription;
+    setPickedAwaitingDescription(null);
+    if (picked) startUpload(picked, description);
+  }
+
+  function handleDescriptionCancel() {
+    if (pickedAwaitingDescription) releasePhoto(pickedAwaitingDescription.uri);
+    setPickedAwaitingDescription(null);
+  }
+
+  async function handleEditDescription(description: string): Promise<boolean> {
+    try {
+      await updateDescription(description);
+      return true;
+    } catch (err) {
+      const apiError = err as ApiError;
+      if (apiError.status === 401 || apiError.kind === 'cancelled') return false;
+      if (apiError.status === 404) {
+        addToast({ type: 'error', message: 'Este registro não existe mais' });
+        resetExperience();
+        reload();
+        return true;
+      }
+      addToast({
+        type: 'error',
+        message: apiError.kind === 'network' ? 'Sem conexão com a internet' : 'Não foi possível salvar. Tente de novo.',
+      });
+      return false;
+    }
+  }
+
+  /** Tabela de tratamento de erro da task — envio da foto. */
+  function handleUploadError(apiError: ApiError, picked: PickedImage, description?: string) {
+    if (apiError.status === 401 || apiError.kind === 'cancelled') return;
+    const retry = { actionLabel: 'Tentar de novo', onAction: () => startUpload(picked, description) };
+
+    if (apiError.kind === 'timeout') {
+      addToast({ type: 'error', message: 'A conexão demorou demais', ...retry });
+      return;
+    }
+    if (apiError.kind === 'network') {
+      addToast({ type: 'error', message: 'Sem conexão com a internet' });
+      return;
+    }
+
+    switch (apiError.status) {
+      case 400:
+        addToast({ type: 'info', message: 'Você pode adicionar fotos depois que o evento terminar' });
+        setIsPhotoActionHidden(true);
+        return;
+      case 403:
+        addToast({ type: 'warning', message: 'Só quem participou pode adicionar fotos' });
+        setIsPhotoActionHidden(true);
+        return;
+      case 404:
+        if (apiError.detail === 'Experience not found') {
+          // Experiência guardada sumiu no servidor: esquece e recarrega.
+          resetExperience();
+          reload();
+          return;
+        }
+        addToast({ type: 'error', message: 'Evento não encontrado ou não disponível para você' });
+        router.back();
+        return;
+      case 409:
+        if (apiError.detail === 'Photo limit reached') {
+          addToast({ type: 'warning', message: 'Você atingiu o limite de fotos para este evento' });
+          setIsPhotoLimitReached(true);
+          return;
+        }
+        // `Experience already exists` que nem o `GET .../experiences/me`
+        // resolveu — tentar de novo não adianta.
+        addToast({ type: 'error', message: 'Não foi possível enviar a foto.' });
+        return;
+      case 413:
+        addToast({ type: 'warning', message: 'A foto precisa ter até 5 MB' });
+        return;
+      case 415:
+        addToast({ type: 'warning', message: 'Use uma foto em JPG ou PNG' });
+        return;
+      default:
+        addToast({ type: 'error', message: 'Não foi possível enviar a foto. Tente de novo.', ...retry });
+    }
+  }
+
+  async function handleRemoveConfirm() {
+    const photoId = photoToRemove;
+    if (!photoId) return;
+    await deletePhoto(photoId);
+  }
+
+  /** `true` quando a foto saiu da grade (excluída agora ou já inexistente). */
+  async function deletePhoto(photoId: string): Promise<boolean> {
+    try {
+      if (!await removePhoto(photoId)) return false;
+      setIsPhotoLimitReached(false);
+      setPhotoToRemove(null);
+      return true;
+    } catch (err) {
+      const apiError = err as ApiError;
+      if (apiError.kind === 'cancelled') return false;
+      setPhotoToRemove(null);
+      if (apiError.status === 401) return false;
+      if (apiError.status === 403) {
+        addToast({ type: 'warning', message: 'Você não pode remover esta foto' });
+        setUndeletablePhotoIds((ids) => [...ids, photoId]);
+      } else if (apiError.status === 404) {
+        // `Photo not found`: silencioso, a foto só sai da grade.
+        dropPhoto(photoId);
+        setIsPhotoLimitReached(false);
+        return true;
+      } else if (apiError.kind === 'timeout') {
+        addToast({ type: 'error', message: 'A conexão demorou demais' });
+      } else if (apiError.kind === 'network') {
+        addToast({ type: 'error', message: 'Sem conexão com a internet' });
+      } else {
+        addToast({ type: 'error', message: 'Não foi possível remover a foto. Tente de novo.' });
+      }
+      return false;
+    }
+  }
+
+  async function handleJoin() {
+    try {
+      await join();
+      reload();
+    } catch (err) {
+      const apiError = err as ParticipationError;
+      if (apiError.status === 404) {
+        addToast({ type: 'warning', message: 'Este evento não está mais disponível.' });
+      } else if (apiError.status === 409) {
+        addToast({ type: 'warning', message: 'Este evento está lotado' });
+      } else {
+        addToast({ type: 'error', message: 'Não foi possível concluir. Tente de novo.' });
+      }
+      reload();
+    }
+  }
+
+  async function handleCancelConfirm() {
+    setShowCancelDialog(false);
+    try {
+      await cancel();
+      addToast({ type: 'success', message: 'Participação cancelada.' });
+      reload();
+    } catch {
+      addToast({ type: 'error', message: 'Não foi possível cancelar. Tente de novo.' });
+    }
+  }
 
   function onMainAction() {
     if (event!.viewer.available_action === 'SHARE') {
@@ -103,10 +467,12 @@ export default function EventDetail() {
       return;
     }
 
-    // Confirmar, solicitar e cancelar presença são a US5.2 e a US5.3: os
-    // endpoints não estão no contrato desta task. O botão já vem da API para
-    // a tela não precisar mudar quando eles chegarem.
-    addToast({ type: 'info', message: 'Ação de presença chega com a US5.2.' });
+    if (event!.viewer.available_action === 'CANCEL_PRESENCE') {
+      setShowCancelDialog(true);
+      return;
+    }
+
+    handleJoin();
   }
 
   return (
@@ -134,7 +500,7 @@ export default function EventDetail() {
             <Rect x="0" y="0" width="100%" height="100%" fill="url(#scrim)" />
           </Svg>
 
-          <View style={[styles.heroActions, { top: insets.top + spacing[16] }]}>
+          <View style={[styles.heroActions, { top: insets.top + (isOffline ? spacing[64] : spacing[16]) }]}>
             <IconButton
               icon="x"
               variant="Tonal"
@@ -143,13 +509,16 @@ export default function EventDetail() {
             />
 
             <View style={styles.heroActionsRight}>
-              <IconButton
-                icon="star"
-                variant="Tonal"
-                accessibilityLabel="Favoritar evento"
-                // Favoritar é outra US; o botão existe no frame desta tela.
-                onPress={() => addToast({ type: 'info', message: 'Favoritar chega em outra US.' })}
-              />
+              {canFavorite && (
+                <IconButton
+                  icon="star"
+                  variant={isFavorited ? 'Filled' : 'Tonal'}
+                  iconFilled={isFavorited}
+                  accessibilityLabel={isFavorited ? 'Remover dos favoritos' : 'Favoritar evento'}
+                  disabled={isOffline}
+                  onPress={toggleFavorite}
+                />
+              )}
               {event.viewer.is_organizer && (
                 <IconButton
                   icon="settings"
@@ -185,6 +554,15 @@ export default function EventDetail() {
         </View>
 
         <View style={styles.body}>
+          {isFinished && (
+            <View style={styles.section}>
+              <View style={styles.finishedBanner}>
+                <Icon name="info" size={20} color={palette.info.default} absoluteStrokeWidth />
+                <Text style={styles.finishedBannerText}>Este evento já aconteceu.</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.section}>
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
@@ -194,18 +572,52 @@ export default function EventDetail() {
                 </Text>
               </View>
 
-              <View style={styles.infoRow}>
-                <Icon name="map-pin" size={20} color={colors.text.primary} absoluteStrokeWidth />
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {event.location_name}
+              {locationLabel && (
+                <View style={styles.infoRow}>
+                  <Icon name="map-pin" size={20} color={colors.text.primary} absoluteStrokeWidth />
+                  <Text style={styles.infoText} numberOfLines={1}>
+                    {locationLabel}
+                  </Text>
+                </View>
+              )}
+
+              {isLocationApproximate && (
+                <Text style={styles.locationHint}>
+                  Área aproximada. O endereço exato aparece quando o organizador aprovar sua
+                  participação.
                 </Text>
-              </View>
+              )}
 
               <View style={styles.infoRow}>
                 <Badge family="Privacy" value={event.privacy} />
+                {participationStatusBadge && <Badge family="Status" value={participationStatusBadge} />}
               </View>
             </View>
           </View>
+
+          {/* Quem organiza não precisa de atalho para o próprio perfil. */}
+          {!event.viewer.is_organizer && (
+            <Pressable
+              onPress={() => router.push({ pathname: '/UserProfile', params: { id: event.organizer.id } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Organizado por ${organizerName}. Ver perfil`}
+              android_ripple={{ color: palette.primary[50] }}
+              style={({ pressed }) => [styles.organizer, pressed && styles.organizerPressed]}
+            >
+              <Avatar
+                variant={event.organizer.user_type === 'BUSINESS' ? 'Store' : 'User'}
+                diameter={ORGANIZER_AVATAR_DIAMETER}
+                source={event.organizer.avatar_url ? { uri: event.organizer.avatar_url } : undefined}
+              />
+              <View style={styles.organizerInfo}>
+                <Text style={styles.organizerCaption}>Organizado por</Text>
+                <Text style={styles.organizerName} numberOfLines={1}>
+                  {organizerName}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={colors.text.tertiary} absoluteStrokeWidth />
+            </Pressable>
+          )}
 
           {/* Sem `participants_preview` o bloco some inteiro — nunca vira
               "0 confirmados". É o caso do evento privado sem participação. */}
@@ -252,6 +664,51 @@ export default function EventDetail() {
             </View>
           )}
 
+          {/* Fotos do registro do usuário neste evento. Enquanto envia, a
+              miniatura otimista mostra o progresso; o resto da tela segue
+              utilizável. A lixeira só aparece depois do 201 — antes disso a
+              foto ainda não é do servidor. */}
+          {photos.length > 0 && (
+            <View style={[styles.section, styles.photoGrid]}>
+              {photos.map((photo, index) => {
+                const position = `Foto ${index + 1} de ${photos.length}`;
+                const isUploading = photo.photoId === null;
+                const percent = Math.round(photo.progress * 100);
+                const canRemove =
+                  !isUploading &&
+                  !isOffline &&
+                  removingPhotoId !== photo.photoId &&
+                  !undeletablePhotoIds.includes(photo.photoId as string);
+
+                return (
+                  <View key={photo.localId} style={{ width: photoTileSize }}>
+                    <PhotoTile
+                      uri={photo.uri}
+                      accessibilityLabel={isUploading ? `${position}, enviando` : position}
+                      removeAccessibilityLabel={`Remover ${position.toLowerCase()}`}
+                      onRemove={canRemove ? () => setPhotoToRemove(photo.photoId) : undefined}
+                      onPress={
+                        isUploading
+                          ? undefined
+                          : () => setViewerIndex(uploadedPhotos.findIndex((item) => item.photoId === photo.photoId))
+                      }
+                    />
+                    {isUploading && (
+                      <View
+                        style={styles.uploadTrack}
+                        accessibilityRole="progressbar"
+                        accessibilityLabel={`Enviando ${position.toLowerCase()}`}
+                        accessibilityValue={{ min: 0, max: 100, now: percent }}
+                      >
+                        <View style={[styles.uploadFill, { width: `${percent}%` }]} />
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           <View style={styles.section}>
             <View style={styles.divider} />
           </View>
@@ -260,7 +717,11 @@ export default function EventDetail() {
             <Text style={styles.descriptionHeading} accessibilityRole="header">
               Descrição
             </Text>
-            <Text style={styles.descriptionLead}>{descriptionLead}</Text>
+            {descriptionLead ? (
+              <Text style={styles.descriptionLead}>{descriptionLead}</Text>
+            ) : (
+              <Text style={styles.descriptionText}>Sem descrição.</Text>
+            )}
             {descriptionRest.filter(Boolean).map((paragraph) => (
               <Text key={paragraph} style={styles.descriptionText}>
                 {paragraph}
@@ -270,24 +731,85 @@ export default function EventDetail() {
         </View>
       </ScrollView>
 
-      {action && (
+      {canAddPhoto ? (
         <View style={[styles.cta, { paddingBottom: insets.bottom + spacing[20] }]}>
           <Button
-            label={action.label}
+            label="Adicionar foto ao meu registro"
+            icon="camera"
+            // Offline e limite atingido: escrita desabilitada, não escondida.
+            disabled={isOffline || isPhotoLimitReached || isPicking || experienceStatus === 'loading'}
+            onPress={handleAddPhoto}
+            style={styles.ctaButton}
+          />
+        </View>
+      ) : action && (
+        <View style={[styles.cta, { paddingBottom: insets.bottom + spacing[20] }]}>
+          <Button
+            label={actionLabel ?? action.label}
             variant={action.variant}
             icon={action.icon}
-            isLoading={action.icon === 'share' && isSharing}
+            isLoading={(action.icon === 'share' && isSharing) || isSubmitting}
             onPress={onMainAction}
             style={styles.ctaButton}
           />
         </View>
       )}
+
+      <Dialog
+        visible={showCancelDialog}
+        variant="LeaveEvent"
+        title={isPendingCancel ? 'Cancelar solicitação?' : 'Cancelar presença?'}
+        description={
+          isPendingCancel
+            ? 'Sua solicitação será removida da fila do organizador.'
+            : 'Você deixa de aparecer na lista de confirmados. Pode confirmar de novo quando quiser.'
+        }
+        confirmLabel={isPendingCancel ? 'Cancelar solicitação' : 'Cancelar presença'}
+        onConfirm={handleCancelConfirm}
+        onCancel={() => setShowCancelDialog(false)}
+        isLoading={isSubmitting}
+      />
+
+      <PhotoViewer
+        initialIndex={viewerIndex}
+        photos={uploadedPhotos.map((photo) => ({
+          id: photo.photoId,
+          uri: photo.uri,
+          title: event.title,
+          description: experience?.description ?? null,
+          canDelete: !isOffline && !undeletablePhotoIds.includes(photo.photoId),
+          canEditDescription: experience !== null && !isOffline,
+        }))}
+        onClose={closeViewer}
+        onDelete={(photo) => deletePhoto(photo.id)}
+        onEditDescription={(_, description) => handleEditDescription(description)}
+      />
+
+      <ExperienceDescriptionDialog
+        visible={pickedAwaitingDescription !== null}
+        mode="create"
+        onConfirm={handleDescriptionConfirm}
+        onCancel={handleDescriptionCancel}
+      />
+
+      <Dialog
+        visible={photoToRemove !== null}
+        variant="DeleteEvent"
+        title="Remover foto?"
+        description="A foto deixa de aparecer no evento e no seu perfil."
+        confirmLabel="Remover"
+        onConfirm={handleRemoveConfirm}
+        onCancel={() => setPhotoToRemove(null)}
+        isLoading={removingPhotoId !== null}
+      />
+
+      {offlineBanner}
     </View>
   );
 }
 
 /** Esqueleto do carregamento: capa, título e blocos, nunca tela em branco. */
-function EventDetailSkeleton() {
+function EventDetailSkeleton({ offlineBanner }: { offlineBanner: ReactNode }) {
   return (
     <View style={styles.screen} accessibilityLabel="Carregando evento" accessibilityRole="progressbar">
       <View style={styles.skeletonHero} />
@@ -304,6 +826,7 @@ function EventDetailSkeleton() {
           <View style={[styles.skeletonBlock, styles.skeletonLineShort]} />
         </View>
       </View>
+      {offlineBanner}
     </View>
   );
 }
@@ -342,6 +865,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing[8],
   },
+  offlineBanner: {
+    position: 'absolute',
+    pointerEvents: 'box-none',
+    left: 0,
+    right: 0,
+  },
   heroIdentity: {
     position: 'absolute',
     left: spacing[16],
@@ -368,6 +897,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[16],
   },
 
+  finishedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+    padding: spacing[16],
+    borderRadius: radius.md,
+    backgroundColor: palette.info.bg,
+  },
+  finishedBannerText: {
+    flex: 1,
+    ...typography.bodyM,
+    color: palette.info.default,
+  },
+
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: PHOTO_GRID_GAP,
+  },
+  uploadTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: UPLOAD_PROGRESS_HEIGHT,
+    backgroundColor: colors.surface.sunken,
+  },
+  uploadFill: {
+    height: '100%',
+    backgroundColor: colors.action.primary,
+  },
+
   infoCard: {
     backgroundColor: colors.surface.sunken,
     borderRadius: radius.md,
@@ -382,6 +943,37 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     ...typography.bodyL,
+    color: colors.text.primary,
+  },
+  locationHint: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+  },
+
+  // A margem + padding de 8 alinham o conteúdo nos 16 da tela e deixam o fundo
+  // do toque com folga, sem encostar na borda.
+  organizer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+    marginHorizontal: spacing[8],
+    paddingHorizontal: spacing[8],
+    paddingVertical: spacing[4],
+    minHeight: 44,
+    borderRadius: radius.md,
+  },
+  organizerPressed: {
+    backgroundColor: palette.primary[50],
+  },
+  organizerInfo: {
+    flex: 1,
+  },
+  organizerCaption: {
+    ...typography.bodyS,
+    color: colors.text.secondary,
+  },
+  organizerName: {
+    ...typography.labelM,
     color: colors.text.primary,
   },
 

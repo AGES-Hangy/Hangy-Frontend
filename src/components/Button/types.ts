@@ -1,10 +1,16 @@
-import type { ReactElement } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { ReactElement, Ref } from 'react';
+import type { StyleProp, ViewInstance, ViewStyle } from 'react-native';
 
 import type { IconName } from '@/components/Icon';
 
 /** Aparência do botão — eixo `Variant` do Figma. */
-export type ButtonVariant = 'Primary' | 'Secondary' | 'Accent' | 'Tertiary' | 'Danger';
+export type ButtonVariant =
+  | 'Primary'
+  | 'Secondary'
+  | 'Accent'
+  | 'Tertiary'
+  | 'Danger'
+  | 'DangerText';
 
 /** Altura 52 / 44 / 36 — eixo `Size` do Figma. */
 export type ButtonSize = 'LG' | 'MD' | 'SM';
@@ -37,4 +43,6 @@ export type ButtonProps = {
    * total). Não use para sobrescrever cor, raio ou tipografia.
    */
   style?: StyleProp<ViewStyle>;
+  /** Repassado ao `Pressable` interno, por exemplo para devolver o foco de acessibilidade ao botão. */
+  ref?: Ref<ViewInstance>;
 };

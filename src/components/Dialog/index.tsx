@@ -1,3 +1,4 @@
+import type { TextInstance } from 'react-native';
 import { useRef } from 'react';
 import {
   ActivityIndicator,
@@ -43,6 +44,35 @@ const VARIANTS = {
     confirmLabel: 'Sair',
     destructive: true,
   },
+  DeleteAccount: {
+    title: 'Excluir sua conta?',
+    description:
+      'Esta ação não pode ser desfeita. Seu perfil, conexões, fotos e eventos criados serão removidos permanentemente.',
+    confirmLabel: 'Excluir conta',
+    destructive: true,
+  },
+  RemoveTagArea: {
+    title: 'Remover área?',
+    description: 'Os interesses dessa área também serão removidos do seu perfil.',
+    confirmLabel: 'Remover área',
+    destructive: true,
+  },
+  // Sem frame no Figma (pendência registrada na task 072): segue o DiscardEvent.
+  DiscardChanges: {
+    title: 'Descartar alterações?',
+    description: 'O que você mudou no perfil não será salvo.',
+    confirmLabel: 'Descartar',
+    destructive: true,
+  },
+  // "Usuários bloqueados - desbloquear (confirmação)", Variant=Confirm. O título
+  // leva o nome de quem é desbloqueado e vem por `title`.
+  Unblock: {
+    title: 'Desbloquear usuário?',
+    description:
+      'Essa pessoa poderá ver seu perfil e encontrar você na busca de novo. A conexão que vocês tinham não volta.',
+    confirmLabel: 'Desbloquear',
+    destructive: false,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({
@@ -53,6 +83,7 @@ export function Dialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = 'Voltar',
   isLoading = false,
   children,
   confirmDisabled = false,
@@ -64,7 +95,7 @@ export function Dialog({
     description: description ?? variantConfig.description,
     confirmLabel: confirmLabel ?? variantConfig.confirmLabel,
   };
-  const titleRef = useRef<Text>(null);
+  const titleRef = useRef<TextInstance>(null);
 
   function focusTitle() {
     if (Platform.OS === 'web') return;
@@ -125,11 +156,11 @@ export function Dialog({
                   onPress={onCancel}
                   disabled={isLoading}
                   accessibilityRole="button"
-                  accessibilityLabel="Voltar"
+                  accessibilityLabel={cancelLabel}
                   accessibilityState={{ disabled: isLoading }}
                   style={({ pressed }) => [styles.button, pressed && !isLoading && styles.cancelPressed]}
                 >
-                  <Text style={styles.cancelLabel}>Voltar</Text>
+                  <Text style={styles.cancelLabel}>{cancelLabel}</Text>
                 </Pressable>
               </View>
             </ScrollView>
@@ -143,7 +174,7 @@ export function Dialog({
 const styles = StyleSheet.create({
   overlay: { flex: 1 },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg.inverse,
     opacity: 0.5,
   },

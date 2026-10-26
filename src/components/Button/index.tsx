@@ -76,6 +76,12 @@ const VARIANTS: Record<ButtonVariant, VariantVisuals> = {
     pressed: { backgroundColor: colors.action.danger, contentColor: colors.text.inverse },
     disabled: DISABLED_FILL,
   },
+  DangerText: {
+    // Button/DangerText (Sprint 3 Components): ação destrutiva só de texto.
+    default: { contentColor: colors.action.danger },
+    pressed: { contentColor: colors.action.danger },
+    disabled: { contentColor: colors.text.disabled },
+  },
 };
 
 /** Variantes cujo Pressed o Figma define com fill próprio, em vez de opacidade. */
@@ -101,7 +107,7 @@ function isIconName(value: unknown): value is IconName {
 }
 
 /**
- * Botão base do app — 5 variantes, 3 tamanhos e 4 estados do Design System.
+ * Botão base do app — 6 variantes, 3 tamanhos e 4 estados do Design System.
  *
  * ```tsx
  * <Button label="Criar evento" icon="plus" onPress={criarEvento} />
@@ -119,6 +125,7 @@ export function Button({
   onPress,
   accessibilityLabel,
   style,
+  ref,
 }: ButtonProps) {
   const metrics = SIZES[size];
   const isBlocked = disabled || isLoading;
@@ -126,6 +133,7 @@ export function Button({
 
   return (
     <Pressable
+      ref={ref}
       onPress={onPress}
       disabled={isBlocked}
       hitSlop={{ top: verticalHitSlop, bottom: verticalHitSlop }}
@@ -199,7 +207,7 @@ const styles = StyleSheet.create({
     opacity: 0,
   },
   spinner: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

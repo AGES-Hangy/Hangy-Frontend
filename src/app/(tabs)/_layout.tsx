@@ -1,11 +1,15 @@
-import { Tabs, router } from 'expo-router';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { router } from 'expo-router';
+import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 
 import { AuthGuard } from '@/utils/AuthGuard';
 import { BottomNav } from '@/components/BottomNav';
 import type { BottomNavActive, BottomNavTab } from '@/components/BottomNav';
 import { TopAppBarProvider, TopAppBarSlot } from '@/hooks/useTopAppBar';
+import { NotificationsProvider } from '@/hooks/useNotifications';
 import { noNavbarScreens } from '@/constants/noNavbarScreens';
+import { NotificationResponseBridge } from '@/utils/NotificationResponseBridge';
+import { ForegroundNotificationBridge } from '@/utils/ForegroundNotificationBridge';
+import { PushRegistrationBridge } from '@/utils/PushRegistrationBridge';
 
 /** Rota de cada aba do Figma. As duas tabelas são inversas uma da outra. */
 const ROUTE_BY_TAB: Record<BottomNavTab, string> = {
@@ -19,7 +23,7 @@ const TAB_BY_ROUTE: Record<string, BottomNavTab> = Object.fromEntries(
   Object.entries(ROUTE_BY_TAB).map(([tab, route]) => [route, tab as BottomNavTab]),
 );
 
-function TabBar({ state, navigation }: BottomTabBarProps) {
+function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const current = state.routes[state.index];
 
   // noNavbarScreens continua sendo a fonte de verdade de quem esconde a barra.
@@ -39,14 +43,14 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
 
         // Emitir tabPress mantém o comportamento padrão do navegador (como o
         // scroll-to-top e o reset de stack) que um tabBar próprio perderia.
-        const event = navigation.emit({
+        const event = emitter.emit({
           type: 'tabPress',
           target: target.key,
           canPreventDefault: true,
         });
 
         if (target.key !== current.key && !event.defaultPrevented) {
-          navigation.navigate(target.name);
+          navigateToTab(target.key);
         }
       }}
       onCreatePress={() => router.push('/CreateEvent')}
@@ -57,19 +61,45 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
 export default function TabsLayout() {
   return (
     <AuthGuard>
-      <TopAppBarProvider>
-        <Tabs
-          backBehavior="history"
-          tabBar={(props) => <TabBar {...props} />}
-          screenOptions={{
-            headerShown: true,
-            // Padrão de todas as telas. A que precisa de outra barra
-            // sobrescreve com useTopAppBar, então o layout não conhece telas
-            // específicas.
-            header: () => <TopAppBarSlot />,
-          }}
-        />
-      </TopAppBarProvider>
+      <NotificationsProvider>
+        {/* Dentro do AuthGuard porque antes dele o replace da Splash desfaria a
+            navegação do toque com o app fechado. */}
+        <NotificationResponseBridge />
+        <ForegroundNotificationBridge />
+        <PushRegistrationBridge />
+        <TopAppBarProvider>
+          <Tabs
+            backBehavior="history"
+            tabBar={(props) => <TabBar {...props} />}
+            screenOptions={{
+              headerShown: true,
+              // Padrão de todas as telas. A que precisa de outra barra
+              // sobrescreve com useTopAppBar, então o layout não conhece telas
+              // específicas.
+              header: () => <TopAppBarSlot />,
+            }}
+          >
+            {/* SDK 58 exige declaração explícita de todas as rotas deste navegador. */}
+            <Tabs.Screen name="Home/index" />
+            <Tabs.Screen name="Live/index" />
+            <Tabs.Screen name="Search/index" />
+            <Tabs.Screen name="Profile/index" />
+            <Tabs.Screen name="(screens)/BlockedUsers/index" />
+            <Tabs.Screen name="(screens)/Connections/index" />
+            <Tabs.Screen name="(screens)/CreateEvent/index" />
+            <Tabs.Screen name="(screens)/EditEvent/index" />
+            <Tabs.Screen name="(screens)/EditProfile/index" />
+            <Tabs.Screen name="(screens)/EventDetail/index" />
+            <Tabs.Screen name="(screens)/EventPublished/index" />
+            <Tabs.Screen name="(screens)/Followers/index" />
+            <Tabs.Screen name="(screens)/ManageEvent/index" />
+            <Tabs.Screen name="(screens)/Notifications/ConnectionRequests/index" />
+            <Tabs.Screen name="(screens)/Notifications/ParticipationRequests/index" />
+            <Tabs.Screen name="(screens)/Notifications/index" />
+            <Tabs.Screen name="(screens)/UserProfile/index" />
+          </Tabs>
+        </TopAppBarProvider>
+      </NotificationsProvider>
     </AuthGuard>
   );
 }

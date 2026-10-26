@@ -1,11 +1,14 @@
+import type { ViewInstance } from 'react-native';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  type ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
+import { EventDuration } from '@/components/CreateEvent/EventDuration';
 import { Icon } from '@/components/Icon';
 import { ParticipantLimit } from '@/components/ParticipantLimit';
 import { ProfileTabs } from '@/components/ProfileTabs';
@@ -13,6 +16,8 @@ import { TextField } from '@/components/TextField';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import type { AddressSuggestion } from '@/hooks/useAddressSearch';
+import { isValidDuration } from '@/utils/eventDuration';
 
 import type { CreateEventFormData, Privacy } from '@/components/CreateEvent/types';
 
@@ -28,16 +33,21 @@ const PRIVACY_DESCRIPTION: Record<Privacy, string> = {
   INVITE_ONLY: 'Só aparece para pessoas convidadas; não entra no feed nem na busca.',
 };
 
+const PRIVATE_LOCATION_HINT =
+  'Quem ainda não foi aprovado vê só o bairro e uma área aproximada no mapa. O endereço completo aparece depois da aprovação.';
+
 export type Step2Handle = {
   submit: () => boolean;
 };
 
 export type Step2Props = {
   data: CreateEventFormData;
-  scrollRef: React.RefObject<ScrollView | null>;
+  scrollRef: React.RefObject<ScrollViewInstance | null>;
   onChangeDate: (v: Date | null) => void;
   onChangeTime: (v: Date | null) => void;
+  onChangeDuration: (minutes: number | null) => void;
   onChangeLocation: (v: string) => void;
+  onSelectLocation: (suggestion: AddressSuggestion) => void;
   onChangeParticipantLimit: (v: number) => void;
   onChangeUnlimited: (v: boolean) => void;
   onChangePrivacy: (v: Privacy) => void;
@@ -45,7 +55,7 @@ export type Step2Props = {
   publishError: string | null;
 };
 
-type MissingField = 'dateRow' | 'location' | 'privacy';
+type MissingField = 'dateRow' | 'duration' | 'location';
 
 const FIELD_SCROLL_MARGIN = spacing[16];
 
@@ -71,7 +81,9 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
     scrollRef,
     onChangeDate,
     onChangeTime,
+    onChangeDuration,
     onChangeLocation,
+    onSelectLocation,
     onChangeParticipantLimit,
     onChangeUnlimited,
     onChangePrivacy,
@@ -82,36 +94,44 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
 ) {
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  const containerRef = useRef<View>(null);
-  const dateRowRef = useRef<View>(null);
-  const locationRef = useRef<View>(null);
-  const privacyRef = useRef<View>(null);
+  const containerRef = useRef<ViewInstance>(null);
+  const dateRowRef = useRef<ViewInstance>(null);
+  const durationRef = useRef<ViewInstance>(null);
+  const locationRef = useRef<ViewInstance>(null);
 
   const isDateMissing = !data.date;
   const isTimeMissing = !data.time;
-  const isLocationMissing = data.location.trim().length === 0;
-  const isInviteeMissing = data.privacy === 'INVITE_ONLY' && data.inviteeIds.length === 0;
+  const isLocationMissing = data.location.trim().length === 0 || data.locationCoordinates === null;
   const isDateInPast = data.date !== null && !isFutureDate(data.date, data.time);
+  const isDurationMissing = data.durationMinutes === null;
+  const isDurationInvalid = !isValidDuration(data.durationMinutes);
 
   const showDateRowError = submitAttempted && (isDateMissing || isTimeMissing || isDateInPast);
   const showLocationError = submitAttempted && isLocationMissing;
+  const durationError = !submitAttempted || !isDurationInvalid
+    ? undefined
+    : isDurationMissing
+      ? 'Informe a duração do evento'
+      : 'A duração precisa ser maior que 00:00';
 
   useImperativeHandle(ref, () => ({
     submit: () => {
       setSubmitAttempted(true);
 
-      if (isDateMissing || isDateInPast || isTimeMissing || isLocationMissing || isInviteeMissing) {
+      if (isDateMissing || isDateInPast || isTimeMissing || isDurationInvalid || isLocationMissing) {
         const firstMissing: MissingField =
           isDateMissing || isDateInPast || isTimeMissing
             ? 'dateRow'
-            : isLocationMissing ? 'location' : 'privacy';
+            : isDurationInvalid
+              ? 'duration'
+              : 'location';
 
         const messages: string[] = [];
         if (isDateMissing) messages.push('data');
         else if (isDateInPast) messages.push('data futura');
         if (isTimeMissing) messages.push('horário');
+        if (isDurationInvalid) messages.push('duração');
         if (isLocationMissing) messages.push('local');
-        if (isInviteeMissing) messages.push('ao menos um convidado');
 
         requestAnimationFrame(() => {
           const scroll = scrollRef.current;
@@ -122,8 +142,8 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
           const contentNode = containerRef.current;
           const field = {
             dateRow: dateRowRef,
+            duration: durationRef,
             location: locationRef,
-            privacy: privacyRef,
           }[firstMissing].current;
           if (scroll && contentNode && field) {
             field.measureLayout(contentNode, (_x, y) => {
@@ -194,15 +214,24 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         ) : null}
       </View>
 
-      <View ref={locationRef}>
+      <View ref={durationRef}>
+        <EventDuration
+          value={data.durationMinutes}
+          onChange={onChangeDuration}
+          error={durationError}
+          disabled={isPublishing}
+        />
+      </View>
+
+      <View ref={locationRef} style={styles.locationField}>
         <FieldLabel label="Local" required />
-        <TextField
-          type="Location"
+        <AddressAutocompleteField
           value={data.location}
           onChangeText={onChangeLocation}
+          onSelect={onSelectLocation}
           placeholder="Digite o local do evento"
           maxLength={120}
-          error={showLocationError ? 'Informe o local do evento' : undefined}
+          error={showLocationError ? 'Selecione um local da lista ou do mapa' : undefined}
           reserveMessageSpace
           accessibilityLabel="Local do evento, obrigatório"
           disabled={isPublishing}
@@ -217,7 +246,7 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         disabled={isPublishing}
       />
 
-      <View ref={privacyRef} style={styles.section}>
+      <View style={styles.section}>
         <Text style={[typography.labelM, styles.fieldLabel]}>Visibilidade</Text>
 
         <ProfileTabs
@@ -229,6 +258,11 @@ export const Step2 = forwardRef<Step2Handle, Step2Props>(function Step2(
         <Text style={[typography.bodyS, { color: colors.text.secondary, marginTop: spacing[8] }]}>
           {PRIVACY_DESCRIPTION[data.privacy]}
         </Text>
+        {data.privacy === 'PRIVATE' ? (
+          <Text style={[typography.bodyS, { color: colors.text.secondary, marginTop: spacing[4] }]}>
+            {PRIVATE_LOCATION_HINT}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -244,6 +278,13 @@ const styles = StyleSheet.create({
   },
   required: {
     color: palette.error.default,
+  },
+  // A lista de sugestões do campo é absoluta e o `zIndex` dela só vale dentro
+  // deste wrapper; sem elevá-lo, os blocos seguintes (limite, visibilidade)
+  // pintam por cima das sugestões e não deixam tocar nelas.
+  locationField: {
+    zIndex: 1,
+    elevation: 1,
   },
   dateRow: {
     flexDirection: 'row',

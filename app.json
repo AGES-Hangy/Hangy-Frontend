@@ -6,7 +6,6 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "br.pucrs.ages.hangy"
@@ -15,7 +14,8 @@
       "package": "br.pucrs.ages.hangy"
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "single"
     },
     "plugins": [
       "expo-router",
@@ -26,7 +26,37 @@
           "microphonePermission": false
         }
       ],
-      "@react-native-community/datetimepicker"
-    ]
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O Hangy usa sua localização para mostrar eventos perto de você no mapa e para preencher o endereço do seu comércio no cadastro."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#653B6B"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#653B6B"
+        }
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f278d959-6c74-40aa-8ae5-c6fb5113fecd"
+      }
+    },
+    "owner": "gbn0s-team"
   }
 }

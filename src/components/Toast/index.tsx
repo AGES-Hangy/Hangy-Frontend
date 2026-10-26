@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { palette } from '@/constants/colors';
@@ -12,12 +12,16 @@ export interface ToastMessage {
   id: string;
   type: ToastType;
   message: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export interface AddToastOptions {
   type: ToastType;
   message?: string;
   eventName?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface ToastContextData {
@@ -107,6 +111,19 @@ const ToastItem: React.FC<{ message: ToastMessage; onRemove: (id: string) => voi
     >
       {icon}
       <Text style={[styles.text, textStyle]}>{message.message}</Text>
+      {message.actionLabel && message.onAction && (
+        <Pressable
+          onPress={() => {
+            message.onAction?.();
+            onRemove(message.id);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={message.actionLabel}
+          hitSlop={spacing[8]}
+        >
+          <Text style={styles.action}>{message.actionLabel}</Text>
+        </Pressable>
+      )}
       <IconButton
         icon={<Icon name="x" size={18} color={palette.neutral[700]} />}
         size="SM"
@@ -122,7 +139,7 @@ const ToastItem: React.FC<{ message: ToastMessage; onRemove: (id: string) => voi
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback(({ type, message, eventName }: AddToastOptions) => {
+  const addToast = useCallback(({ type, message, eventName, actionLabel, onAction }: AddToastOptions) => {
     const id = Math.random().toString(36).substring(2, 9);
     const resolvedMessage =
       message ||
@@ -130,7 +147,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ? defaultToastMessages.success(eventName)
         : defaultToastMessages[type]());
 
-    setMessages((state) => [...state, { id, type, message: resolvedMessage }]);
+    setMessages((state) => [...state, { id, type, message: resolvedMessage, actionLabel, onAction }]);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -209,6 +226,12 @@ const styles = StyleSheet.create({
     ...typography.bodyM,
     fontWeight: '500',
     marginLeft: spacing[12],
+    marginRight: spacing[12],
+  },
+  action: {
+    ...typography.labelS,
+    color: colors.text.brand,
+    textDecorationLine: 'underline',
     marginRight: spacing[12],
   },
 });

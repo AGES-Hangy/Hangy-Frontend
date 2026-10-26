@@ -9,7 +9,7 @@ import {
 } from './types';
 import { colors, palette } from '@/constants/colors';
 import { layout, radius } from '@/constants/layout';
-import { fontFamily, typography } from '@/constants/typography';
+import { typography } from '@/constants/typography';
 
 const BADGE_HEIGHT = layout.badge.height;
 const BADGE_HORIZONTAL_PADDING = layout.badge.paddingHorizontal;
@@ -109,7 +109,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     includeFontPadding: false,
-    fontFamily: fontFamily.base,
   },
   notificationBadge: {
     position: 'relative',
@@ -157,4 +156,5 @@ const styles = StyleSheet.create({
 
 export type { BadgeFamily, BadgeProps, PrivacyBadgeValue, StatusBadgeValue } from './types';
 export { getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from './utils';
+export { resolvePrivacyVariant } from './types';
 export type { BackendPrivacy, BackendStatus } from './utils';

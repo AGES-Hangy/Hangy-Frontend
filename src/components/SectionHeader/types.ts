@@ -5,6 +5,8 @@ export interface SectionHeaderProps {
   variant?: 'title' | 'overline';
   /** Mostra ou esconde o link de ação (padrão: false) */
   action?: boolean;
+  /** Mostra o chevron ao lado do link de ação. Padrão: true. */
+  showActionIcon?: boolean;
   /** Mantém a ação visível enquanto a tela de destino ainda não está disponível. */
   actionDisabled?: boolean;
   /** Texto do link de ação. Padrão: "Ver todos" */

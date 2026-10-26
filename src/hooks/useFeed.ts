@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { useToast } from '@/components/Toast';
 import { API_BASE_URL } from '@/constants/api';
@@ -21,6 +21,8 @@ interface ApiFeedItem {
   cover_photo_url?: string | null;
   privacy: EventPrivacy;
   participants_count?: number;
+  /** Se quem está vendo favoritou o evento — mesmo valor de `viewer.is_favorited` no detalhe. */
+  is_favorited?: boolean;
   /** Tag(s) do próprio evento que casaram com esta seção (ex.: "Futebol" em "Esportes"). */
   tags?: { id: string; name: string }[];
 }
@@ -45,6 +47,7 @@ function toEvent(item: ApiFeedItem): Event {
     location: item.location_name,
     imageUrl: item.cover_photo_url ?? '',
     privacy: item.privacy,
+    isFavorited: item.is_favorited ?? false,
   };
 }
 
@@ -67,6 +70,19 @@ function normalizeFeed(data: ApiFeedResponse): FeedSection[] {
   }));
 }
 
+// No módulo, e não em estado: quem invalida (ex.: Editar perfil, ao salvar as
+// tags) não está na árvore da Home, que continua montada na tab bar.
+let isFeedStale = false;
+let discardCachedFeed = false;
+let feedRevision = 0;
+
+/** Marca o feed como desatualizado: ele é recarregado na próxima visita à Home. */
+export function invalidateFeed({ discardCache = false }: { discardCache?: boolean } = {}) {
+  isFeedStale = true;
+  discardCachedFeed ||= discardCache;
+  ++feedRevision;
+}
+
 export function useFeed() {
   const { showInfoToast } = useToast();
   const [sections, setSections] = useState<FeedSection[]>([]);
@@ -80,6 +96,7 @@ export function useFeed() {
     async (options: { silent?: boolean } = {}) => {
       const { silent = false } = options;
       const requestId = ++latestRequestIdRef.current;
+      const revision = feedRevision;
 
       if (!silent) {
         setIsLoading(true);
@@ -97,7 +114,7 @@ export function useFeed() {
           signal: controller.signal,
         });
 
-        if (requestId !== latestRequestIdRef.current) return;
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         if (!response.ok) {
           if (response.status === 401) {
@@ -118,13 +135,13 @@ export function useFeed() {
         }
 
         const data = (await response.json()) as ApiFeedResponse;
-        if (requestId !== latestRequestIdRef.current) return;
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         setSections(normalizeFeed(data));
         setError(null);
         setIsOffline(false);
       } catch (requestError) {
-        if (requestId !== latestRequestIdRef.current) return;
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         const offline = requestError instanceof TypeError;
 
@@ -149,10 +166,24 @@ export function useFeed() {
   );
 
   useEffect(() => {
+    // A carga inicial já traz o feed atual.
+    isFeedStale = false;
+    discardCachedFeed = false;
     void loadFeed();
   }, [loadFeed]);
 
   const refresh = useCallback(() => loadFeed({ silent: true }), [loadFeed]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isFeedStale) return;
+      isFeedStale = false;
+      const discard = discardCachedFeed;
+      discardCachedFeed = false;
+      if (discard) setSections([]);
+      void loadFeed({ silent: !discard });
+    }, [loadFeed]),
+  );
 
   return { sections, isLoading, error, isOffline, reload: loadFeed, refresh };
 }

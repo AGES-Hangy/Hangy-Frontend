@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -8,17 +9,18 @@ import {
   Text,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
-import { Icon } from '@/components/Icon';
-import { colors, palette } from '@/constants/colors';
+import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
-import { typography } from '@/constants/typography';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
+import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
+import { announce } from '@/utils/accessibility';
+import { endDateFrom } from '@/utils/eventDuration';
 
 import { Step1 } from '@/components/CreateEvent/Step1';
 import { Step2, type Step2Handle } from '@/components/CreateEvent/Step2';
@@ -30,41 +32,61 @@ const EMPTY_FORM: CreateEventFormData = {
   title: '',
   description: '',
   coverUri: null,
+  coverUrl: null,
   tagIds: [],
   date: null,
   time: null,
+  durationMinutes: null,
   location: '',
   locationCoordinates: null,
+  locationNeighborhood: null,
+  locationCity: null,
   participantLimit: 10,
   unlimited: false,
   privacy: 'PUBLIC',
-  inviteeIds: [],
 };
 
 export default function CreateEvent() {
-  const [publishedTitle, setPublishedTitle] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const step2Ref = useRef<Step2Handle>(null);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<CreateEventFormData>(EMPTY_FORM);
   const [submitCount, setSubmitCount] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
+  /** Capa recusada pela API ao publicar; aparece como erro do FileUpload. */
+  const [coverRejected, setCoverRejected] = useState<string | null>(null);
+  const [focusCover, setFocusCover] = useState(false);
+
+  const {
+    pickAndUpload: pickAndUploadCover,
+    cancelUpload: cancelCoverUpload,
+    clearImage: clearCoverImage,
+    reset: resetCoverUpload,
+    isUploading: isCoverUploading,
+    progress: coverProgress,
+    error: coverUploadError,
+  } = useEventCoverUpload();
 
   // A tela é uma aba de `Tabs` (ver (tabs)/_layout.tsx) e continua montada ao
   // trocar de aba — sem isto, sair e reabrir manteria o formulário preenchido
-  // ou, pior, cairia direto na tela de "evento publicado" de uma criação
-  // anterior.
+  // ou, pior, cairia direto no passo 2 de uma criação anterior.
   const resetForm = useCallback(() => {
+    resetCoverUpload();
     setForm(EMPTY_FORM);
     setStep(1);
     setSubmitCount(0);
     setLocalError(null);
-    setPublishedTitle(null);
-  }, []);
+    setCoverRejected(null);
+    setFocusCover(false);
+  }, [resetCoverUpload]);
+
+  // Pelo mesmo motivo, sair da tela não desmonta o hook: o envio em andamento
+  // é cancelado aqui, e o formulário fica como estava.
+  useFocusEffect(useCallback(() => () => cancelCoverUpload(), [cancelCoverUpload]));
 
   const handleDiscard = useCallback(() => {
     setShowDiscardConfirm(false);
@@ -72,24 +94,35 @@ export default function CreateEvent() {
     router.back();
   }, [resetForm]);
 
-  const handleLeavePublished = useCallback(() => {
-    resetForm();
-    router.back();
-  }, [resetForm]);
-
   useTopAppBar({
     variant: 'Modal',
-    title: publishedTitle ? 'Evento publicado' : 'Criar evento',
-    onBack: publishedTitle ? handleLeavePublished : () => setShowDiscardConfirm(true),
+    title: 'Criar evento',
+    onBack: () => setShowDiscardConfirm(true),
   });
 
   const missing = useMemo(() => validateStep1(form), [form.title, form.tagIds]);
 
-  const { publishEvent, isPublishing, publishError } = useCreateEventStep2();
+  const {
+    publishEvent,
+    generateInviteLink,
+    isPublishing: isPublishingEvent,
+    isGeneratingLink,
+    publishError,
+  } = useCreateEventStep2();
+  // Publicar e gerar o link de convite são uma operação só para o usuário.
+  const isPublishing = isPublishingEvent || isGeneratingLink;
 
   const setTitle = (title: string) => setForm((f) => ({ ...f, title }));
   const setDescription = (description: string) => setForm((f) => ({ ...f, description }));
-  const setCoverUri = (coverUri: string | null) => setForm((f) => ({ ...f, coverUri }));
+  const pickCover = async () => {
+    setCoverRejected(null);
+    const uploaded = await pickAndUploadCover();
+    if (uploaded) setForm((f) => ({ ...f, coverUri: uploaded.uri, coverUrl: uploaded.url }));
+  };
+  const removeCover = () => {
+    clearCoverImage();
+    setForm((f) => ({ ...f, coverUri: null, coverUrl: null }));
+  };
   const toggleTag = (id: string) =>
     setForm((f) => {
       if (f.tagIds.includes(id)) return { ...f, tagIds: f.tagIds.filter((t) => t !== id) };
@@ -98,6 +131,7 @@ export default function CreateEvent() {
     });
 
   const handleContinue = () => {
+    if (isCoverUploading) return;
     setLocalError(null);
     setSubmitCount((c) => c + 1);
     if (missing.length === 0) {
@@ -107,6 +141,7 @@ export default function CreateEvent() {
   };
 
   const handlePublish = async () => {
+    if (isCoverUploading) return;
     setLocalError(null);
     const valid = step2Ref.current?.submit();
     if (!valid) return;
@@ -117,13 +152,8 @@ export default function CreateEvent() {
       AccessibilityInfo.announceForAccessibility(message);
     };
 
-    if (form.coverUri) {
-      showLocalError('Remova a capa para publicar sem imagem. O envio de capas ainda não está disponível.');
-      return;
-    }
-
     if (!form.locationCoordinates) {
-      showLocalError('Não é possível publicar sem confirmar o local. A seleção de locais ainda não está disponível.');
+      showLocalError('Selecione um local da lista ou do mapa antes de publicar.');
       return;
     }
 
@@ -131,47 +161,49 @@ export default function CreateEvent() {
     if (form.time) {
       eventDate.setHours(form.time.getHours(), form.time.getMinutes(), 0, 0);
     }
-    const endDate = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
+    // O Step2 só libera a publicação com uma duração válida.
+    const endDate = endDateFrom(eventDate, form.durationMinutes!);
 
     const result = await publishEvent({
       title: form.title,
       description: form.description || null,
-      cover_photo_url: null,
+      cover_photo_url: form.coverUrl,
       tag_ids: form.tagIds,
       event_date: eventDate.toISOString(),
       end_date: endDate.toISOString(),
       location: form.locationCoordinates,
       location_name: form.location || null,
+      location_neighborhood: form.locationNeighborhood,
+      location_city: form.locationCity,
       max_participants: form.unlimited ? null : form.participantLimit,
       privacy: form.privacy,
     });
-    if (result) setPublishedTitle(result.title);
-  };
+    if (result.kind === 'invalid-cover') {
+      removeCover();
+      setCoverRejected(INVALID_COVER_MESSAGE);
+      setStep(1);
+      setFocusCover(true);
+      // Sempre, e não só o foco: se o foco não mudar de lugar, este anúncio é
+      // o único jeito de o leitor de tela saber da recusa.
+      announce(INVALID_COVER_MESSAGE);
+      return;
+    }
+    if (result.kind === 'failed') return;
+    const { event_id: eventId } = result.event;
 
-  if (publishedTitle) {
-    return (
-      <View style={styles.successScreen}>
-        <View style={styles.successContent}>
-          <View style={styles.successIcon}>
-            <Icon name="circle-check" size={32} color={palette.success.default} />
-          </View>
-          <Text style={[typography.h2, styles.successTitle]}>Seu evento está no ar</Text>
-          <Text style={[typography.bodyM, styles.successDescription]}>
-            O evento “{publishedTitle}” foi publicado com sucesso.
-          </Text>
-        </View>
-        <View style={[styles.successFooter, { paddingBottom: spacing[16] + insets.bottom }]}>
-          <Button
-            label="Ir para o início"
-            onPress={() => {
-              resetForm();
-              router.replace('/Home');
-            }}
-          />
-        </View>
-      </View>
-    );
-  }
+    // O backend não cria o link junto com o evento, e `GET /events/{id}/share`
+    // responde 404 para um evento por convite que ainda não tem um — é o link
+    // gerado aqui que a tela de publicado lê para compartilhar.
+    if (form.privacy === 'INVITE_ONLY') await generateInviteLink(eventId);
+
+    // `replace` troca a entrada de criação no histórico: fechar a tela de
+    // publicado não devolve o usuário ao formulário.
+    router.replace({
+      pathname: '/EventPublished',
+      params: { eventId, privacy: form.privacy },
+    });
+    resetForm();
+  };
 
   return (
     <View style={styles.screen}>
@@ -194,9 +226,15 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               missing={missing}
               submitCount={submitCount}
+              coverProgress={isCoverUploading ? (coverProgress ?? 0) : undefined}
+              coverError={coverUploadError ?? coverRejected}
+              focusCover={focusCover}
               onChangeTitle={setTitle}
               onChangeDescription={setDescription}
-              onChangeCover={setCoverUri}
+              onPickCover={pickCover}
+              onCancelCover={cancelCoverUpload}
+              onRemoveCover={removeCover}
+              onCoverFocused={() => setFocusCover(false)}
               onToggleTag={toggleTag}
             />
           ) : (
@@ -206,7 +244,23 @@ export default function CreateEvent() {
               scrollRef={scrollRef}
               onChangeDate={(v) => setForm((f) => ({ ...f, date: v }))}
               onChangeTime={(v) => setForm((f) => ({ ...f, time: v }))}
-              onChangeLocation={(v) => setForm((f) => ({ ...f, location: v, locationCoordinates: { latitude: 0, longitude: 0 } }))}
+              onChangeDuration={(v) => setForm((f) => ({ ...f, durationMinutes: v }))}
+              // Digitar invalida tudo que veio da seleção anterior: bairro e
+              // cidade saem sempre do mesmo ponto que as coordenadas.
+              onChangeLocation={(v) => setForm((f) => ({
+                ...f,
+                location: v,
+                locationCoordinates: null,
+                locationNeighborhood: null,
+                locationCity: null,
+              }))}
+              onSelectLocation={(suggestion) => setForm((f) => ({
+                ...f,
+                location: suggestion.shortLabel,
+                locationCoordinates: { latitude: suggestion.latitude, longitude: suggestion.longitude },
+                locationNeighborhood: suggestion.neighborhood,
+                locationCity: suggestion.city,
+              }))}
               onChangeParticipantLimit={(v) => setForm((f) => ({ ...f, participantLimit: v }))}
               onChangeUnlimited={(v) => setForm((f) => ({ ...f, unlimited: v }))}
               onChangePrivacy={(v: Privacy) => setForm((f) => ({ ...f, privacy: v }))}
@@ -239,6 +293,7 @@ export default function CreateEvent() {
             size="LG"
             style={styles.primaryButton}
             onPress={step === 1 ? handleContinue : handlePublish}
+            disabled={isCoverUploading}
             isLoading={step === 2 && isPublishing}
           />
         </View>
@@ -267,7 +322,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[24],
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bg.base,
     opacity: 0.6,
   },
@@ -284,33 +339,5 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 2,
-  },
-  successScreen: {
-    flex: 1,
-    backgroundColor: colors.bg.base,
-  },
-  successContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[24],
-  },
-  successIcon: {
-    backgroundColor: palette.success.bg,
-    borderRadius: 32,
-    padding: spacing[16],
-    marginBottom: spacing[24],
-  },
-  successTitle: {
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  successDescription: {
-    color: colors.text.secondary,
-    textAlign: 'center',
-    marginTop: spacing[8],
-  },
-  successFooter: {
-    padding: spacing[16],
   },
 });

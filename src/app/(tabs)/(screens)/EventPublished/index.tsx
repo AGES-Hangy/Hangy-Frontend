@@ -44,12 +44,9 @@ export default function EventoPublicado() {
     };
   }, [getShare]);
 
+  // Sempre a Home: o histórico das abas não garante que o "voltar" seja a
+  // Home (pode cair de volta no formulário de criação).
   function handleClose() {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
     router.replace('/Home');
   }
 

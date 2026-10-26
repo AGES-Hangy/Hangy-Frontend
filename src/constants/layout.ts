@@ -35,6 +35,13 @@ export const spacing = {
  */
 export const pressedOpacity = 0.85;
 export const layout = {
+  mapPinShadows: {
+    default: { offsetY: 4, blur: 8 },
+    unselected: { offsetY: 2, blur: 5 },
+    selected: { offsetY: 6, blur: 12 },
+    cluster: { offsetY: 4, blur: 10 },
+    userLoc: { offsetY: 1, blur: 3 },
+  },
   emptyState: {
     illustrationSize: 96,
     textMaxWidth: 260,
@@ -72,7 +79,13 @@ export const layout = {
     compactImageSize: 72,
     overlayZIndex: 1,
     flexShrink: 1,
-    mapPreviewWidth: 280,
+    /**
+     * Folga à direita do `MapPreview` para o botão de ação que a aba Ao Vivo
+     * sobrepõe ao card: IconButton SM (36) + `right` de 12 + 8 de respiro.
+     */
+    mapPreviewActionInset: 56,
+    /** Ícone de privacidade sobre a capa do `MapPreview` — mesmo círculo do `MapPin/LockBadge`. */
+    mapPrivacyIconSize: 20,
     mapPreviewHeight: 96,
     mapImageSize: 80,
     miniWidth: 172,
@@ -88,6 +101,19 @@ export const layout = {
     detailIconSize: 14,
     chevronSize: 20,
     imageTransitionDuration: 150,
+  },
+  notificationItem: {
+    /** Altura dos botões de ação nos frames 703:12202 e 703:12214; hitSlop completa 44. */
+    notificationActionHeight: 32,
+    /** Altura mínima dos cards de solicitação nos frames 703:12202 e 703:12214. */
+    minHeightActions: 104,
+    minHeightPlain: 80,
+    thumbSize: 48,
+    /** Capa do evento à direita do `Activity`, maior que a thumb da esquerda. */
+    trailingThumbSize: 56,
+    unreadDotSize: 8,
+    chevronSize: 20,
+    fallbackIconSize: 20,
   },
 } as const;
 

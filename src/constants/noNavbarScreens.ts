@@ -7,4 +7,7 @@ export const noNavbarScreens: string[] = [
   'EventDetail',
   'ManageEvent',
   'EventPublished',
+  'EditProfile',
+  'BlockedUsers',
+  'Followers',
 ];

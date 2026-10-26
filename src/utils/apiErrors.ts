@@ -1,4 +1,4 @@
-import { ApiError } from '@/utils/http';
+import { ApiError, UploadCancelledError } from '@/utils/http';
 
 /**
  * Tradução dos erros da API para o que a tela mostra.
@@ -70,6 +70,23 @@ export function describeLoadError(error: unknown): LoadError {
     message: 'Não foi possível carregar. Tente de novo.',
     canRetry: true,
   };
+}
+
+export function describeProfileLoadError(error: unknown): LoadError {
+  const loadError = describeLoadError(error);
+
+  if (loadError.kind === 'unavailable' || loadError.kind === 'cancelled') {
+    // Ambíguo de propósito: o 404 também é a resposta quando o perfil
+    // visitado bloqueou quem acessa, e a mensagem não pode entregar isso.
+    return {
+      kind: 'unavailable',
+      title: 'Perfil indisponível',
+      message: 'Este perfil não está disponível.',
+      canRetry: false,
+    };
+  }
+
+  return loadError;
 }
 
 /** O que fazer com o erro de uma ação (aprovar, recusar, remover, cancelar). */
@@ -171,10 +188,38 @@ export function describeActionError(error: unknown): ActionError {
 }
 
 /**
+ * `detail` do 400 de `POST /events` e `PATCH /events/{id}` quando
+ * `cover_photo_url` não é do bucket (task 276).
+ */
+export const INVALID_COVER_PHOTO_URL = 'Invalid cover photo URL';
+
+/** Falha no envio de um arquivo. O texto fica com quem chama. */
+export type UploadErrorKind = 'invalid-file' | 'connection' | 'failed';
+
+/**
+ * `null` quando não há o que mostrar: o usuário cancelou, ou foi 401, que o
+ * `apiUpload` já entregou ao tratamento global de sessão expirada.
+ */
+export function classifyUploadError(error: unknown): UploadErrorKind | null {
+  if (error instanceof UploadCancelledError) return null;
+  if (!(error instanceof ApiError || isApiErrorLike(error))) return 'failed';
+
+  const { kind, status } = error;
+
+  if (kind === 'network' || kind === 'timeout') return 'connection';
+  if (status === 401) return null;
+  // Só pelo status: um proxy pode recusar o arquivo sem o JSON da API, e
+  // tentar de novo com o mesmo arquivo daria o mesmo erro.
+  if (status === 413 || status === 415) return 'invalid-file';
+
+  return 'failed';
+}
+
+/**
  * O mock devolve um erro com o mesmo formato do `ApiError`, mas de outra
  * classe — `instanceof` não pega. Este teste estrutural cobre os dois.
  */
-function isApiErrorLike(
+export function isApiErrorLike(
   error: unknown,
 ): error is { kind: string; status: number | null; detail: string | null } {
   return (

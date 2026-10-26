@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import type { BlurEvent, FocusEvent, StyleProp, ViewStyle } from 'react-native';
+import type { BlurEvent, FocusEvent, KeyboardTypeOptions, StyleProp, ViewStyle } from 'react-native';
+
+import type { IconName } from '@/components/Icon';
 
 /** Eixo `Type` do Figma — muda comportamento e affordance do campo. */
 export type TextFieldType =
@@ -48,6 +50,8 @@ export type TextFieldProps = {
   onFocus?: (event: FocusEvent) => void;
   onBlur?: (event: BlurEvent) => void;
   placeholder?: string;
+  keyboardType?: KeyboardTypeOptions;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   /** Texto de apoio abaixo do campo (Body S). */
   helper?: string;
   /** Mensagem de erro — força o estado `Error`. */
@@ -89,12 +93,34 @@ export type TextFieldProps = {
   onChangeDate?: (date: Date | null) => void;
   /** `Type=Date`: seletor de data (padrão) ou de hora. */
   dateMode?: 'date' | 'time';
+  /**
+   * `Type=Date` em modo hora: o valor é uma duração (horas e minutos do
+   * `Date`), não um horário. No iOS abre o seletor de timer (rodas "horas" e
+   * "min"); no Android, que não tem esse seletor, o relógio em 24 h.
+   */
+  isDuration?: boolean;
   /** `Type=Date`: limites do seletor. */
   minimumDate?: Date;
   maximumDate?: Date;
 
   /** Limite de caracteres. Em `TextArea` também liga o contador do Figma. */
   maxLength?: number;
+
+  /**
+   * Sobrescreve o ícone à direita padrão do `type` (ex.: trocar o `chevron`
+   * de `Location` por outro ícone). Sem esta prop, o ícone continua vindo só
+   * do `type`, como hoje.
+   */
+  trailingIcon?: IconName;
+  /**
+   * Dá um toque só na área do ícone à direita, sem depender de o campo ser
+   * editável — usado por telas que abrem algo à parte (ex.: um seletor num
+   * mapa) a partir de um campo que também aceita digitação livre. Sem esta
+   * prop, o ícone continua só decorativo.
+   */
+  onTrailingIconPress?: () => void;
+  /** Rótulo de acessibilidade do toque acima. Padrão: `"Mais opções"`. */
+  onTrailingIconPressAccessibilityLabel?: string;
 
   /** Padrão: o próprio `label`. */
   accessibilityLabel?: string;

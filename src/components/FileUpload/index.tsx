@@ -26,8 +26,9 @@ const labelM = {
   letterSpacing: typography.labelM.letterSpacing,
 } as const;
 
-/** Frame de referência do Figma — dropzone 340×107. Usado só para manter a proporção. */
+/** Frame de referência do Figma — dropzone 340×107. Textos podem pedir mais altura. */
 const ASPECT_RATIO = 340 / 107;
+const MIN_BOX_HEIGHT = 107;
 const BORDER_DASH = '3,3';
 
 type State = 'empty' | 'uploading' | 'filled' | 'error';
@@ -94,6 +95,9 @@ export function FileUpload({
         onLayout={handleLayout}
         style={[
           styles.box,
+          state === 'filled'
+            ? { aspectRatio: ASPECT_RATIO }
+            : { minHeight: Math.max(MIN_BOX_HEIGHT, boxSize.width / ASPECT_RATIO) },
           { backgroundColor: state === 'error' ? palette.error.bg : palette.neutral[200] },
         ]}
       >
@@ -204,7 +208,6 @@ const styles = StyleSheet.create({
   },
   box: {
     width: '100%',
-    aspectRatio: ASPECT_RATIO,
     borderRadius: radius.dropzone,
     alignItems: 'center',
     justifyContent: 'center',
@@ -216,15 +219,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing[8],
     paddingHorizontal: spacing[16],
+    paddingVertical: spacing[4],
   },
   bodyText: {
     ...bodyS,
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   bodyTextMuted: {
     ...bodyS,
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   errorText: {

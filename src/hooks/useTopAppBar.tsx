@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 
 import { TopAppBar } from '@/components/TopAppBar';
 import type { TopAppBarProps } from '@/components/TopAppBar';
+import { useNotifications } from '@/hooks/useNotifications';
 
 /** Barra padrão de todas as telas: a da Home, com logo e sino. */
 const DEFAULT_BAR: TopAppBarProps = { variant: 'Home' };
@@ -43,11 +44,12 @@ export function TopAppBarProvider({ children }: { children: ReactNode }) {
 /** Renderiza a barra da tela em foco. É o `header` do `(tabs)/_layout.tsx`. */
 export function TopAppBarSlot() {
   const context = useContext(TopAppBarContext);
+  const { unreadCount } = useNotifications();
   const bar = context?.bar ?? DEFAULT_BAR;
 
   if (bar === 'hidden') return null;
 
-  return <TopAppBar {...bar} />;
+  return <TopAppBar {...bar} unreadCount={bar.variant === 'Home' ? unreadCount : bar.unreadCount} />;
 }
 
 /**
@@ -71,6 +73,9 @@ export function useTopAppBar(props: TopAppBarProps | null) {
   const action = props?.action;
   const actionRef = useRef(action);
   actionRef.current = action;
+  const secondaryAction = props?.secondaryAction;
+  const secondaryActionRef = useRef(secondaryAction);
+  secondaryActionRef.current = secondaryAction;
   const onBack = props?.onBack;
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
@@ -85,9 +90,12 @@ export function useTopAppBar(props: TopAppBarProps | null) {
       ...props,
       onBack: onBack ? () => onBackRef.current?.() : undefined,
       action: action ? { ...action, onPress: () => actionRef.current?.onPress?.() } : undefined,
+      secondaryAction: secondaryAction
+        ? { ...secondaryAction, onPress: () => secondaryActionRef.current?.onPress?.() }
+        : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hidden, variant, title, unreadCount, showBack, Boolean(onBack), action?.icon, action?.accessibilityLabel],
+      [hidden, variant, title, unreadCount, showBack, Boolean(onBack), action?.icon, action?.accessibilityLabel, action?.disabled, secondaryAction?.icon, secondaryAction?.accessibilityLabel, secondaryAction?.disabled],
   );
 
   // No foco, e não na montagem: numa tab bar as telas continuam montadas ao

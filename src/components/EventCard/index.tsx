@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 
 import { AvatarGroup } from '@/components/AvatarGroup';
-import { Badge, getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from '@/components/Badge';
+import { Badge, getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue, resolvePrivacyVariant } from '@/components/Badge';
 import { Chip } from '@/components/Chip';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
@@ -50,22 +50,41 @@ function formatEventDateTime(value: string | null) {
 	return time ? `${date} · ${time}` : date;
 }
 
+function formatRequestDateTime(value: string | null) {
+	if (!value) return null;
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return value;
+
+	const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+	const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+	return `${weekdays[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} · ${date.getHours()}h`;
+}
+
 const placeholderImage = require('../../../assets/images/hangy.svg');
+const REQUEST_ACTION_HIT_SLOP = Math.max(0, (44 - layout.eventCard.requestActionHeight) / 2);
 
 export function EventCard({
 	variant,
 	event,
 	state = 'Default',
-	isNew = false,
+	isUnread = false,
 	onPress,
-	onNotifyPress,
+	actionsDisabled,
+	onAcceptRequest,
+	onRejectRequest,
+	onFavoritePress,
+	isFavorited = false,
 }: EventCardProps) {
+	const favorite = onFavoritePress ? { isFavorited, onPress: onFavoritePress } : undefined;
 	const dateTime = formatEventDateTime(event.date);
-	const accessibleLabel = [event.title, dateTime, event.location, getPrivacyBadgeLabel(event.privacy)]
+	const accessibleLabel = [event.title, dateTime, event.location, event.privacy && getPrivacyBadgeLabel(event.privacy)]
 		.filter(Boolean)
 		.join(', ');
+	if (variant === 'Request') {
+		return <RequestCard event={event} isUnread={isUnread} onPress={onPress} actionsDisabled={actionsDisabled} onAccept={onAcceptRequest} onReject={onRejectRequest} />;
+	}
 	if (variant === 'Mini') {
-		return <MiniCard event={event} onPress={onPress} onNotifyPress={onNotifyPress} accessibleLabel={accessibleLabel} />;
+		return <MiniCard event={event} onPress={onPress} favorite={favorite} accessibleLabel={accessibleLabel} />;
 	}
 
 	return (
@@ -76,19 +95,19 @@ export function EventCard({
 			onPress={onPress}
 			style={({ pressed }) => [
 				styles.pressable,
-				// `Compact` é a única variante com largura fluida (width: '100%' até
-				// compactMaxWidth); as outras têm largura fixa e devem encolher ao
-				// conteúdo. Sem isto, `width: '100%'` do card não tem uma largura de
-				// referência (o Pressable encolhe ao próprio conteúdo) e o card
-				// estoura para a direita da tela.
-				variant === 'Compact' && styles.pressableFluid,
+				// `Compact` e `MapPreview` têm largura fluida (`MapPreview` ocupa a
+				// largura do overlay do mapa, como no frame "Ao Vivo 2"); as outras
+				// têm largura fixa e devem encolher ao conteúdo. Sem isto,
+				// `width: '100%'` do card não tem uma largura de referência (o
+				// Pressable encolhe ao próprio conteúdo) e o card estoura para a
+				// direita da tela.
+				(variant === 'Compact' || variant === 'MapPreview') && styles.pressableFluid,
 				pressed && styles.pressed,
 			]}
 		>
-			{variant === 'Featured' && <FeaturedCard event={event} onNotifyPress={onNotifyPress} />}
+			{variant === 'Featured' && <FeaturedCard event={event} favorite={favorite} />}
 			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
-			{variant === 'Request' && <RequestCard event={event} isNew={isNew} />}
 		</Pressable>
 	);
 }
@@ -111,7 +130,8 @@ function EventImage({ event, style, placeholderColor }: { event: Event; style: o
 	);
 }
 
-function PrivacyTag({ privacy }: { privacy: EventPrivacy }) {
+function PrivacyTag({ privacy }: { privacy?: EventPrivacy }) {
+	if (!privacy) return null;
 	return (
 		<View style={styles.privacyTagWrap}>
 			<Badge family="Privacy" value={getPrivacyBadgeValue(privacy)} />
@@ -119,16 +139,23 @@ function PrivacyTag({ privacy }: { privacy: EventPrivacy }) {
 	);
 }
 
-/** Sino de notificações sobre a capa — mesmo `IconButton` de sempre, só posicionado por cima da imagem. */
-function NotifyButton({ style, onPress }: { style: object; onPress?: () => void }) {
+type FavoriteToggle = { isFavorited: boolean; onPress: () => void };
+
+/**
+ * Estrela de favorito sobre a capa — mesmo visual do detalhe do evento, no
+ * tamanho SM. O rótulo cita o título: no carrossel há vários botões iguais.
+ */
+function FavoriteButton({ event, favorite, style }: { event: Event; favorite?: FavoriteToggle; style: object }) {
+	if (!favorite) return null;
+
 	return (
 		<IconButton
-			icon="bell"
+			icon="star"
 			size="SM"
-			variant="Outline"
-			disabled={!onPress}
-			accessibilityLabel="Ativar notificações do evento"
-			onPress={onPress}
+			variant={favorite.isFavorited ? 'Filled' : 'Tonal'}
+			iconFilled={favorite.isFavorited}
+			accessibilityLabel={`${favorite.isFavorited ? 'Remover dos favoritos' : 'Favoritar'}: ${event.title}`}
+			onPress={favorite.onPress}
 			style={style}
 		/>
 	);
@@ -159,7 +186,7 @@ function AttendeesGroup({ attendees }: { attendees: Event['attendeeAvatars'] }) 
 	);
 }
 
-function FeaturedCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: () => void }) {
+function FeaturedCard({ event, favorite }: { event: Event; favorite?: FavoriteToggle }) {
 	const tags = event.tags ?? [];
 	const hasFooter = tags.length > 0 || (event.attendeeAvatars?.length ?? 0) > 0;
 	const dateTime = formatEventDateTime(event.date);
@@ -169,7 +196,7 @@ function FeaturedCard({ event, onNotifyPress }: { event: Event; onNotifyPress?: 
 			<View style={styles.featuredImageWrap}>
 				<EventImage event={event} style={styles.featuredImage} placeholderColor={palette.primary[200]} />
 				<PrivacyTag privacy={event.privacy} />
-				<NotifyButton style={styles.featuredNotifyPosition} onPress={onNotifyPress} />
+				<FavoriteButton event={event} favorite={favorite} style={styles.featuredFavoritePosition} />
 			</View>
 
 			{/* 1 linha: `Featured` tem altura fixa (288) — um título de 2 linhas
@@ -210,7 +237,7 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 			<View style={styles.compactContent}>
 				<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
 				{meta ? <Text numberOfLines={1} style={styles.detailText}>{meta}</Text> : null}
-				<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
+				{event.privacy && <Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />}
 			</View>
 
 			{stateBadge ? (
@@ -227,21 +254,51 @@ function CompactCard({ event, state }: { event: Event; state: EventCardProps['st
 	);
 }
 
+// Mesmo layout para evento exato e aproximado (frames "Ao Vivo 2" do Figma):
+// título, local e data, com a privacidade num ícone sobre a capa. Quem monta o `Event` decide o texto do local ("Região
+// do…" no aproximado) e a distância ("~600 m"). A distância vai na linha da
+// data — três linhas é o que cabe na altura fixa do card.
 function MapPreviewCard({ event }: { event: Event }) {
-	const distance = event.distance ?? '250 metros';
+	const dateLine = [formatEventDateTime(event.date), event.distance && `a ${event.distance}`]
+		.filter(Boolean)
+		.join(' · ');
 
 	return (
 		<View style={[styles.cardFlat, styles.mapPreview]}>
 			<View style={styles.mapImageWrap}>
 				<EventImage event={event} style={styles.mapImage} placeholderColor={palette.secondary[200]} />
+				{event.privacy && <MapPreviewPrivacyIcon privacy={event.privacy} />}
 			</View>
 			<View style={styles.mapDetails}>
 				<Text numberOfLines={1} style={styles.compactTitle}>{event.title}</Text>
-				<Text numberOfLines={1} style={[styles.detailText, styles.mapPreviewDistance]}>
-					a {distance} de você
-				</Text>
-				<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
+				{event.location && <Text numberOfLines={1} style={styles.detailText}>{event.location}</Text>}
+				{dateLine ? (
+					<View style={styles.detailLine}>
+						<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.secondary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={styles.detailText}>{dateLine}</Text>
+					</View>
+				) : null}
 			</View>
+		</View>
+	);
+}
+
+/**
+ * Privacidade no preview do mapa: o `Badge` com texto (24 de altura, até ~93
+ * de largura) é do tamanho da capa de 80. Aqui fica só o ícone, com as cores
+ * do selo de privacidade, no formato do `MapPin/LockBadge` (círculo 20, ícone
+ * 12). Decorativo: o nome já está no `accessibilityLabel` do card.
+ */
+function MapPreviewPrivacyIcon({ privacy }: { privacy: EventPrivacy }) {
+	const visual = resolvePrivacyVariant(getPrivacyBadgeValue(privacy));
+	return (
+		<View
+			style={[styles.mapPrivacyIcon, { backgroundColor: visual.backgroundColor, borderColor: visual.borderColor }]}
+			accessibilityElementsHidden
+			importantForAccessibility="no-hide-descendants"
+			pointerEvents="none"
+		>
+			<Icon name={visual.icon} size={layout.badge.iconSize} color={visual.textColor} strokeWidth={layout.badge.iconStrokeWidth} />
 		</View>
 	);
 }
@@ -249,12 +306,12 @@ function MapPreviewCard({ event }: { event: Event }) {
 function MiniCard({
 	event,
 	onPress,
-	onNotifyPress,
+	favorite,
 	accessibleLabel,
 }: {
 	event: Event;
 	onPress?: () => void;
-	onNotifyPress?: () => void;
+	favorite?: FavoriteToggle;
 	accessibleLabel: string;
 }) {
 	const tag = event.tags?.[0];
@@ -272,9 +329,11 @@ function MiniCard({
 			>
 				<View style={styles.miniImageWrap}>
 					<EventImage event={event} style={styles.miniImage} placeholderColor={palette.primary[200]} />
-					<View style={styles.overlayBadge}>
-						<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
-					</View>
+					{event.privacy && (
+						<View style={styles.overlayBadge}>
+							<Badge family="Privacy" value={getPrivacyBadgeValue(event.privacy)} />
+						</View>
+					)}
 				</View>
 
 				<View style={[styles.carouselContent, styles.miniContent]}>
@@ -294,57 +353,88 @@ function MiniCard({
 				{tag ? <Chip label={tag} categoryType="macro" size="sm" isSelected /> : <View />}
 				<AttendeesGroup attendees={event.attendeeAvatars} />
 			</View>}
-			<NotifyButton style={styles.miniNotifyPosition} onPress={onNotifyPress} />
+			{/* Irmão do Pressable do card, não filho: tocar na estrela não abre o evento. */}
+			<FavoriteButton event={event} favorite={favorite} style={styles.miniFavoritePosition} />
 		</View>
 	);
 }
 
-function RequestCard({ event, isNew }: { event: Event; isNew: boolean }) {
+function RequestCard({
+	event,
+	isUnread,
+	onPress,
+	actionsDisabled,
+	onAccept,
+	onReject,
+}: {
+	event: Event;
+	isUnread: boolean;
+	onPress?: () => void;
+	actionsDisabled?: boolean;
+	onAccept?: () => void;
+	onReject?: () => void;
+}) {
 	const requesterName = event.requesterName ?? 'Usuário';
-	const dateTime = formatEventDateTime(event.date);
+	const dateTime = formatRequestDateTime(event.date);
 
 	return (
 		<View style={[styles.cardElevated, styles.carousel]}>
-			<View style={styles.requestImageWrap}>
-				<EventImage event={event} style={styles.requestImage} placeholderColor={palette.primary[200]} />
-				{isNew && (
-					<View style={styles.newBadge}>
-						<Text style={styles.newBadgeLabel}>Nova</Text>
-					</View>
-				)}
-			</View>
-
-			<View style={styles.carouselContent}>
-				{/* 1 linha: mesma razão do `Featured` — carrossel de altura consistente. */}
-				<Text numberOfLines={1} style={styles.miniTitle}>{event.title}</Text>
-
-				<View style={styles.detailLine}>
-					<Icon name="user" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>
-						{requesterName} solicitou
-					</Text>
+			<Pressable
+				onPress={onPress}
+				disabled={!onPress}
+				accessibilityRole={onPress ? 'button' : undefined}
+				accessibilityLabel={onPress ? `${isUnread ? 'Nova. ' : ''}${event.title}, solicitação de ${requesterName}` : undefined}
+				style={styles.requestMain}
+			>
+				<View style={styles.requestImageWrap}>
+					<EventImage event={event} style={styles.requestImage} placeholderColor={palette.primary[200]} />
+					{isUnread && (
+						<View style={styles.requestNewBadge} aria-hidden>
+							<Text style={styles.requestNewBadgeLabel}>Nova</Text>
+						</View>
+					)}
 				</View>
-				{dateTime && <View style={styles.detailLine}>
-					<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
-					<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>{dateTime}</Text>
-				</View>}
 
+				<View style={[styles.carouselContent, styles.requestContent]}>
+					{/* O nome do evento quebra em até 2 linhas, como no Figma. */}
+					<Text numberOfLines={2} style={styles.miniTitle}>{event.title}</Text>
+
+					<View style={styles.detailLine}>
+						<Icon name="user" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>
+							{requesterName} solicitou
+						</Text>
+					</View>
+					{dateTime && <View style={styles.detailLine}>
+						<Icon name="calendar" size={layout.eventCard.detailIconSize} color={colors.text.tertiary} absoluteStrokeWidth />
+						<Text numberOfLines={1} style={[styles.detailText, styles.requestDetailText]}>{dateTime}</Text>
+					</View>}
+				</View>
+			</Pressable>
+
+			<View style={styles.requestActionsWrap}>
 				<View style={styles.requestActions}>
 					<Pressable
-						onPress={() => undefined}
+						onPress={onAccept}
+						hitSlop={{ top: REQUEST_ACTION_HIT_SLOP, bottom: REQUEST_ACTION_HIT_SLOP }}
+						disabled={actionsDisabled}
 						accessibilityRole="button"
 						accessibilityLabel="Aceitar solicitação"
-						style={styles.acceptButton}
+						accessibilityState={{ disabled: actionsDisabled }}
+						style={[styles.acceptButton, actionsDisabled && styles.requestActionDisabled]}
 					>
-						<Icon name="check" size={18} color={colors.text.inverse} absoluteStrokeWidth />
+						<Icon name="check" size={18} color={actionsDisabled ? colors.text.disabled : colors.text.inverse} absoluteStrokeWidth />
 					</Pressable>
 					<Pressable
-						onPress={() => undefined}
+						onPress={onReject}
+						hitSlop={{ top: REQUEST_ACTION_HIT_SLOP, bottom: REQUEST_ACTION_HIT_SLOP }}
+						disabled={actionsDisabled}
 						accessibilityRole="button"
 						accessibilityLabel="Recusar solicitação"
-						style={styles.rejectButton}
+						accessibilityState={{ disabled: actionsDisabled }}
+						style={[styles.rejectButton, actionsDisabled && styles.requestRejectDisabled]}
 					>
-						<Icon name="x" size={16} color={colors.text.secondary} absoluteStrokeWidth />
+						<Icon name="x" size={16} color={actionsDisabled ? colors.text.disabled : colors.text.secondary} absoluteStrokeWidth />
 					</Pressable>
 				</View>
 			</View>
@@ -383,7 +473,6 @@ const styles = StyleSheet.create({
 		alignSelf: 'stretch',
 	},
 	requestDetailText: { color: colors.text.tertiary },
-	mapPreviewDistance: { color: palette.primary[600] },
 
 	tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[8], flexShrink: 1 },
 
@@ -411,7 +500,7 @@ const styles = StyleSheet.create({
 	},
 	featuredImage: { width: '100%', height: '100%' },
 	privacyTagWrap: { position: 'absolute', top: spacing[12], left: spacing[12], zIndex: layout.eventCard.overlayZIndex },
-	featuredNotifyPosition: {
+	featuredFavoritePosition: {
 		position: 'absolute',
 		top: spacing[12],
 		right: spacing[12],
@@ -440,14 +529,15 @@ const styles = StyleSheet.create({
 	compactImage: { width: '100%', height: '100%' },
 	compactContent: { flex: 1, gap: spacing[4], alignItems: 'flex-start' },
 
-	// MapPreview — w280 h96 r14, flutuante sobre o mapa, sem sombra.
+	// MapPreview — largura do overlay, h96 r14, flutuante sobre o mapa, sem sombra.
 	mapPreview: {
-		width: layout.eventCard.mapPreviewWidth,
+		width: '100%',
 		height: layout.eventCard.mapPreviewHeight,
 		flexDirection: 'row',
 		alignItems: 'center',
 		borderRadius: radius.md,
 		padding: spacing[8],
+		paddingRight: layout.eventCard.mapPreviewActionInset,
 		gap: spacing[12],
 		overflow: 'hidden',
 	},
@@ -458,6 +548,18 @@ const styles = StyleSheet.create({
 		overflow: 'hidden',
 	},
 	mapImage: { width: '100%', height: '100%' },
+	mapPrivacyIcon: {
+		position: 'absolute',
+		top: spacing[4],
+		left: spacing[4],
+		width: layout.eventCard.mapPrivacyIconSize,
+		height: layout.eventCard.mapPrivacyIconSize,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderRadius: radius.full,
+		borderWidth: layout.badge.borderWidth,
+		zIndex: layout.eventCard.overlayZIndex,
+	},
 	mapDetails: { flex: 1, gap: spacing[4], alignItems: 'flex-start' },
 
 	// Mini e Request — cards do carrossel: w172 fixa, r14, elevação 1.
@@ -469,6 +571,8 @@ const styles = StyleSheet.create({
 	miniCard: { minHeight: layout.eventCard.miniHeight },
 	miniMain: { flexGrow: 1 },
 	carouselContent: { padding: spacing[12], gap: spacing[8], alignItems: 'flex-start' },
+	requestMain: { alignSelf: 'stretch' },
+	requestContent: { paddingBottom: 0 },
 	miniContent: { flexGrow: 1, paddingBottom: 0 },
 
 	miniImageWrap: {
@@ -478,7 +582,7 @@ const styles = StyleSheet.create({
 	},
 	miniImage: { width: '100%', height: '100%' },
 	overlayBadge: { position: 'absolute', top: spacing[8], left: spacing[8], zIndex: layout.eventCard.overlayZIndex },
-	miniNotifyPosition: {
+	miniFavoritePosition: {
 		position: 'absolute',
 		top: spacing[8],
 		right: spacing[8],
@@ -501,20 +605,21 @@ const styles = StyleSheet.create({
 		position: 'relative',
 	},
 	requestImage: { width: '100%', height: '100%' },
-	newBadge: {
+	// Badge/Novo: pílula âmbar sobre a capa. Texto escuro — nunca branco sobre âmbar.
+	requestNewBadge: {
 		position: 'absolute',
 		top: spacing[8],
 		left: spacing[8],
-		backgroundColor: palette.secondary[500],
 		paddingHorizontal: spacing[8],
 		paddingVertical: spacing[4],
 		borderRadius: radius.full,
+		backgroundColor: palette.secondary[500],
 		zIndex: layout.eventCard.overlayZIndex,
 	},
-	// Nunca texto branco sobre âmbar — o Figma trava em palette/neutral/900.
-	newBadgeLabel: { ...typography.labelS, color: palette.neutral[900] },
+	requestNewBadgeLabel: { ...typography.labelS, color: palette.neutral[900] },
 
 	requestActions: { flexDirection: 'row', gap: spacing[8], width: '100%' },
+	requestActionsWrap: { paddingHorizontal: spacing[12], paddingTop: spacing[8], paddingBottom: spacing[12] },
 	acceptButton: {
 		flex: 1,
 		height: layout.eventCard.requestActionHeight,
@@ -523,6 +628,7 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	requestActionDisabled: { backgroundColor: colors.surface.sunken },
 	rejectButton: {
 		width: layout.eventCard.requestRejectWidth,
 		height: layout.eventCard.requestActionHeight,
@@ -533,4 +639,5 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	requestRejectDisabled: { backgroundColor: colors.surface.sunken, borderColor: colors.border.default },
 });

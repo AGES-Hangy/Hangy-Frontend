@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import type { ScrollViewInstance, ViewInstance } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   KeyboardAvoidingView,
@@ -8,9 +9,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AddressAutocompleteField } from '@/components/AddressAutocompleteField';
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
@@ -22,10 +24,13 @@ import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEditEvent } from '@/hooks/useEditEvent';
 import { useEvent } from '@/hooks/useEvent';
-import { useImageUpload } from '@/hooks/useImageUpload';
+import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import { announce, moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
+import { durationMinutesBetween, endDateFrom, isValidDuration } from '@/utils/eventDuration';
 
+import { EventDuration } from '@/components/CreateEvent/EventDuration';
 import { TagPicker } from '@/components/CreateEvent/TagPicker';
 import { MAX_TAGS } from '@/components/CreateEvent/types';
 import type { EventDetail } from '@/types/event';
@@ -33,14 +38,24 @@ import type { EventDetail } from '@/types/event';
 type EditEventFormData = {
   title: string;
   description: string;
+  /** Prévia da capa: a URL salva ou a URI local de uma capa nova. */
   coverUri: string | null;
+  /** O que vai em `cover_photo_url`: a URL salva ou a devolvida pelo envio. */
+  coverUrl: string | null;
   date: Date | null;
   time: Date | null;
+  /** Duração em minutos (obrigatória); vem da salva, `end_date - event_date`. */
+  durationMinutes: number | null;
   location: string;
+  /** `null` enquanto o texto digitado não virou um local da lista ou do mapa. */
+  locationCoordinates: { latitude: number; longitude: number } | null;
+  /** Bairro e cidade do local selecionado — derivados dele, nunca digitados. */
+  locationNeighborhood: string | null;
+  locationCity: string | null;
   tagIds: string[];
 };
 
-type MissingField = 'title' | 'dateRow' | 'location' | 'tags';
+type MissingField = 'title' | 'dateRow' | 'duration' | 'location' | 'tags';
 
 const SCROLL_MARGIN = spacing[16];
 
@@ -48,11 +63,18 @@ function toFormData(event: EventDetail): EditEventFormData {
   const eventDate = new Date(event.event_date);
   return {
     title: event.title,
-    description: event.description,
+    description: event.description ?? '',
     coverUri: event.cover_photo_url,
+    coverUrl: event.cover_photo_url,
     date: eventDate,
     time: eventDate,
-    location: event.location_name,
+    durationMinutes: durationMinutesBetween(event.event_date, event.end_date),
+    location: event.location_name ?? '',
+    locationCoordinates: event.location,
+    // O detalhe não devolve bairro e cidade separados; só são preenchidos (e
+    // enviados) quando o organizador escolhe um endereço novo.
+    locationNeighborhood: null,
+    locationCity: null,
     tagIds: event.tags.map((tag) => tag.id),
   };
 }
@@ -68,7 +90,8 @@ function validate(form: EditEventFormData): MissingField[] {
   const missing: MissingField[] = [];
   if (form.title.trim().length === 0) missing.push('title');
   if (!form.date || !form.time || !isFutureDate(form.date, form.time)) missing.push('dateRow');
-  if (form.location.trim().length === 0) missing.push('location');
+  if (!isValidDuration(form.durationMinutes)) missing.push('duration');
+  if (form.location.trim().length === 0 || form.locationCoordinates === null) missing.push('location');
   if (form.tagIds.length === 0) missing.push('tags');
   return missing;
 }
@@ -94,23 +117,34 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
 export default function EditEvent() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
-  const containerRef = useRef<View>(null);
-  const titleRef = useRef<View>(null);
-  const dateRowRef = useRef<View>(null);
-  const locationRef = useRef<View>(null);
-  const tagsRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const containerRef = useRef<ViewInstance>(null);
+  const titleRef = useRef<ViewInstance>(null);
+  const dateRowRef = useRef<ViewInstance>(null);
+  const durationRef = useRef<ViewInstance>(null);
+  const locationRef = useRef<ViewInstance>(null);
+  const tagsRef = useRef<ViewInstance>(null);
+  const coverRef = useRef<ViewInstance>(null);
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload } = useEvent(id);
   const { saveEvent, isSaving, saveError } = useEditEvent(id);
   const { tags, isLoading: tagsLoading, error: tagsError, refetch: refetchTags } = useTags();
-  const { pickImage, error: coverError } = useImageUpload();
+  const {
+    pickAndUpload: pickAndUploadCover,
+    cancelUpload: cancelCoverUpload,
+    clearImage: clearCoverImage,
+    reset: resetCoverUpload,
+    isUploading: isCoverUploading,
+    progress: coverProgress,
+    error: coverUploadError,
+  } = useEventCoverUpload();
 
   const [form, setForm] = useState<EditEventFormData | null>(null);
   const originalRef = useRef<EditEventFormData | null>(null);
-  const durationMsRef = useRef(2 * 60 * 60 * 1000);
   const [submitCount, setSubmitCount] = useState(0);
-  const [localError, setLocalError] = useState<string | null>(null);
+  /** Capa recusada pela API ao salvar; aparece como erro do FileUpload. */
+  const [coverRejected, setCoverRejected] = useState<string | null>(null);
+  const [coverFocusRequest, setCoverFocusRequest] = useState(0);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Só na primeira carga: sem isto, o refetch do `useEvent` no foco (ex.:
@@ -120,10 +154,12 @@ export default function EditEvent() {
       const initial = toFormData(event);
       setForm(initial);
       originalRef.current = initial;
-      durationMsRef.current =
-        new Date(event.end_date).getTime() - new Date(event.event_date).getTime();
     }
   }, [event, form]);
+
+  // A tela continua montada ao sair: o envio em andamento é cancelado aqui, e
+  // o formulário fica como estava.
+  useFocusEffect(useCallback(() => () => cancelCoverUpload(), [cancelCoverUpload]));
 
   const hasChanges = Boolean(
     form && originalRef.current && JSON.stringify(form) !== JSON.stringify(originalRef.current),
@@ -147,9 +183,10 @@ export default function EditEvent() {
   const submitAttempted = submitCount > 0;
   const showSummary = submitAttempted && missing.length > 0;
 
-  const fieldRefs: Record<MissingField, React.RefObject<View | null>> = {
+  const fieldRefs: Record<MissingField, React.RefObject<ViewInstance | null>> = {
     title: titleRef,
     dateRow: dateRowRef,
+    duration: durationRef,
     location: locationRef,
     tags: tagsRef,
   };
@@ -160,6 +197,7 @@ export default function EditEvent() {
     const messages: string[] = [];
     if (missing.includes('title')) messages.push('nome');
     if (missing.includes('dateRow')) messages.push('data e horário');
+    if (missing.includes('duration')) messages.push('duração');
     if (missing.includes('location')) messages.push('local');
     if (missing.includes('tags')) messages.push('ao menos uma tag');
     AccessibilityInfo.announceForAccessibility(`Preencha: ${messages.join(', ')}.`);
@@ -174,6 +212,40 @@ export default function EditEvent() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submitCount]);
+
+  // Num efeito, e não no `onLayout` como no Criar evento: aqui o FileUpload já
+  // está montado quando o 400 chega, e nada acima dele muda de altura.
+  useEffect(() => {
+    if (coverFocusRequest === 0) return;
+
+    const node = coverRef.current;
+    const scroll = scrollRef.current;
+    const contentNode = containerRef.current;
+    if (!node || !scroll || !contentNode) return;
+
+    node.measureLayout(contentNode, (_x, y) => {
+      scroll.scrollTo({ y: Math.max(y - SCROLL_MARGIN, 0), animated: true });
+    });
+    moveAccessibilityFocus(node);
+  }, [coverFocusRequest]);
+
+  // `null` até o formulário carregar: a primeira capa não conta como troca.
+  const coverState = !form
+    ? null
+    : (coverUploadError ?? coverRejected)
+      ? 'error'
+      : isCoverUploading ? 'uploading' : form.coverUri ? 'filled' : 'empty';
+  const previousCoverStateRef = useRef(coverState);
+
+  // No web, o botão acionado (adicionar, cancelar, remover) some quando o
+  // FileUpload troca de estado, e o foco do teclado cai no `body`.
+  useEffect(() => {
+    const previous = previousCoverStateRef.current;
+    previousCoverStateRef.current = coverState;
+    if (previous === null || previous === coverState) return;
+    const node = coverRef.current;
+    if (node) restoreLostFocus(node);
+  }, [coverState]);
 
   if (isLoadingEvent || !form) return <EditEventSkeleton />;
 
@@ -235,48 +307,106 @@ export default function EditEvent() {
       return { ...current, tagIds: [...current.tagIds, tagId] };
     });
 
-  const handlePickCover = async () => {
-    const picked = await pickImage();
-    if (picked) set('coverUri', picked.uri);
+  // Digitar invalida o que veio da seleção anterior — coordenadas, bairro e
+  // cidade saem sempre do mesmo ponto. Voltar ao texto original restaura o
+  // local original, para desfazer a digitação não exigir escolher de novo.
+  const handleChangeLocation = (value: string) =>
+    setForm((current) => {
+      if (!current) return current;
+      const original = originalRef.current;
+      if (original && value === original.location) {
+        return {
+          ...current,
+          location: value,
+          locationCoordinates: original.locationCoordinates,
+          locationNeighborhood: original.locationNeighborhood,
+          locationCity: original.locationCity,
+        };
+      }
+      return {
+        ...current,
+        location: value,
+        locationCoordinates: null,
+        locationNeighborhood: null,
+        locationCity: null,
+      };
+    });
+
+  const pickCover = async () => {
+    setCoverRejected(null);
+    const uploaded = await pickAndUploadCover();
+    if (uploaded) {
+      setForm((current) =>
+        current ? { ...current, coverUri: uploaded.uri, coverUrl: uploaded.url } : current,
+      );
+    }
+  };
+
+  const removeCover = () => {
+    clearCoverImage();
+    setForm((current) => (current ? { ...current, coverUri: null, coverUrl: null } : current));
   };
 
   async function handleSave() {
-    if (!form || !event) return;
+    if (!form || !event || isCoverUploading) return;
 
-    setLocalError(null);
     setSubmitCount((count) => count + 1);
     if (validate(form).length > 0) return;
 
-    // O upload de capa ainda não existe (mesma limitação da criação): só dá
-    // para mandar a capa que já veio do servidor, ou remover.
     const original = originalRef.current;
-    if (form.coverUri && form.coverUri !== original?.coverUri) {
-      setLocalError(
-        'Remova a nova capa para salvar. O envio de imagens ainda não está disponível.',
-      );
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
-      return;
-    }
-
     const eventDate = new Date(form.date!);
     eventDate.setHours(form.time!.getHours(), form.time!.getMinutes(), 0, 0);
-    const endDate = new Date(eventDate.getTime() + durationMsRef.current);
+    const endDate = endDateFrom(eventDate, form.durationMinutes!);
 
-    const saved = await saveEvent({
+    // Bairro e cidade entram na comparação: escolher de novo o mesmo endereço
+    // num evento antigo (sem esses dois) mantém texto e coordenadas, mas
+    // precisa enviar o local para o backend gravá-los.
+    const locationChanged =
+      form.location !== original?.location ||
+      form.locationCoordinates?.latitude !== original?.locationCoordinates?.latitude ||
+      form.locationCoordinates?.longitude !== original?.locationCoordinates?.longitude ||
+      form.locationNeighborhood !== original?.locationNeighborhood ||
+      form.locationCity !== original?.locationCity;
+    const coverChanged = form.coverUrl !== original?.coverUrl;
+
+    const result = await saveEvent({
       title: form.title,
       description: form.description || null,
-      cover_photo_url: form.coverUri,
+      // Capa sem troca nem remoção fica fora do corpo: o backend mantém a
+      // salva sem depender de compará-la com o valor recebido.
+      ...(coverChanged ? { cover_photo_url: form.coverUrl } : {}),
       tag_ids: form.tagIds,
       event_date: eventDate.toISOString(),
       end_date: endDate.toISOString(),
-      // Não há seleção de local de verdade ainda: as coordenadas seguem
-      // fixas no ponto original do evento, só o texto é editável.
-      location: event.location,
-      location_name: form.location || null,
+      // Sem mexer no endereço, nenhum campo de local vai no corpo: o backend
+      // recalcula o ponto aproximado sempre que `location` chega.
+      ...(locationChanged && form.locationCoordinates
+        ? {
+            location: form.locationCoordinates,
+            location_name: form.location || null,
+            location_neighborhood: form.locationNeighborhood,
+            location_city: form.locationCity,
+          }
+        : {}),
     });
 
-    if (saved) {
-      originalRef.current = form;
+    if (result === 'invalid-cover') {
+      removeCover();
+      setCoverRejected(INVALID_COVER_MESSAGE);
+      setCoverFocusRequest((count) => count + 1);
+      // Sempre, e não só o foco: se o foco não mudar de lugar, este anúncio é
+      // o único jeito de o leitor de tela saber da recusa.
+      announce(INVALID_COVER_MESSAGE);
+      return;
+    }
+
+    if (result === 'saved') {
+      // A prévia passa para a URL do servidor, como na primeira carga: a tela
+      // não desmonta, e o `blob:` liberado aqui não pode voltar num descarte.
+      const savedForm = { ...form, coverUri: form.coverUrl };
+      originalRef.current = savedForm;
+      setForm(savedForm);
+      resetCoverUpload();
       router.back();
     }
   }
@@ -292,11 +422,11 @@ export default function EditEvent() {
           pointerEvents={isSaving ? 'none' : 'auto'}
         >
           <View ref={containerRef}>
-            {(saveError || localError) && (
+            {saveError && (
               <View style={styles.errorBanner} accessibilityRole="alert">
                 <Icon name="triangle-alert" size={16} color={palette.error.default} />
                 <Text style={[typography.bodyS, styles.errorBannerText]}>
-                  {localError ?? saveError}
+                  {saveError}
                 </Text>
               </View>
             )}
@@ -329,21 +459,17 @@ export default function EditEvent() {
               />
             </View>
 
-            <View style={styles.field}>
+            <View style={styles.field} ref={coverRef}>
               <FileUpload
                 label="Capa"
                 badge="Opcional"
                 value={form.coverUri ? { uri: form.coverUri } : null}
-                error={coverError ?? undefined}
-                onPick={handlePickCover}
-                onRemove={() => set('coverUri', null)}
+                progress={isCoverUploading ? (coverProgress ?? 0) : undefined}
+                error={coverUploadError ?? coverRejected ?? undefined}
+                onPick={pickCover}
+                onCancel={cancelCoverUpload}
+                onRemove={removeCover}
               />
-              {form.coverUri && form.coverUri !== originalRef.current?.coverUri && (
-                <Text style={styles.notice}>
-                  Capa selecionada apenas para prévia. Remova-a para salvar; o envio de imagens
-                  ainda não está disponível.
-                </Text>
-              )}
             </View>
 
             <View style={styles.field} ref={dateRowRef}>
@@ -387,16 +513,51 @@ export default function EditEvent() {
               )}
             </View>
 
-            <View style={styles.field} ref={locationRef}>
+            <View style={styles.field} ref={durationRef}>
+              <EventDuration
+                value={form.durationMinutes}
+                onChange={(minutes) => set('durationMinutes', minutes)}
+                error={
+                  showSummary && missing.includes('duration')
+                    ? form.durationMinutes === null
+                      ? 'Informe a duração do evento'
+                      : 'A duração precisa ser maior que 00:00'
+                    : undefined
+                }
+                disabled={isSaving}
+              />
+            </View>
+
+            <View style={[styles.field, styles.locationField]} ref={locationRef}>
               <FieldLabel label="Local" required />
-              <TextField
-                type="Location"
+              <AddressAutocompleteField
                 value={form.location}
-                onChangeText={(value) => set('location', value)}
+                onChangeText={handleChangeLocation}
+                onSelect={(suggestion) =>
+                  setForm((current) =>
+                    current
+                      ? {
+                          ...current,
+                          location: suggestion.shortLabel,
+                          locationCoordinates: {
+                            latitude: suggestion.latitude,
+                            longitude: suggestion.longitude,
+                          },
+                          locationNeighborhood: suggestion.neighborhood,
+                          locationCity: suggestion.city,
+                        }
+                      : current,
+                  )
+                }
                 placeholder="Digite o local do evento"
                 maxLength={120}
-                error={showSummary && missing.includes('location') ? 'Informe o local do evento' : undefined}
+                error={
+                  showSummary && missing.includes('location')
+                    ? 'Selecione um local da lista ou do mapa'
+                    : undefined
+                }
                 reserveMessageSpace
+                accessibilityLabel="Local do evento, obrigatório"
                 disabled={isSaving}
               />
             </View>
@@ -423,7 +584,7 @@ export default function EditEvent() {
             style={styles.saveButton}
             onPress={handleSave}
             isLoading={isSaving}
-            disabled={!hasChanges}
+            disabled={!hasChanges || isCoverUploading}
           />
         </View>
       </KeyboardAvoidingView>
@@ -436,6 +597,11 @@ export default function EditEvent() {
         confirmLabel="Descartar"
         onConfirm={() => {
           setShowDiscardConfirm(false);
+          // A tela não desmonta ao sair: sem restaurar o formulário, reabrir
+          // mostraria as edições descartadas e uma prévia `blob:` já revogada.
+          resetCoverUpload();
+          setForm(originalRef.current);
+          setCoverRejected(null);
           router.back();
         }}
         onCancel={() => setShowDiscardConfirm(false)}
@@ -477,17 +643,18 @@ const styles = StyleSheet.create({
   field: {
     marginBottom: spacing[24],
   },
+  // A lista de sugestões do campo é absoluta; sem elevar o wrapper, o bloco
+  // de tags pinta por cima dela e não deixa tocar nas sugestões.
+  locationField: {
+    zIndex: 1,
+    elevation: 1,
+  },
   fieldLabel: {
     color: palette.neutral[700],
     marginBottom: spacing[4],
   },
   required: {
     color: palette.error.default,
-  },
-  notice: {
-    ...typography.bodyS,
-    color: colors.text.secondary,
-    marginTop: spacing[8],
   },
   dateRow: {
     flexDirection: 'row',

@@ -5,16 +5,15 @@ Aplicativo mobile do Hangy, construído com React Native, Expo e TypeScript.
 ## Requisitos
 
 - Node.js 22.13 ou superior
-- Expo Go no celular, ou um emulador Android/iOS
+- Build de desenvolvimento compatível com Expo SDK 58 no celular (ou Expo Go compatível, para testes sem push remoto)
+- Para compilar localmente: Xcode compatível no iOS ou Android SDK/JDK no Android
 
 ## Rodando localmente
 
 Instale as dependências:
 
 ```bash
-npm i
-# ou
-npm install
+npm ci
 ```
 
 Depois, inicie o servidor de desenvolvimento do Expo:
@@ -28,6 +27,63 @@ Para validar os tipos:
 ```bash
 npm run typecheck
 ```
+
+## Validação da atualização para SDK 58
+
+O projeto usa Expo 58, React 19.3 e React Native 0.88. Builds de desenvolvimento
+feitas com SDK 57 precisam ser reconstruídas; atualizar apenas o JavaScript não basta.
+
+```bash
+npm ci
+npx expo install --check
+npx expo-doctor
+npm run typecheck
+npm test
+npx expo export --platform all
+```
+
+Para testar no celular, configure `.env.local` (não versionado):
+
+```dotenv
+EXPO_PUBLIC_API_BASE_URL=https://ENDERECO-DO-BACKEND-DE-TESTE
+EXPO_PUBLIC_USE_API_MOCKS=false
+```
+
+Substitua o endereço pelo backend de teste real. Para API no Mac, use seu IP
+na rede local, servidor acessível pela rede e celular no mesmo Wi-Fi; `localhost`
+no celular aponta para o próprio aparelho.
+
+Use o perfil `development` de `eas.json` para gerar uma nova build, caso não
+compile localmente. iOS exige acesso às credenciais e provisionamento do projeto.
+Depois de instalar a build compatível:
+
+```bash
+npx expo start --dev-client --lan --clear
+```
+
+Antes do PR, registrar modelo, sistema, build e resultado de cada cenário em iOS
+e Android:
+
+- Abrir a frio, entrar, fechar/reabrir preservando a sessão, sair e entrar novamente.
+- Alternar Início/Ao vivo/Buscar/Perfil, repetir toque na aba atual, abrir detalhes
+  e voltar; conferir botão voltar do Android, cabeçalhos e áreas seguras.
+- Criar/editar evento: tentar avançar com campos vazios duas vezes e após rolar;
+  conferir foco/rolagem até o erro, teclado e preservação dos dados entre etapas.
+- Escolher/cancelar foto, trocar capa, selecionar data/hora, salvar e reabrir
+  para confirmar persistência no backend.
+- Negar e depois permitir localização nos ajustes; retornar ao app e conferir
+  mapa, marcadores e seleção de endereço.
+- Favoritar/desfavoritar e participar/cancelar; reabrir detalhe para conferir estado.
+- Abrir diálogos, cancelar e confirmar; verificar retorno do foco com leitor de tela,
+  especialmente no perfil e nos botões de carregar mais.
+- Em build de desenvolvimento, validar push com app aberto, em segundo plano e
+  fechado; tocar na notificação deve abrir o destino correto.
+- Desligar/religar rede, repetir operação e conferir recuperação sem travamento.
+- Rodar também build Android `preview` (release), pois o SDK 58 habilita otimização
+  R8 por padrão. Bundle exportado não substitui esse teste.
+
+A saída web é explicitamente `single`: hospedagem estática deve encaminhar rotas
+para `index.html`. As pastas nativas continuam geradas e ignoradas pelo Git.
 
 ## Organização do repositório
 

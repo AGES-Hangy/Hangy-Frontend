@@ -25,6 +25,7 @@ const ICON_SIZE = 24;
  * a variante tem ou não ação à direita.
  */
 const SLOT_WIDTH = 48;
+const ACTION_GAP = spacing[8];
 /** Logo Hangy: 70x27 no frame do Figma. */
 const LOGO_WIDTH = 70;
 const LOGO_HEIGHT = 27;
@@ -48,21 +49,25 @@ function BarButton({
   icon,
   label,
   onPress,
+  disabled,
   tint,
   children,
 }: {
   icon: IconName;
   label: string;
   onPress?: () => void;
+  disabled?: boolean;
   tint: string;
   children?: React.ReactNode;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       hitSlop={ICON_HIT_SLOP}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
     >
       <View>
         <Icon name={icon} color={tint} />
@@ -91,16 +96,19 @@ export function TopAppBar({
   unreadCount = 0,
   onNotificationsPress,
   action,
+  secondaryAction,
 }: TopAppBarProps) {
   const insets = useSafeAreaInsets();
 
   const isBrand = BRAND_VARIANTS.includes(variant);
   const isBordered = variant !== 'Home';
   const tint = isBrand ? colors.text.inverse : colors.text.primary;
-  const goBack = onBack ?? (() => router.back());
+  // Sem histórico (link direto, recarga na web) o voltar cairia no vazio: vai para a Home.
+  const goBack = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/Home')));
 
   const showsLogo = variant === 'Home' || variant === 'BrandBack';
   const isModal = variant === 'Modal';
+  const hasSecondaryAction = variant !== 'Home' && Boolean(secondaryAction);
 
   // Ícone de saída: o Modal fecha o fluxo, as outras voltam um passo.
   const leaveIcon: IconName | null = isModal ? 'x' : variant === 'Home' ? null : 'arrow-left';
@@ -145,7 +153,7 @@ export function TopAppBar({
         </Text>
       )}
 
-      <View style={[styles.slot, styles.slotEnd]}>
+      <View style={[styles.slot, styles.slotEnd, hasSecondaryAction && styles.slotEndRow]}>
         {variant === 'Home' && (
           <BarButton
             icon="bell"
@@ -156,6 +164,15 @@ export function TopAppBar({
             {unreadCount > 0 && <View style={styles.unreadDot} />}
           </BarButton>
         )}
+        {variant !== 'Home' && secondaryAction && (
+          <BarButton
+            icon={secondaryAction.icon}
+            label={secondaryAction.accessibilityLabel}
+            tint={tint}
+            onPress={secondaryAction.onPress}
+            disabled={secondaryAction.disabled}
+          />
+        )}
 
         {variant !== 'Home' && action && (
           <BarButton
@@ -163,6 +180,7 @@ export function TopAppBar({
             label={action.accessibilityLabel}
             tint={tint}
             onPress={action.onPress}
+            disabled={action.disabled}
           />
         )}
       </View>
@@ -199,8 +217,16 @@ const styles = StyleSheet.create({
   slotEnd: {
     alignItems: 'flex-end',
   },
+  slotEndRow: {
+    width: SLOT_WIDTH + ICON_SIZE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: ACTION_GAP,
+  },
   center: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
   },
   logo: {
@@ -210,6 +236,7 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h4,
     flex: 1,
+    minWidth: 0,
     textAlign: 'center',
     color: colors.text.primary,
   },

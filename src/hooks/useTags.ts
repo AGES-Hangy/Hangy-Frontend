@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { API_BASE_URL } from '@/constants/api';
+import { API_BASE_URL, USE_API_MOCKS } from '@/constants/api';
+import { resolveMock } from '@/mocks/eventApi';
 
 export type TagLeaf = { id: string; name: string; type: 'MICRO' };
 export type TagNode = { id: string; name: string; type: 'MACRO'; children: TagLeaf[] };
@@ -23,6 +24,12 @@ export function useTags() {
     setError(null);
 
     try {
+      // Rota pública, fora do `apiFetch`: o desvio para o mock é repetido aqui.
+      if (USE_API_MOCKS) {
+        setTags(await resolveMock<TagNode[]>('/tags/tree'));
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/tags/tree`);
 
       if (!response.ok) {
