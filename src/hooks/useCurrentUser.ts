@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { endpoints } from '@/constants/api';
 import type { UserType } from '@/types/event';
-import type { CurrentUserResponse } from '@/types/profile';
+import type { CurrentUserResponse, UserRole } from '@/types/profile';
 import { describeLoadError, type LoadError } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
 
 export interface CurrentUser {
   userId: string;
   userType: UserType;
+  role: UserRole;
   email: string;
   /** Nome da pessoa ou nome fantasia. */
   name: string | null;
@@ -34,6 +35,7 @@ export function useCurrentUser() {
       setUser({
         userId: data.id,
         userType: data.user_type,
+        role: data.role,
         email: data.email,
         name: data.name ?? null,
         profile: data.profile ?? null,

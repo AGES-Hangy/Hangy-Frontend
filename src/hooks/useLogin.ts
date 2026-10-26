@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL, API_TIMEOUT_MS, endpoints } from '@/constants/api';
 import { removeToken, saveToken } from '@/utils/auth';
 import type { UserType } from '@/types/event';
+import type { UserRole } from '@/types/profile';
 
 interface LoginUser {
   id: string;
   email: string;
   userType: UserType;
+  role: UserRole;
   name: string;
 }
 
@@ -17,7 +19,7 @@ interface LoginResult {
   user: LoginUser;
 }
 
-type AuthUser = { id: string; email: string } & (
+type AuthUser = { id: string; email: string; role: UserRole } & (
   | { user_type: 'PERSONAL'; name: string }
   | { user_type: 'BUSINESS'; business_name: string }
 );
@@ -102,6 +104,7 @@ export function useLogin() {
           id: data.user.id,
           email: data.user.email,
           userType: data.user.user_type,
+          role: data.user.role,
           name: data.user.user_type === 'BUSINESS' ? data.user.business_name : data.user.name,
         },
       };

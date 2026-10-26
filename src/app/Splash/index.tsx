@@ -1,12 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 
+import { SessionLoadError } from '@/components/SessionLoadError';
 import { palette } from '@/constants/colors';
-import { getToken } from '@/utils/auth';
+import { spacing } from '@/constants/layout';
+import { useSessionRole } from '@/hooks/useSessionRole';
+import { homeRouteFor } from '@/utils/homeRoute';
 
 /**
  * Dimensões do frame Splash no Figma (nó 1693:9) — o viewBox fixo com
@@ -19,23 +22,24 @@ const FRAME_HEIGHT = 874;
 /** Tempo mínimo exibindo a splash, pra não piscar em sessões que resolvem rápido demais. */
 const MIN_VISIBLE_MS = 1000;
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export default function Splash() {
+  // Com sessão salva, o papel vem do `GET /users/me` em paralelo ao tempo
+  // mínimo, para a ida à rede não somar espera visível.
+  const { state, retry } = useSessionRole();
+  const [minElapsed, setMinElapsed] = useState(false);
+
   useEffect(() => {
-    let isMounted = true;
-
-    Promise.all([getToken(), wait(MIN_VISIBLE_MS)]).then(([token]) => {
-      if (!isMounted) return;
-      router.replace(token ? '/Home' : '/Login');
-    });
-
-    return () => {
-      isMounted = false;
-    };
+    const timeout = setTimeout(() => setMinElapsed(true), MIN_VISIBLE_MS);
+    return () => clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    if (!minElapsed) return;
+    if (state.status === 'anonymous') router.replace('/Login');
+    else if (state.status === 'ready') router.replace(homeRouteFor(state.role));
+  }, [minElapsed, state]);
+
+  const loadError = minElapsed && state.status === 'error' ? state.error : null;
 
   return (
     <View
@@ -100,6 +104,9 @@ export default function Splash() {
         contentFit="contain"
         accessible={false}
       />
+      {loadError && (
+        <SessionLoadError title={loadError.title} message={loadError.message} onRetry={retry} />
+      )}
     </View>
   );
 }
@@ -109,6 +116,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing[32],
     backgroundColor: palette.primary[600],
   },
   logo: {

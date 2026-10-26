@@ -44,7 +44,16 @@ export class ApiError extends Error {
   }
 }
 
-type SessionExpiredHandler = () => void;
+/**
+ * Por que a sessão caiu: `expired` é o 401; `changed` é o 403 `Admin access
+ * required`, que no uso normal só acontece quando o papel da conta mudou.
+ */
+export type SessionEndReason = 'expired' | 'changed';
+
+type SessionExpiredHandler = (reason: SessionEndReason) => void;
+
+/** O 403 das rotas `/admin/*` quando a conta não é (mais) administradora. */
+const ADMIN_ACCESS_REQUIRED = 'Admin access required';
 
 let onSessionExpired: SessionExpiredHandler | null = null;
 
@@ -61,9 +70,9 @@ export function setSessionExpiredHandler(handler: SessionExpiredHandler | null) 
  * Trata o 401 uma vez só, aqui, e não em cada hook: qualquer tela que chame
  * `apiFetch` herda de graça o "apagar token e voltar para o Login".
  */
-async function handleUnauthorized() {
+async function handleUnauthorized(reason: SessionEndReason = 'expired') {
   await removeToken();
-  onSessionExpired?.();
+  onSessionExpired?.(reason);
   router.replace('/Login');
 }
 
@@ -139,6 +148,9 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     const { detail, body } = await readErrorBody(response);
+    // Mesmo tratamento do 401: a guarda da área Admin já barra quem não é
+    // admin, então este 403 indica que o papel mudou durante a sessão.
+    if (response.status === 403 && detail === ADMIN_ACCESS_REQUIRED) await handleUnauthorized('changed');
     throw new ApiError('http', response.status, detail, body);
   }
 
