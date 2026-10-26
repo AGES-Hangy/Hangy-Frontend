@@ -6,10 +6,12 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { ProfileEventList } from '@/components/Profile/ProfileEventList';
 import { ProfileEventListSkeleton } from '@/components/Profile/ProfileEventListSkeleton';
 import { ProfileHeader } from '@/components/Profile/ProfileHeader';
 import { ProfileHeaderSkeleton } from '@/components/Profile/ProfileHeaderSkeleton';
+import { ProfilePhotoGrid } from '@/components/Profile/ProfilePhotoGrid';
 import { ProfileTabs } from '@/components/ProfileTabs';
 import { RelationshipButton } from '@/components/RelationshipButton';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -21,13 +23,16 @@ import { useBlockUser } from '@/hooks/useBlockUser';
 import { useBusinessFollow } from '@/hooks/useBusinessFollow';
 import { useConnectionActions } from '@/hooks/useConnectionActions';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useMyPhotos } from '@/hooks/useMyPhotos';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
+import { useProfilePhotosLoadMore } from '@/hooks/useProfilePhotosLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import type { ProfilePatch } from '@/hooks/useUserProfile';
 import type { ConnectionAnswerResult, UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
+import { toPhotoViewerItems } from '@/utils/photoViewer';
 
 /**
  * Espera o fade de saída do `Modal` antes de mover o foco do leitor de tela:
@@ -59,11 +64,26 @@ function followersPatch(profile: UserProfileData, delta: number): ProfilePatch {
 }
 
 type PersonEventsTab = Extract<UserEventsTab, 'history' | 'created'>;
+type VisitedProfileTab = PersonEventsTab | 'gallery';
 
-const PERSON_EVENTS_TABS = [
+const PERSON_TABS = [
   { value: 'history', label: 'Histórico' },
   { value: 'created', label: 'Eventos' },
-] as const satisfies ReadonlyArray<{ value: PersonEventsTab; label: string }>;
+  { value: 'gallery', label: 'Galeria' },
+] as const satisfies ReadonlyArray<{ value: VisitedProfileTab; label: string }>;
+
+const PERSON_TABS_WITHOUT_GALLERY = PERSON_TABS.filter((tab) => tab.value !== 'gallery');
+
+const BUSINESS_TABS = [
+  { value: 'created', label: 'Eventos' },
+  { value: 'gallery', label: 'Galeria' },
+] as const satisfies ReadonlyArray<{ value: VisitedProfileTab; label: string }>;
+
+function emptyGallery(isBusiness: boolean) {
+  return isBusiness
+    ? { title: 'Nenhuma foto ainda', text: 'As fotos que os participantes publicarem nos eventos aparecem aqui.' }
+    : { title: 'Nenhuma foto ainda', text: 'As fotos que esta pessoa publicar nos eventos aparecem aqui.' };
+}
 
 const EMPTY_EVENTS: Record<PersonEventsTab, { title: string; text: string }> = {
   history: { title: 'Nenhum evento no histórico', text: 'Os eventos que já aconteceram aparecem aqui.' },
@@ -98,7 +118,11 @@ export default function UserProfile() {
     reload: reloadEvents,
     loadMore,
   } = useUserEvents(id);
-  const [personEventsTab, setPersonEventsTab] = useState<PersonEventsTab>('created');
+  const [profileTab, setProfileTab] = useState<VisitedProfileTab>('created');
+  // As fotos só carregam na primeira vez que a Galeria abre.
+  const [hasOpenedGallery, setHasOpenedGallery] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const closeViewer = useCallback(() => setViewerIndex(null), []);
   const { isOffline } = useNetworkStatus();
   const { loadMoreButtonRef, handleLoadMore } = useProfileEventsLoadMore({ tabs: eventTabs, loadMore, isOffline });
   const { addToast } = useToast();
@@ -125,7 +149,31 @@ export default function UserProfile() {
   const isUnavailable = error?.kind === 'unavailable';
   // Até saber quem está logado, o perfil não aparece: o id pode ser o próprio.
   const visibleProfile = isUnavailable || isLoadingViewer || isOwnProfile ? null : profile;
-  const activeEventsTab: PersonEventsTab = visibleProfile?.user_type === 'BUSINESS' ? 'created' : personEventsTab;
+  const isBusinessProfile = visibleProfile?.user_type === 'BUSINESS';
+  // Galeria de pessoa só para conexões confirmadas; a de estabelecimento é pública.
+  const canSeeGallery =
+    visibleProfile !== null && (isBusinessProfile || visibleProfile.connection_status === 'CONFIRMED');
+  const activeEventsTab: PersonEventsTab =
+    profileTab === 'gallery' || (isBusinessProfile && profileTab === 'history') ? 'created' : profileTab;
+  const {
+    photos,
+    error: photosError,
+    isForbidden: isPhotosForbidden,
+    hasMore: hasMorePhotos,
+    isLoadingMore: isLoadingMorePhotos,
+    loadMoreError: photosLoadMoreError,
+    loadMore: loadMorePhotos,
+    reload: reloadPhotos,
+  } = useMyPhotos({ enabled: canSeeGallery && hasOpenedGallery, userId: id });
+  const { loadMoreButtonRef: loadMorePhotosButtonRef, handleLoadMore: handleLoadMorePhotos } =
+    useProfilePhotosLoadMore({
+      photos,
+      hasMore: hasMorePhotos,
+      isLoadingMore: isLoadingMorePhotos,
+      loadMoreError: photosLoadMoreError,
+      loadMore: loadMorePhotos,
+      isOffline,
+    });
   const activeEvents = eventTabs ? eventTabs[activeEventsTab] : null;
   const events = eventTabs ? (activeEvents?.items ?? []) : null;
   // Depois do `await`, o perfil capturado pelo callback é o de antes da
@@ -192,9 +240,21 @@ export default function UserProfile() {
     }
   }, [addToast, id, isOffline, reloadFailure, retryFailed]);
 
+  // Voltou a ser conexão depois de um 403: a Galeria tenta de novo.
   useEffect(() => {
-    setPersonEventsTab('created');
+    if (canSeeGallery && isPhotosForbidden) void reloadPhotos();
+  }, [canSeeGallery, isPhotosForbidden, reloadPhotos]);
+
+  useEffect(() => {
+    setProfileTab('created');
+    setHasOpenedGallery(false);
+    setViewerIndex(null);
   }, [id]);
+
+  function selectProfileTab(tab: VisitedProfileTab) {
+    setProfileTab(tab);
+    if (tab === 'gallery') setHasOpenedGallery(true);
+  }
 
   useEffect(() => {
     if (!isLoading && !error && !isLoadingEvents && !eventsError) feedbackKey.current = null;
@@ -489,6 +549,23 @@ export default function UserProfile() {
       label: isBusiness ? (singular ? 'Seguidor' : 'Seguidores') : singular ? 'Conexão' : 'Conexões',
     },
   ];
+  // Backend de antes dos contadores públicos: sem eles, só o primeiro.
+  if (typeof visibleProfile.events_count === 'number') {
+    const events = visibleProfile.events_count;
+    stats.push({ value: events, label: events === 1 ? 'Evento' : 'Eventos' });
+  }
+  if (typeof visibleProfile.photos_count === 'number') {
+    const photosCount = visibleProfile.photos_count;
+    stats.push({ value: photosCount, label: photosCount === 1 ? 'Foto' : 'Fotos' });
+  }
+  // Um 403 quer dizer que a conexão acabou do outro lado: a Galeria fecha.
+  const isGalleryLocked = !canSeeGallery || isPhotosForbidden;
+  // Sem conexão a aba Galeria nem aparece; se a conexão acabar com ela aberta,
+  // a tela volta para Eventos.
+  const visibleTab: VisitedProfileTab =
+    (isGalleryLocked && profileTab === 'gallery') || (isBusiness && profileTab === 'history')
+      ? 'created'
+      : profileTab;
 
   return (
     <View style={styles.screen}>
@@ -526,36 +603,61 @@ export default function UserProfile() {
           }
         />
 
-        {isBusiness ? (
-          <View style={styles.sectionTitle}>
-            <SectionHeader title="Eventos" />
-          </View>
+        <View style={styles.tabsWrap}>
+          <ProfileTabs
+            items={isBusiness ? BUSINESS_TABS : isGalleryLocked ? PERSON_TABS_WITHOUT_GALLERY : PERSON_TABS}
+            value={visibleTab}
+            onChange={selectProfileTab}
+            accessibilityLabel="Seções do perfil"
+          />
+        </View>
+
+        {visibleTab === 'gallery' ? (
+          <ProfilePhotoGrid
+            photos={photos}
+            loadFailed={photosError !== null}
+            onRetry={() => void reloadPhotos()}
+            total={visibleProfile.photos_count ?? photos?.length ?? 0}
+            empty={emptyGallery(isBusiness)}
+            hasMore={hasMorePhotos}
+            isLoadingMore={isLoadingMorePhotos}
+            onLoadMore={handleLoadMorePhotos}
+            loadMoreButtonRef={loadMorePhotosButtonRef}
+            onPressPhoto={(_, index) => setViewerIndex(index)}
+          />
         ) : (
-          <View style={styles.tabsWrap}>
-            <ProfileTabs
-              items={PERSON_EVENTS_TABS}
-              value={personEventsTab}
-              onChange={setPersonEventsTab}
-              accessibilityLabel="Seções do perfil"
+          <>
+            {activeEventsTab === 'created' && (
+              <Text style={styles.visibilityNotice}>{visibilityNotice(name, isBusiness)}</Text>
+            )}
+
+            <ProfileEventList
+              items={events}
+              loadFailed={eventsError !== null}
+              onRetry={retryEvents}
+              empty={EMPTY_EVENTS[activeEventsTab]}
+              hasMore={activeEvents?.hasMore ?? false}
+              isLoadingMore={activeEvents?.loadingMore ?? false}
+              onLoadMore={() => handleLoadMore(activeEventsTab)}
+              loadMoreButtonRef={loadMoreButtonRef}
             />
-          </View>
+          </>
         )}
-
-        {activeEventsTab === 'created' && (
-          <Text style={styles.visibilityNotice}>{visibilityNotice(name, isBusiness)}</Text>
-        )}
-
-        <ProfileEventList
-          items={events}
-          loadFailed={eventsError !== null}
-          onRetry={retryEvents}
-          empty={EMPTY_EVENTS[activeEventsTab]}
-          hasMore={activeEvents?.hasMore ?? false}
-          isLoadingMore={activeEvents?.loadingMore ?? false}
-          onLoadMore={() => handleLoadMore(activeEventsTab)}
-          loadMoreButtonRef={loadMoreButtonRef}
-        />
       </ScrollView>
+
+      {!isGalleryLocked && (
+        <PhotoViewer
+          initialIndex={viewerIndex}
+          photos={toPhotoViewerItems(photos ?? [], { canDelete: false })}
+          onClose={closeViewer}
+          onPressTitle={(photo) => {
+            const eventId = photos?.find((item) => item.photo_id === photo.id)?.event.id;
+            if (!eventId) return;
+            closeViewer();
+            router.push({ pathname: '/EventDetail', params: { id: eventId } });
+          }}
+        />
+      )}
 
       <Dialog
         visible={openDialog === 'unfollow'}
@@ -655,9 +757,6 @@ const styles = StyleSheet.create({
   // O `ProfileTabs` ocupa 100% do contêiner: a margem lateral vem de fora,
   // como o "TabsWrap" dos frames.
   tabsWrap: {
-    paddingHorizontal: spacing[16],
-  },
-  sectionTitle: {
     paddingHorizontal: spacing[16],
   },
   visibilityNotice: {

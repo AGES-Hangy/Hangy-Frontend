@@ -147,6 +147,14 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/photos${query ? `?${query}` : ''}`;
   },
+  /** Galeria do perfil de outra pessoa: só fotos de eventos `PUBLIC`. */
+  userPhotos: (userId: string, options?: { limit?: number; cursor?: string | null }) => {
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/users/${encodeURIComponent(userId)}/photos${query ? `?${query}` : ''}`;
+  },
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */

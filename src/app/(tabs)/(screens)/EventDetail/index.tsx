@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/Badge';
 import { PHOTO_GRID_COLUMNS, PHOTO_GRID_GAP, PhotoTile } from '@/components/PhotoTile';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
@@ -112,12 +113,15 @@ export default function EventDetail() {
   // Fotos cujo `DELETE` voltou 403: a lixeira some só delas.
   const [undeletablePhotoIds, setUndeletablePhotoIds] = useState<string[]>([]);
   const [photoToRemove, setPhotoToRemove] = useState<string | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const closeViewer = useCallback(() => setViewerIndex(null), []);
 
   useEffect(() => {
     setIsPhotoActionHidden(false);
     setIsPhotoLimitReached(false);
     setUndeletablePhotoIds([]);
     setPhotoToRemove(null);
+    setViewerIndex(null);
   }, [event?.event_id]);
 
   // Arquivo recusado no aparelho: fora de JPG/PNG ou acima de 5 MB.
@@ -271,6 +275,10 @@ export default function EventDetail() {
   // ação nem aparece, para a UI não oferecer o que a API vai negar.
   const canAddPhoto =
     isFinished && event.viewer.participation_status === 'CONFIRMED' && !isPhotoActionHidden;
+  // Só as fotos já confirmadas pelo servidor abrem em tela cheia.
+  const uploadedPhotos = photos.filter(
+    (photo): photo is typeof photo & { photoId: string } => photo.photoId !== null,
+  );
   const photoTileSize =
     (windowWidth - spacing[16] * 2 - PHOTO_GRID_GAP * (PHOTO_GRID_COLUMNS - 1)) / PHOTO_GRID_COLUMNS;
 
@@ -340,15 +348,21 @@ export default function EventDetail() {
   async function handleRemoveConfirm() {
     const photoId = photoToRemove;
     if (!photoId) return;
+    await deletePhoto(photoId);
+  }
+
+  /** `true` quando a foto saiu da grade (excluída agora ou já inexistente). */
+  async function deletePhoto(photoId: string): Promise<boolean> {
     try {
-      if (!await removePhoto(photoId)) return;
+      if (!await removePhoto(photoId)) return false;
       setIsPhotoLimitReached(false);
       setPhotoToRemove(null);
+      return true;
     } catch (err) {
       const apiError = err as ApiError;
-      if (apiError.kind === 'cancelled') return;
+      if (apiError.kind === 'cancelled') return false;
       setPhotoToRemove(null);
-      if (apiError.status === 401) return;
+      if (apiError.status === 401) return false;
       if (apiError.status === 403) {
         addToast({ type: 'warning', message: 'Você não pode remover esta foto' });
         setUndeletablePhotoIds((ids) => [...ids, photoId]);
@@ -356,6 +370,7 @@ export default function EventDetail() {
         // `Photo not found`: silencioso, a foto só sai da grade.
         dropPhoto(photoId);
         setIsPhotoLimitReached(false);
+        return true;
       } else if (apiError.kind === 'timeout') {
         addToast({ type: 'error', message: 'A conexão demorou demais' });
       } else if (apiError.kind === 'network') {
@@ -363,6 +378,7 @@ export default function EventDetail() {
       } else {
         addToast({ type: 'error', message: 'Não foi possível remover a foto. Tente de novo.' });
       }
+      return false;
     }
   }
 
@@ -601,6 +617,11 @@ export default function EventDetail() {
                       accessibilityLabel={isUploading ? `${position}, enviando` : position}
                       removeAccessibilityLabel={`Remover ${position.toLowerCase()}`}
                       onRemove={canRemove ? () => setPhotoToRemove(photo.photoId) : undefined}
+                      onPress={
+                        isUploading
+                          ? undefined
+                          : () => setViewerIndex(uploadedPhotos.findIndex((item) => item.photoId === photo.photoId))
+                      }
                     />
                     {isUploading && (
                       <View
@@ -677,6 +698,19 @@ export default function EventDetail() {
         onConfirm={handleCancelConfirm}
         onCancel={() => setShowCancelDialog(false)}
         isLoading={isSubmitting}
+      />
+
+      <PhotoViewer
+        initialIndex={viewerIndex}
+        photos={uploadedPhotos.map((photo) => ({
+          id: photo.photoId,
+          uri: photo.uri,
+          title: event.title,
+          description: experienceDescription,
+          canDelete: !isOffline && !undeletablePhotoIds.includes(photo.photoId),
+        }))}
+        onClose={closeViewer}
+        onDelete={(photo) => deletePhoto(photo.id)}
       />
 
       <Dialog

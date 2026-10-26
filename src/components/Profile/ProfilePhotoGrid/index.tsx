@@ -31,6 +31,7 @@ export function ProfilePhotoGrid({
   isLoadingMore,
   onLoadMore,
   loadMoreButtonRef,
+  onPressPhoto,
 }: ProfilePhotoGridProps) {
   if (photos === null && !loadFailed) return <ProfilePhotoGridSkeleton />;
 
@@ -58,14 +59,18 @@ export function ProfilePhotoGrid({
       <View style={styles.grid}>
         {toRows(photos).map((row, rowIndex) => (
           <View key={row[0].photo_id} style={styles.row}>
-            {row.map((photo, columnIndex) => (
-              <PhotoTile
-                key={photo.photo_id}
-                uri={photo.photo_url}
-                accessibilityLabel={`Foto ${rowIndex * PHOTO_GRID_COLUMNS + columnIndex + 1} de ${labelTotal}, ${photo.event.title}`}
-                style={styles.tile}
-              />
-            ))}
+            {row.map((photo, columnIndex) => {
+              const index = rowIndex * PHOTO_GRID_COLUMNS + columnIndex;
+              return (
+                <PhotoTile
+                  key={photo.photo_id}
+                  uri={photo.photo_url}
+                  accessibilityLabel={`Foto ${index + 1} de ${labelTotal}, ${photo.event.title}`}
+                  onPress={onPressPhoto ? () => onPressPhoto(photo, index) : undefined}
+                  style={styles.tile}
+                />
+              );
+            })}
             {/* A última linha incompleta: sem as caixas vazias, os tiles se esticariam. */}
             {Array.from({ length: PHOTO_GRID_COLUMNS - row.length }, (_, index) => (
               <View key={`vazio-${index}`} style={styles.tile} />
