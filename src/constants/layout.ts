@@ -115,6 +115,13 @@ export const layout = {
     chevronSize: 20,
     fallbackIconSize: 20,
   },
+  /** Linha de pessoa/estabelecimento nos resultados de busca — h72, avatar 56, borda 1px. */
+  listItem: {
+    minHeight: 72,
+    avatarSize: 56,
+    borderWidth: 1,
+    chevronSize: 20,
+  },
 } as const;
 
 // Sombras — offset/blur em px (CSS) convertidos para shadow* do React Native;
