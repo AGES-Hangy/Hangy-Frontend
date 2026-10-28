@@ -78,6 +78,15 @@ export const layout = {
     iconSize: 12,
     iconStrokeWidth: 2.25,
   },
+  /** ReportCard do Figma: raio md · borda 1 · padding 12 · gap 8 · miniatura 32 · ícones 16/14/20. */
+  reportCard: {
+    borderWidth: 1,
+    thumbSize: 32,
+    thumbIconSize: 16,
+    titleGap: 2,
+    reasonIconSize: 14,
+    chevronSize: 20,
+  },
   eventCard: {
     pressedOpacity: 0.82,
     featuredWidth: 320,
