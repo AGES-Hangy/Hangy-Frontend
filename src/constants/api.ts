@@ -3,18 +3,10 @@ import type { UserEventsTab } from '@/types/user';
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 /**
- * Liga as respostas de mentira de `src/mocks/eventApi.ts` no lugar da rede.
- *
- * Existe porque os endpoints de evento (tasks de backend 103, 097, 209, 099 e
- * 101) ainda não foram mergeados: com isto ligado dá para percorrer as telas de
- * ponta a ponta, e quando o backend subir é só parar de usar a flag — nenhum
- * hook ou tela muda, o desvio acontece dentro de `apiFetch`.
- *
- * Controlado por `EXPO_PUBLIC_USE_API_MOCKS`, setada pelo script
- * `npm run start:stub` (o `npm start` normal roda contra a API de verdade).
- *
- * Só vale em desenvolvimento: num build de produção o mock nunca entra, mesmo
- * se alguém esquecer a env var ligada.
+ * Ativa as respostas de `src/mocks/eventApi.ts` no cliente HTTP durante o
+ * desenvolvimento. `npm run start:stub` define `EXPO_PUBLIC_USE_API_MOCKS`;
+ * sem essa variável, as chamadas seguem para a API.
+ * Builds de produção ignoram a flag.
  */
 export const USE_API_MOCKS = __DEV__ && process.env.EXPO_PUBLIC_USE_API_MOCKS === 'true';
 

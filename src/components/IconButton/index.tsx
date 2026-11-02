@@ -11,10 +11,9 @@ import { colors, palette } from '@/constants/colors';
 import { pressedOpacity, radius } from '@/constants/layout';
 
 /**
- * Métricas por tamanho — seção IconButton da página Components do Figma:
- * círculo 52/44/36 com ícone 24/20/18. Exportado porque outros componentes
- * (ex.: o badge de câmera do `PhotoTile`) reaproveitam esses diâmetros em vez
- * de duplicar o número mágico.
+ * Métricas da seção IconButton na página Components do Figma:
+ * círculo 52/44/36 com ícone 24/20/18. O badge de câmera do `PhotoTile`
+ * também usa esses diâmetros.
  */
 export const ICON_BUTTON_SIZES = {
   LG: { diameter: 52, icon: 24 },
@@ -23,8 +22,7 @@ export const ICON_BUTTON_SIZES = {
 } as const satisfies Record<IconButtonSize, unknown>;
 
 /**
- * Área de toque mínima. No tamanho SM o círculo tem 36 mas o toque precisa de
- * 44 — a diferença vai para `hitSlop`, sem aumentar o visual.
+ * No tamanho SM, `hitSlop` amplia o alvo de toque de 36 para 44 sem aumentar o círculo.
  */
 const MIN_TOUCH_SIZE = 44;
 
@@ -65,26 +63,23 @@ const VARIANTS: Record<IconButtonVariant, { default: Visual; disabled: Visual }>
     },
   },
   Ghost: {
-    // Sem fundo e sem borda.
     default: { iconColor: colors.text.primary },
     disabled: { iconColor: colors.text.disabled },
   },
 };
 
-/** Variantes desenhadas com contorno — borda 1.5 no Figma. */
+/** Variantes com contorno de 1.5 no Figma. */
 const HAS_BORDER: ReadonlySet<IconButtonVariant> = new Set<IconButtonVariant>(['Outline']);
 
 /**
- * `icon` aceita tanto o nome de um `Icon` quanto um elemento pronto — este
- * teste separa os dois casos em runtime, e de quebra estreita o tipo para o
- * `name` do `Icon`.
+ * Distingue nomes de ícones de elementos React e restringe o tipo a `IconName`.
  */
 function isIconName(value: unknown): value is IconName {
   return typeof value === 'string' && value in icons;
 }
 
 /**
- * Botão circular sem label — 4 variantes e 3 tamanhos do Design System.
+ * Botão circular sem texto, com 4 variantes e 3 tamanhos do Design System.
  *
  * ```tsx
  * <IconButton icon="arrow-left" accessibilityLabel="Voltar" />

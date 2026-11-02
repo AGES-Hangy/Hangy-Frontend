@@ -4,15 +4,13 @@ import { colors } from '@/constants/colors';
 import { icons } from '@/components/Icon/icons';
 import type { IconProps } from '@/components/Icon/types';
 
-/** Padrões do Figma — seção "Icons (Lucide)" da página Components. */
+/** Padrões da seção "Icons (Lucide)" na página Components do Figma. */
 const DEFAULT_SIZE = 24;
 const DEFAULT_STROKE_WIDTH = 2;
 
 /**
- * Wrapper único dos ícones Lucide do Design System.
- *
- * Trava tamanho, traço e cor num padrão só, para que nenhuma tela importe
- * `lucide-react-native` direto. Renderiza SVG nativo via `react-native-svg`.
+ * Ícones Lucide com os valores padrão de tamanho, traço e cor do Design System.
+ * Use este componente nas telas. Ele renderiza SVG nativo via `react-native-svg`.
  *
  * ```tsx
  * <Icon name="bell" />
@@ -32,14 +30,10 @@ export function Icon({
   const isDecorative = accessibilityLabel === undefined;
 
   return (
-    // Os props de acessibilidade ficam na View, não no SVG: o lucide repassa o
-    // que não conhece para o elemento nativo, e no web isso vira atributo DOM
-    // inválido. A View também fixa o frame quadrado do Figma.
-    //
-    // `aria-hidden` em vez de accessibilityElementsHidden (iOS) +
-    // importantForAccessibility (Android): o React Native mapeia ele para os
-    // dois no nativo, e o react-native-web descarta aquele par sem traduzir —
-    // o que deixava o ícone decorativo exposto ao leitor de tela no web.
+    // A View recebe os props de acessibilidade e fixa o frame quadrado do Figma.
+    // No SVG, esses props virariam atributos DOM inválidos na Web.
+    // `aria-hidden` oculta ícones decorativos na Web e no nativo; o RN Web não
+    // traduz `accessibilityElementsHidden` e `importantForAccessibility`.
     <View
       style={{ width: size, height: size }}
       aria-hidden={isDecorative || undefined}
@@ -52,8 +46,7 @@ export function Icon({
         fill={fill}
         strokeWidth={strokeWidth}
         absoluteStrokeWidth={absoluteStrokeWidth}
-        // O Figma trava cap/join em `round`; o lucide já entrega assim, mas
-        // deixamos explícito para o traço não mudar se o pacote mudar o padrão.
+        // Mantém cap/join em `round`, como no Figma, mesmo se o padrão do Lucide mudar.
         strokeLinecap="round"
         strokeLinejoin="round"
       />

@@ -2,9 +2,7 @@ import type { CreateEventFormData, MissingField } from '@/components/CreateEvent
 
 /**
  * Campos obrigatórios da etapa 1 ainda pendentes, na ordem em que aparecem na
- * tela. Função pura de propósito: dá para testar sem montar a tela, e a etapa 2
- * acrescenta o seu `validateStep2` aqui do lado em vez de empilhar `if`s no
- * container.
+ * tela.
  */
 export function validateStep1(form: CreateEventFormData): MissingField[] {
   const missing: MissingField[] = [];

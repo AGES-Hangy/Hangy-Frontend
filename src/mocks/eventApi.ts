@@ -21,30 +21,20 @@ import type {
 import { API_TIMEOUT_MS } from '@/constants/api';
 
 /**
- * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
- * em `@/constants/api`.
+ * Respostas simuladas, ativadas por `USE_API_MOCKS` em `@/constants/api`.
  *
- * Existe porque as tasks de backend 103, 097, 209, 099, 101 e 276 ainda não
- * subiram. O formato é cópia do contrato acordado, então quando o backend
- * chegar é só desligar a flag — nada nas telas nem nos hooks muda.
+ * Cobre eventos (tasks 103, 097, 209, 099, 101 e 276), termos
+ * (`GET /terms/current`, task 212 [BE]) e perfis (`GET /users/{id}` e
+ * `GET /users/{id}/events`, tasks 075 e 228 [BE]).
  *
- * Também cobre `GET /terms/current` (task 212 [BE], também não subiu) pelo
- * mesmo motivo — não é um endpoint de evento, mas é só mais um backend que
- * falta, e criar um segundo arquivo/dispatcher pra um caso só seria over-engineering.
+ * Os cenários de `GET /events/nearby` (task 119 [BE]) estão em `EVENTOS_PROXIMOS`.
  *
- * Pelo mesmo motivo cobre `GET /users/{id}` e `GET /users/{id}/events` (tasks
- * 075 e 228 [BE]), usados pelo perfil de outro usuário.
- *
- * `GET /events/nearby` (mapa Ao Vivo, task 119 [BE]) também mora aqui — ver
- * `EVENTOS_PROXIMOS` para os cenários do mapa.
- *
- * O estado é mutável de propósito: aprovar, recusar, remover e cancelar
- * alteram o mock, para o fluxo inteiro poder ser percorrido no app.
+ * Aprovar, recusar, remover e cancelar alteram o estado do mock, permitindo
+ * percorrer essas ações no app sem backend.
  *
  * ## Cenários de teste
  *
- * O `event_id` da rota escolhe o cenário, para dar de testar os estados de
- * erro sem mexer no código — `/EventDetail?id=cancelled`, por exemplo:
+ * O `event_id` da rota escolhe o cenário, por exemplo `/EventDetail?id=cancelled`:
  *
  * | `event_id`  | O que acontece                                          |
  * | ----------- | ------------------------------------------------------- |
@@ -1574,9 +1564,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return perfilPublicoDaConta() as T;
   }
 
-  // Não é um endpoint de evento, mas a task 212 [BE] (`GET /terms/current`)
-  // também ainda não subiu — o cadastro (task 056) precisa disto pra dar de
-  // testar a etapa de aceite dos termos sem backend.
+  // Termos para testar a etapa de aceite do cadastro (tasks 056 e 212 [BE]).
   if (partes[0] === 'terms' && partes[1] === 'current' && method === 'GET') {
     return {
       version: '2026-08-01',

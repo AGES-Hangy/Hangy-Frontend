@@ -24,7 +24,7 @@ import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { EventParticipantItem } from '@/types/event';
 import { formatRelativeTime } from '@/utils/datetime';
 
-/** Confirmação aberta no momento — no máximo uma por vez. */
+/** Confirmação aberta no momento, no máximo uma por vez. */
 type Confirmation =
   | { kind: 'cancelEvent' }
   | { kind: 'removeParticipant'; participant: EventParticipantItem }
@@ -34,13 +34,12 @@ type Confirmation =
 const CANCEL_REASON_MAX_LENGTH = 1000;
 
 /**
- * Gestão do evento — frames `Gerenciar meu evento`, `... - cancelar evento` e
+ * Gestão do evento: frames `Gerenciar meu evento`, `... - cancelar evento` e
  * `... - solicitação aprovada` do Figma.
  *
- * Aprovar e recusar não pedem confirmação; **remover** pede. O spinner é
- * sempre no card, nunca na tela: aprovar um pendente não pode congelar a
- * lista inteira. Toda essa lógica mora no `useEventParticipants` — aqui só
- * fica o layout e quem chama o quê.
+ * Remover um participante pede confirmação; aprovar e recusar são ações
+ * imediatas. `useEventParticipants` controla o carregamento por card para
+ * manter os demais participantes acessíveis durante a operação.
  */
 export default function ManageEvent() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -59,13 +58,11 @@ export default function ManageEvent() {
   const { share } = useEventShare(id);
 
   /**
-   * Qual confirmação está aberta. É um estado só, e não um booleano por
-   * diálogo, porque dois `Modal` montados ao mesmo tempo no react-native-web
-   * se atrapalham: abrir um mostrava o outro, com o conteúdo vazio. Com um
-   * estado só existe um `Dialog` na árvore, e ele nunca fica ambíguo.
+   * Um único Dialog evita o conflito observado entre dois Modal montados no
+   * react-native-web, em que abrir um exibia o outro com conteúdo vazio.
    */
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
-  /** Motivo do cancelamento — só importa enquanto `confirmation.kind === 'cancelEvent'`. */
+  /** Motivo usado quando `confirmation.kind === 'cancelEvent'`. */
   const [cancelReason, setCancelReason] = useState('');
 
   // A API de participantes não tem um "can_manage": quem decide se dá para
@@ -300,9 +297,8 @@ export default function ManageEvent() {
 }
 
 /**
- * Cópia do diálogo de confirmação. Os dois textos dependem de dado — quantos
- * confirmados vão ser avisados, o nome de quem sai —, por isso não cabem numa
- * variante fixa do `Dialog`.
+ * Textos do diálogo conforme o nome do participante ou o número de confirmados
+ * que serão notificados.
  */
 function describeConfirmation(confirmation: Confirmation, confirmedCount: number) {
   if (confirmation?.kind === 'removeParticipant') {
@@ -326,7 +322,7 @@ function describeConfirmation(confirmation: Confirmation, confirmedCount: number
   };
 }
 
-/** Linha de participante confirmado — não é um componente do Design System, só esta lista. */
+/** Linha de participante confirmado usada nesta lista. */
 type ParticipantRowProps = {
   name: string;
   avatarUri?: string | null;
@@ -375,7 +371,7 @@ function ParticipantRow({
   );
 }
 
-/** Esqueleto de participantes — nunca tela em branco enquanto o GET voa. */
+/** Esqueleto exibido durante o carregamento dos participantes. */
 function ManageEventSkeleton() {
   return (
     <View
@@ -412,7 +408,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[24],
     gap: spacing[16],
   },
-  /** Padding lateral de tela — sempre 16, como manda o guia. */
   section: {
     paddingHorizontal: spacing[16],
   },

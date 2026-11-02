@@ -19,17 +19,14 @@ type TileMetrics = {
 };
 
 /**
- * Métricas por variante — seção PhotoTile da página Components do Figma:
- * Default preenche a coluna (`aspectRatio: 1`, sem raio) em vez de um lado
- * fixo — o 120×120 do frame é só o resultado da largura de tela de
- * referência; a largura real vem do layout, ver `PHOTO_GRID_COLUMNS` abaixo.
- * Expanded é 244×244 com raio md, Cover é 393×237 com a largura fluida
- * ("largura fluida × 237" na descrição do componente no Figma — o 393 do
- * frame também é só a largura da tela de referência).
+ * Métricas da seção PhotoTile na página Components do Figma.
+ * Default é quadrado, sem raio, e preenche a coluna da grade. Cover tem
+ * largura fluida e altura 237; Expanded mede 244×244, com raio md.
+ * Os frames de 120×120 (Default) e 393×237 (Cover) usam a largura da tela
+ * de referência. A grade usa `PHOTO_GRID_COLUMNS`.
  *
- * `placeholderIcon` é o lado do `Icon/image` do placeholder em cada variante
- * (29 / 37 / 40 no Figma). O traço do ícone continua 2 em qualquer tamanho no
- * Figma, por isso ele é renderizado com `absoluteStrokeWidth`.
+ * `placeholderIcon` define o lado do `Icon/image` (29 / 37 / 40).
+ * `absoluteStrokeWidth` mantém o traço em 2 nos três tamanhos.
  */
 const SIZES = {
   Default: {
@@ -56,9 +53,8 @@ const SIZES = {
 } as const satisfies Record<PhotoTileState, TileMetrics>;
 
 /**
- * Colunas e gap da grade de 3 colunas do Figma. `PhotoTile` no `Default`
- * ocupa `flex: 1` dentro da coluna — a largura fixa não é tarefa do
- * componente, é de quem monta o `FlatList`/grade:
+ * Grade de 3 colunas do Figma. O layout da `FlatList` define a largura de
+ * cada coluna, e o `PhotoTile` Default a preenche com `flex: 1`:
  *
  * ```tsx
  * <FlatList
@@ -74,24 +70,20 @@ const SIZES = {
 export const PHOTO_GRID_COLUMNS = 3;
 export const PHOTO_GRID_GAP = spacing[4];
 
-/** Overlay escuro do State=Expanded — 35% de color/bg/inverse no Figma. */
+/** Overlay do State=Expanded: 35% de color/bg/inverse no Figma. */
 const OVERLAY_OPACITY = 0.35;
 
 /**
- * Círculo branco com o `Icon/camera` ao centro do State=Expanded — mesmo
- * diâmetro do `IconButton` MD, não coincidência: reaproveita a métrica em vez
- * de manter duas fontes de verdade para o mesmo círculo.
+ * O círculo branco do `Icon/camera` no State=Expanded usa o diâmetro do
+ * `IconButton` MD.
  */
 const CAMERA_BADGE_SIZE = ICON_BUTTON_SIZES.MD.diameter;
 const CAMERA_ICON_SIZE = 18;
 
 /**
- * Tile da galeria de fotos do evento — componente compartilhado do Design
- * System (seção PhotoTile da página Components do Figma).
+ * Foto da galeria do evento (seção PhotoTile da página Components do Figma).
  *
- * Pensado para uma grade de 3 colunas com gap 4 e tiles encostados: o
- * `Default` não tem raio de propósito, é o que faz o mosaico funcionar. Sem
- * curtir e sem comentar — é registro, não rede social.
+ * A variante Default compõe um mosaico de 3 colunas, gap 4 e cantos retos.
  *
  * ```tsx
  * <PhotoTile uri={foto.uri} accessibilityLabel="Foto do evento" onPress={abrirEmTelaCheia} />
@@ -108,24 +100,19 @@ export function PhotoTile({
   removeAccessibilityLabel = 'Remover foto',
   style,
 }: PhotoTileProps) {
-  // `SIZES[state]` infers the narrow per-variant literal type, not
-  // `TileMetrics` — `satisfies` only checks compatibility, it doesn't widen.
-  // Annotating here (safe, since `satisfies` already proved it) keeps
-  // `metrics.height`/`metrics.aspectRatio` accessible for every variant.
+  // `satisfies` preserva os tipos literais de cada variante. A anotação permite
+  // acessar `height` e `aspectRatio`, opcionais em `TileMetrics`.
   const metrics: TileMetrics = SIZES[state];
   const isPressable = onPress !== undefined;
   const [loadFailed, setLoadFailed] = useState(false);
 
-  // Se a uri muda (ex.: troca de foto no mesmo tile), a falha anterior não
-  // deve grudar na foto nova.
+  // Uma nova URI permite tentar carregar outra foto no mesmo tile.
   useEffect(() => {
     setLoadFailed(false);
   }, [uri]);
 
   const showImage = uri !== undefined && !loadFailed;
-  // No Expanded vazio o frame do Figma mostra só o badge de câmera — o ícone
-  // de placeholder por baixo do overlay escuro ficava quase invisível e
-  // duplicava a mensagem "sem foto".
+  // No Expanded vazio, o badge de câmera já indica a ausência de foto.
   const showPlaceholderIcon = !showImage && state !== 'Expanded';
 
   const content = (
@@ -141,11 +128,9 @@ export function PhotoTile({
         />
       ) : (
         showPlaceholderIcon && (
-          // Placeholder das três variantes no Figma: o fundo primary/200 do
-          // tile com o Icon/image centralizado em primary/400. Também cai
-          // aqui quando a foto existe mas falha ao carregar (offline, 404,
-          // token expirado) — melhor um placeholder claro que um retângulo
-          // vazio parecido, mas sem o ícone.
+          // O placeholder também cobre falhas de carregamento, como falta de
+          // conexão, 404 ou token expirado. Cores do Figma: fundo primary/200
+          // e Icon/image centralizado em primary/400.
           <Icon
             name="image"
             size={metrics.placeholderIcon}
@@ -156,10 +141,7 @@ export function PhotoTile({
       )}
 
       {state === 'Expanded' && (
-        // Overlay e badge são camadas visuais, não alvos de toque próprios —
-        // hoje o tile inteiro dispara `onPress`. Se o design confirmar que o
-        // badge deve abrir a câmera por si só, ele precisa virar um
-        // Pressable com accessibilityLabel próprio.
+        // Overlay e badge são decorativos; o toque é tratado pelo tile.
         <View style={styles.expandedLayer}>
           <View style={styles.overlay} />
           <View style={styles.cameraBadge}>
@@ -176,10 +158,9 @@ export function PhotoTile({
   );
 
   return (
-    // O botão de remover é irmão do tile, não filho: aninhar um Pressable com
-    // papel de botão dentro do outro vira <button> dentro de <button> no web
-    // (HTML inválido, e o leitor de tela anuncia os dois juntos). Esta View só
-    // dá o tamanho da variante e serve de âncora para o posicionamento.
+    // Remover e abrir a foto usam alvos irmãos para evitar botões HTML
+    // aninhados e anúncios juntos no leitor de tela. A View define o tamanho
+    // da variante e ancora o posicionamento do botão de remover.
     <View
       style={[
         { width: metrics.width, height: metrics.height, aspectRatio: metrics.aspectRatio },
@@ -200,9 +181,7 @@ export function PhotoTile({
           {content}
         </Pressable>
       ) : (
-        // Sem onPress, um Pressable ainda vira nó focável em leitor de tela
-        // por causa do accessibilityRole — uma View simples é semanticamente
-        // mais honesta e poupa uma parada de navegação a mais.
+        // Sem onPress, a foto é anunciada como imagem, sem um botão inativo.
         <View
           accessible
           accessibilityRole="image"

@@ -131,9 +131,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[16],
   },
   /**
-   * Sem isto, a `illustration` (largura fixa, menor que o texto) cai no
-   * `flex-start` do `stretch` padrão em vez de ficar centralizada — o título
-   * e o texto centralizam sozinhos via `textAlign`, mas o círculo não.
+   * `textAlign` centraliza o texto; `alignItems` centraliza também a ilustração.
    */
   body: {
     alignItems: 'center',
