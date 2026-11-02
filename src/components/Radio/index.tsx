@@ -55,7 +55,7 @@ export function Radio({
 
 	return (
 		<Pressable
-			onPress={() => !disabled && onChange?.(!selected)}
+			onPress={() => !disabled && !selected && onChange?.(true)}
 			disabled={disabled}
 			accessibilityRole="radio"
 			accessibilityLabel={label ?? 'Radio'}
