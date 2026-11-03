@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
 import {
+  resolveModerationVariant,
   resolveNotificationCount,
   resolvePrivacyVariant,
   resolveStatusVariant,
@@ -17,6 +18,9 @@ const BADGE_ICON_SIZE = layout.badge.iconSize;
 const BADGE_ICON_STROKE_WIDTH = layout.badge.iconStrokeWidth;
 const BADGE_TEXT_GAP = layout.badge.textGap;
 const BADGE_BORDER_WIDTH = layout.badge.borderWidth;
+const MODERATION_HORIZONTAL_PADDING = layout.badge.moderationPaddingHorizontal;
+const MODERATION_TEXT_GAP = layout.badge.moderationTextGap;
+const MODERATION_BORDER_WIDTH = layout.badge.moderationBorderWidth;
 const NOTIFICATION_ICON_SIZE = layout.badge.notificationIconSize;
 const NOTIFICATION_ICON_STROKE_WIDTH = layout.badge.notificationIconStrokeWidth;
 const NOTIFICATION_DOT_SIZE = layout.badge.notificationDotSize;
@@ -75,12 +79,15 @@ export function Badge(props: BadgeProps) {
   const visual =
     props.family === 'Privacy'
       ? resolvePrivacyVariant(props.value)
-      : resolveStatusVariant(props.value);
+      : props.family === 'Status'
+        ? resolveStatusVariant(props.value)
+        : resolveModerationVariant(props.value);
 
   return (
     <View
       style={[
         styles.badge,
+        props.family === 'Moderation' && styles.moderationBadge,
         {
           backgroundColor: visual.backgroundColor,
           borderColor: visual.borderColor,
@@ -106,6 +113,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: BADGE_HORIZONTAL_PADDING,
     borderRadius: radius.full,
     borderWidth: BADGE_BORDER_WIDTH,
+  },
+  moderationBadge: {
+    gap: MODERATION_TEXT_GAP,
+    paddingHorizontal: MODERATION_HORIZONTAL_PADDING,
+    borderWidth: MODERATION_BORDER_WIDTH,
   },
   badgeText: {
     includeFontPadding: false,
@@ -154,7 +166,7 @@ const styles = StyleSheet.create({
   },
 });
 
-export type { BadgeFamily, BadgeProps, PrivacyBadgeValue, StatusBadgeValue } from './types';
+export type { BadgeFamily, BadgeProps, ModerationBadgeValue, PrivacyBadgeValue, StatusBadgeValue } from './types';
 export { getPrivacyBadgeLabel, getPrivacyBadgeValue, getStatusBadgeValue } from './utils';
-export { resolvePrivacyVariant } from './types';
+export { moderationBadgeValues, resolveModerationVariant, resolvePrivacyVariant } from './types';
 export type { BackendPrivacy, BackendStatus } from './utils';
