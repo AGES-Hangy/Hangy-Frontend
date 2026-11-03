@@ -122,6 +122,29 @@ export const layout = {
     borderWidth: 1,
     chevronSize: 20,
   },
+  /**
+   * Skeleton — página Components do Figma: placeholder em neutral/100 com pulso
+   * de 1.2s (o ciclo inteiro: apaga e volta). A opacidade mínima não está no
+   * frame; 0.5 deixa o pulso visível sem o bloco sumir no fundo branco.
+   * Barras e pílulas do frame `Type=Card` (8+160+20+14+14+24 com gaps de 8 e
+   * padding 8/16 = 288) e `Type=ListItem` (18+14+14 com gaps de 8, centradas no 88).
+   */
+  skeleton: {
+    pulseDuration: 1200,
+    pulseMinOpacity: 0.5,
+    lineHeight: 14,
+    pillHeight: 24,
+    cardTitleHeight: 20,
+    cardTitleWidth: 200,
+    cardLineWidth: 260,
+    cardLineShortWidth: 180,
+    cardPillWidth: 88,
+    cardPillShortWidth: 68,
+    itemTitleHeight: 18,
+    itemTitleWidth: 220,
+    itemLineWidth: 300,
+    itemLineShortWidth: 90,
+  },
 } as const;
 
 // Sombras — offset/blur em px (CSS) convertidos para shadow* do React Native;
