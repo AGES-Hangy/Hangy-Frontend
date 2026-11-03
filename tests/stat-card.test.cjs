@@ -67,3 +67,6 @@ test('accessibility label keeps numeric values as given, including 0', () => {
   assert.equal(statCardAccessibilityLabel('Usuários ativos', 1234, 'Hoje'), 'Usuários ativos, 1234, Hoje');
   assert.equal(statCardAccessibilityLabel('Usuários ativos', '1.234', 'Hoje'), 'Usuários ativos, 1.234, Hoje');
 });
+test('accessibility label keeps the label casing as given', () => {
+  assert.equal(statCardAccessibilityLabel('Em análise', '3', undefined), 'Em análise, 3');
+});

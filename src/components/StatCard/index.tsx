@@ -64,6 +64,7 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.overline,
+    textTransform: 'uppercase',
     // O Figma usa text/tertiary: 2,4 a 2,75:1 nos três fundos, abaixo dos 4,5:1 do WCAG 1.4.3.
     color: colors.text.secondary,
   },
