@@ -1,7 +1,7 @@
 import type { IconName } from '@/components/Icon';
 import { colors, palette } from '@/constants/colors';
 
-export type BadgeFamily = 'Privacy' | 'Status' | 'Notification';
+export type BadgeFamily = 'Privacy' | 'Status' | 'Moderation' | 'Notification';
 
 export type PrivacyBadgeValue =
   | 'PUBLIC'
@@ -18,6 +18,19 @@ export type StatusBadgeValue =
   | 'Recusado'
   | 'Lotado';
 
+/**
+ * Estado de moderação de uma conta (`ACTIVE`, `SUSPENDED`, `BANNED`) ou de uma
+ * denúncia (`ReportStatusEnum` do backend: `PENDING`, `REVIEWED`, `RESOLVED`, `REJECTED`).
+ */
+export type ModerationBadgeValue =
+  | 'ACTIVE'
+  | 'SUSPENDED'
+  | 'BANNED'
+  | 'PENDING'
+  | 'REVIEWED'
+  | 'RESOLVED'
+  | 'REJECTED';
+
 export type NotificationBadgeCount = number | undefined;
 
 export type BadgeProps =
@@ -29,6 +42,15 @@ export type BadgeProps =
   | {
       family: 'Status';
       value: StatusBadgeValue;
+      count?: never;
+    }
+  | {
+      family: 'Moderation';
+      /**
+       * Aceita qualquer string para não quebrar a tela com um status novo do
+       * backend que o app ainda não mapeia — nesse caso cai no fallback neutro.
+       */
+      value: ModerationBadgeValue | (string & {});
       count?: never;
     }
   | {
@@ -128,12 +150,82 @@ const statusVariantMap: Record<StatusBadgeValue, BadgeVisualConfig> = {
   },
 };
 
+const neutralColors = {
+  textColor: palette.neutral[500],
+  backgroundColor: palette.neutral[50],
+  borderColor: palette.neutral[300],
+} as const;
+
+const moderationVariantMap: Record<ModerationBadgeValue, BadgeVisualConfig> = {
+  ACTIVE: {
+    label: 'Ativo',
+    icon: 'circle-check',
+    textColor: palette.success.default,
+    backgroundColor: palette.success.bg,
+    borderColor: palette.success.default,
+  },
+  SUSPENDED: {
+    label: 'Suspenso',
+    icon: 'triangle-alert',
+    textColor: palette.warning.default,
+    backgroundColor: palette.warning.bg,
+    borderColor: palette.warning.default,
+  },
+  BANNED: {
+    label: 'Banido',
+    icon: 'lock',
+    textColor: palette.error.default,
+    backgroundColor: palette.error.bg,
+    borderColor: palette.error.default,
+  },
+  PENDING: {
+    label: 'Pendente',
+    icon: 'clock',
+    textColor: palette.warning.default,
+    backgroundColor: palette.warning.bg,
+    borderColor: palette.warning.default,
+  },
+  REVIEWED: {
+    label: 'Em análise',
+    icon: 'clock',
+    textColor: palette.info.default,
+    backgroundColor: palette.info.bg,
+    borderColor: palette.info.default,
+  },
+  RESOLVED: {
+    label: 'Resolvido',
+    icon: 'check',
+    textColor: palette.success.default,
+    backgroundColor: palette.success.bg,
+    borderColor: palette.success.default,
+  },
+  REJECTED: {
+    label: 'Arquivada',
+    icon: 'x',
+    ...neutralColors,
+  },
+};
+
+const moderationFallbackVariant: BadgeVisualConfig = {
+  label: 'Indefinido',
+  icon: 'info',
+  ...neutralColors,
+};
+
+function isKnownModerationValue(value: string): value is ModerationBadgeValue {
+  return Object.prototype.hasOwnProperty.call(moderationVariantMap, value);
+}
+
 export function resolvePrivacyVariant(value: PrivacyBadgeValue): BadgeVisualConfig {
   return privacyVariantMap[value];
 }
 
 export function resolveStatusVariant(value: StatusBadgeValue): BadgeVisualConfig {
   return statusVariantMap[value];
+}
+
+export function resolveModerationVariant(value: string): BadgeVisualConfig {
+  return isKnownModerationValue(value) ? moderationVariantMap[value] : moderationFallbackVariant;
 }
 
 export function resolveNotificationCount(count?: number): { type: 'dot' | 'count'; value: string } | null {
@@ -154,3 +246,4 @@ export function resolveNotificationCount(count?: number): { type: 'dot' | 'count
 
 export const privacyBadgeValues = Object.keys(privacyVariantMap) as PrivacyBadgeValue[];
 export const statusBadgeValues = Object.keys(statusVariantMap) as StatusBadgeValue[];
+export const moderationBadgeValues = Object.keys(moderationVariantMap) as ModerationBadgeValue[];

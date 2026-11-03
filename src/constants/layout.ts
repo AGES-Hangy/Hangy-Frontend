@@ -54,6 +54,10 @@ export const layout = {
     iconStrokeWidth: 2.25,
     textGap: 6,
     borderWidth: 1.5,
+    /** Badge/Moderation do Figma: h24 · px8 · gap4 · raio full · borda 1 · ícone 12. */
+    moderationPaddingHorizontal: spacing[8],
+    moderationTextGap: spacing[4],
+    moderationBorderWidth: 1,
     notificationIconSize: 16,
     notificationIconStrokeWidth: 2.5,
     notificationDotSize: 10,
