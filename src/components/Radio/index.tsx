@@ -60,6 +60,7 @@ export function Radio({
 			accessibilityRole="radio"
 			accessibilityLabel={label ?? 'Radio'}
 			accessibilityState={{ checked: selected, disabled }}
+			aria-checked={selected}
 			hitSlop={verticalHitSlop}
 			style={styles.container}
 		>
