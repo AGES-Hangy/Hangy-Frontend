@@ -24,6 +24,9 @@ export default function AdminLayout() {
   // `segments` é `['Admin', '<Secao>', ...]`; telas internas mantêm a seção.
   const section = segments[1];
   const active = DESTINATIONS.find((dest) => dest === section) ?? 'Painel';
+  // Telas internas de uma seção (ex.: `Denuncias/[id]`) não têm a `AdminNav`
+  // nos frames do Figma: o rodapé é das ações da própria tela.
+  const isInnerScreen = segments.length > 2;
 
   return (
     <AdminGuard>
@@ -31,13 +34,15 @@ export default function AdminLayout() {
         <View style={styles.content}>
           <Stack screenOptions={{ headerShown: false }} />
         </View>
-        <AdminNav
-          active={active}
-          onNavigate={(dest) => {
-            const route = ROUTE_BY_DESTINATION[dest];
-            if (route && dest !== active) router.replace(route);
-          }}
-        />
+        {!isInnerScreen && (
+          <AdminNav
+            active={active}
+            onNavigate={(dest) => {
+              const route = ROUTE_BY_DESTINATION[dest];
+              if (route && dest !== active) router.replace(route);
+            }}
+          />
+        )}
       </SafeAreaView>
     </AdminGuard>
   );

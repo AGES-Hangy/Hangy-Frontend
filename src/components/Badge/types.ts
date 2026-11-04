@@ -193,7 +193,7 @@ const moderationVariantMap: Record<ModerationBadgeValue, BadgeVisualConfig> = {
     borderColor: palette.info.default,
   },
   RESOLVED: {
-    label: 'Resolvido',
+    label: 'Resolvida',
     icon: 'check',
     textColor: palette.success.default,
     backgroundColor: palette.success.bg,

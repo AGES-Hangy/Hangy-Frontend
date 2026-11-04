@@ -19,6 +19,7 @@ import type {
   UserProfile,
 } from '@/types/user';
 import { API_TIMEOUT_MS } from '@/constants/api';
+import { resolveAdminMock } from '@/mocks/adminApi';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
@@ -1505,6 +1506,13 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const method = (init.method ?? 'GET').toUpperCase();
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
+
+  const admin = resolveAdminMock(partes, method, init);
+  if (admin) {
+    if ('semRede' in admin) throw new MockNetworkError();
+    if ('erro' in admin) throw new MockApiError(admin.erro.status, admin.erro.detail);
+    return admin.resposta as T;
+  }
 
   if (partes.join('/') === 'users/me/blocked' && method === 'GET') {
     const params = new URLSearchParams(path.split('?')[1] ?? '');

@@ -200,4 +200,14 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). */
+  adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
+  /**
+   * Arquiva a denúncia sem tocar na conta (task 246 [BE]). A task ainda não
+   * subiu: `PATCH` sem corpo nesta rota é o contrato proposto — confirmar
+   * quando ela existir.
+   */
+  adminReportArchive: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/archive`,
+  /** Banir, suspender ou reverter uma conta; com `report_id`, resolve a denúncia junto (task 249 [BE]). */
+  adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
 } as const;

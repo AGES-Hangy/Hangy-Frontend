@@ -89,6 +89,21 @@ export function describeProfileLoadError(error: unknown): LoadError {
   return loadError;
 }
 
+export function describeReportLoadError(error: unknown): LoadError {
+  const loadError = describeLoadError(error);
+
+  if (loadError.kind === 'unavailable' || loadError.kind === 'cancelled') {
+    return {
+      kind: 'unavailable',
+      title: 'Denúncia não encontrada',
+      message: 'Esta denúncia não existe ou foi removida.',
+      canRetry: false,
+    };
+  }
+
+  return loadError;
+}
+
 /** O que fazer com o erro de uma ação (aprovar, recusar, remover, cancelar). */
 export interface ActionError {
   message: string;

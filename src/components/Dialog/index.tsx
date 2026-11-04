@@ -73,6 +73,29 @@ const VARIANTS = {
     confirmLabel: 'Desbloquear',
     destructive: false,
   },
+  // "Admin — Denúncia — banir usuário" (Sprint 4). O título leva o nome da
+  // conta e vem por `title`. Suspender e arquivar não têm frame próprio:
+  // seguem a mesma estrutura, só o texto muda.
+  BanUser: {
+    title: 'Banir usuário?',
+    description:
+      'O perfil sai do ar, as participações são canceladas e o acesso fica bloqueado. Você pode reverter em Usuários.',
+    confirmLabel: 'Banir usuário',
+    destructive: true,
+  },
+  SuspendUser: {
+    title: 'Suspender usuário?',
+    description:
+      'A conta fica sem acesso por 7 dias e volta sozinha depois disso. Você pode reverter em Usuários.',
+    confirmLabel: 'Suspender 7 dias',
+    destructive: false,
+  },
+  ArchiveReport: {
+    title: 'Arquivar denúncia?',
+    description: 'A denúncia sai da fila e a conta denunciada não sofre nenhuma ação.',
+    confirmLabel: 'Arquivar denúncia',
+    destructive: false,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({
