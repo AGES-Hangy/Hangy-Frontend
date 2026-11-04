@@ -72,12 +72,32 @@ export const endpoints = {
    * Eventos ao redor de um ponto (task 119). A coordenada é o centro do mapa e
    * só existe nesta query — a posição do usuário não é persistida no backend.
    */
-  eventsNearby: ({ latitude, longitude, radiusM }: { latitude: number; longitude: number; radiusM: number }) => {
+  eventsNearby: ({
+    latitude,
+    longitude,
+    radiusM,
+    startsFrom,
+    startsUntil,
+    tagIds = [],
+  }: {
+    latitude: number;
+    longitude: number;
+    radiusM: number;
+    /** Início mínimo do evento, ISO 8601 com offset (task 295). */
+    startsFrom?: string;
+    /** Início máximo do evento, ISO 8601 com offset. */
+    startsUntil?: string;
+    /** Evento com pelo menos uma das tags; macro inclui as micro dela. */
+    tagIds?: string[];
+  }) => {
     const params = new URLSearchParams({
       latitude: latitude.toFixed(6),
       longitude: longitude.toFixed(6),
       radius_m: String(Math.round(radiusM)),
     });
+    if (startsFrom) params.append('starts_from', startsFrom);
+    if (startsUntil) params.append('starts_until', startsUntil);
+    tagIds.forEach((tagId) => params.append('tag_ids', tagId));
     return `/events/nearby?${params.toString()}`;
   },
   /** Sem `status`, a API devolve confirmados; `status=PENDING` exige ser o organizador. */

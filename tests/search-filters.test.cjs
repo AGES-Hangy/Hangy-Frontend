@@ -13,7 +13,7 @@ vm.runInNewContext(
 );
 const {
   blockApplies, countActiveFilters, fromDateKey, normalizeFilterValue, resolveDatePreset, toDateKey,
-  validateDateRange,
+  toNearbyEventFilters, toOffsetIso, validateDateRange,
 } = mod;
 
 // Quarta-feira, 28/10/2026, à noite — perto da virada de dia em UTC.
@@ -69,4 +69,53 @@ test('active filter count is one per block', () => {
   assert.equal(countActiveFilters({ tagIds: [] }), 0);
   assert.equal(countActiveFilters({ datePreset: 'custom', tagIds: [] }), 0);
   assert.equal(countActiveFilters({ datePreset: 'weekend', tagIds: ['a', 'b'], maxDistanceKm: 5 }), 3);
+});
+
+const TAGS = [
+  { id: 'macro-0', name: 'Esportes', type: 'MACRO', children: [{ id: 'micro-0-0', name: 'Futebol', type: 'MICRO' }] },
+  { id: 'macro-1', name: 'Música', type: 'MACRO', children: [{ id: 'micro-1-0', name: 'Rock', type: 'MICRO' }] },
+];
+
+/** Offset local no formato `±HH:MM`, para o teste valer em qualquer fuso. */
+function localOffset(date) {
+  const minutes = -date.getTimezoneOffset();
+  const abs = Math.abs(minutes);
+  return `${minutes >= 0 ? '+' : '-'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+}
+
+test('offset ISO keeps the local wall clock and the same instant', () => {
+  const date = new Date(2026, 10, 4, 9, 5, 7, 42);
+  const iso = toOffsetIso(date);
+  assert.equal(iso, `2026-11-04T09:05:07.042${localOffset(date)}`);
+  assert.equal(new Date(iso).getTime(), date.getTime());
+});
+
+test('nearby filters turn days into local day bounds', () => {
+  const filters = toNearbyEventFilters(
+    { tagIds: [], datePreset: 'custom', dateFrom: '2026-11-01', dateTo: '2026-11-15' },
+    TAGS,
+    WEDNESDAY,
+  );
+  assert.equal(new Date(filters.startsFrom).getTime(), new Date(2026, 10, 1).getTime());
+  assert.equal(new Date(filters.startsUntil).getTime(), new Date(2026, 10, 15, 23, 59, 59, 999).getTime());
+  assert.deepEqual([...filters.tagIds], []);
+
+  const onlyFrom = toNearbyEventFilters({ tagIds: [], datePreset: 'custom', dateFrom: '2026-11-01' }, TAGS, WEDNESDAY);
+  assert.equal(onlyFrom.startsUntil, undefined);
+  const noDate = toNearbyEventFilters({ tagIds: [] }, TAGS, WEDNESDAY);
+  assert.equal(noDate.startsFrom, undefined);
+  assert.equal(noDate.startsUntil, undefined);
+});
+
+test('nearby filters recompute presets for now', () => {
+  // "Hoje" aplicado ontem continua sendo hoje.
+  const stale = { tagIds: [], datePreset: 'today', dateFrom: '2026-10-27', dateTo: '2026-10-27' };
+  const filters = toNearbyEventFilters(stale, TAGS, WEDNESDAY);
+  assert.equal(new Date(filters.startsFrom).getTime(), new Date(2026, 9, 28).getTime());
+  assert.equal(new Date(filters.startsUntil).getTime(), new Date(2026, 9, 28, 23, 59, 59, 999).getTime());
+});
+
+test('nearby filters drop a macro narrowed by one of its micro tags', () => {
+  const filters = toNearbyEventFilters({ tagIds: ['macro-0', 'micro-0-0', 'macro-1'] }, TAGS, WEDNESDAY);
+  assert.deepEqual([...filters.tagIds], ['micro-0-0', 'macro-1']);
 });

@@ -1,4 +1,5 @@
 import type { DatePreset, FilterPanelVariant, FilterValue, ResultType } from '@/components/FilterPanel/types';
+import type { TagNode } from '@/hooks/useTags';
 
 export const EMPTY_FILTER_VALUE: FilterValue = { tagIds: [] };
 
@@ -109,4 +110,53 @@ export function countActiveFilters(value: FilterValue): number {
     value.maxDistanceKm !== undefined,
     value.tagIds.length > 0,
   ].filter(Boolean).length;
+}
+
+/** Filtros do `GET /events/nearby`: início do evento (ISO com offset) e tags. */
+export type NearbyEventFilters = {
+  startsFrom?: string;
+  startsUntil?: string;
+  tagIds: string[];
+};
+
+/** `Date` → ISO 8601 com o offset do aparelho (`2026-11-04T00:00:00.000-03:00`). */
+export function toOffsetIso(date: Date): string {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absolute = Math.abs(offsetMinutes);
+  return (
+    `${toDateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `.${String(date.getMilliseconds()).padStart(3, '0')}${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
+  );
+}
+
+/**
+ * O que a tela Ao vivo manda para o `/events/nearby`. Os dias viram o começo
+ * de `dateFrom` e o fim de `dateTo` no fuso do aparelho, já com offset — o
+ * backend não precisa saber o fuso. Atalhos ("Hoje"…) são recalculados para
+ * `now`, para não buscar a data de quando o filtro foi aplicado.
+ *
+ * Macro com alguma micro marcada fica de fora: o backend expande a macro para
+ * todas as micro dela, e "Esportes + Futebol" viraria "qualquer esporte".
+ */
+export function toNearbyEventFilters(value: FilterValue, tags: TagNode[], now: Date = new Date()): NearbyEventFilters {
+  const range =
+    value.datePreset && value.datePreset !== 'custom'
+      ? resolveDatePreset(value.datePreset, now)
+      : { dateFrom: value.dateFrom, dateTo: value.dateTo };
+  const from = fromDateKey(range.dateFrom);
+  const until = fromDateKey(range.dateTo);
+
+  const selected = new Set(value.tagIds);
+  const narrowedMacros = new Set(
+    tags.filter((macro) => macro.children.some((micro) => selected.has(micro.id))).map((macro) => macro.id),
+  );
+
+  const filters: NearbyEventFilters = { tagIds: [...selected].filter((id) => !narrowedMacros.has(id)) };
+  if (from) filters.startsFrom = toOffsetIso(from);
+  if (until) {
+    const endOfDay = new Date(until.getFullYear(), until.getMonth(), until.getDate(), 23, 59, 59, 999);
+    filters.startsUntil = toOffsetIso(endOfDay);
+  }
+  return filters;
 }
