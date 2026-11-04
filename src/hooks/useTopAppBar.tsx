@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import { TopAppBar } from '@/components/TopAppBar';
@@ -18,7 +18,7 @@ type BarState = TopAppBarProps | 'hidden';
 
 const TopAppBarContext = createContext<{
   bar: BarState;
-  setBar: (bar: BarState | null) => void;
+  setBar: Dispatch<SetStateAction<BarState | null>>;
 } | null>(null);
 
 /**
@@ -101,11 +101,13 @@ export function useTopAppBar(props: TopAppBarProps | null) {
   // No foco, e não na montagem: numa tab bar as telas continuam montadas ao
   // trocar de aba, então um efeito de montagem rodaria uma única vez só. A
   // limpeza devolve o padrão, senão a barra de uma tela vazaria para a
-  // seguinte que não pede nada.
+  // seguinte que não pede nada. Só limpa se a barra ainda for a desta tela:
+  // quando a próxima já estava montada, o foco dela roda antes do blur desta,
+  // e limpar sem conferir apagaria a barra que ela acabou de pedir.
   useFocusEffect(
     useCallback(() => {
       setBar?.(bar);
-      return () => setBar?.(null);
+      return () => setBar?.((current) => (current === bar ? null : current));
     }, [setBar, bar]),
   );
 }

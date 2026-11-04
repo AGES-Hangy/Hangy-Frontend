@@ -1,3 +1,4 @@
+import type { ReportTarget } from '@/types/report';
 import type { UserEventsTab } from '@/types/user';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -163,6 +164,13 @@ export const endpoints = {
   profilePhoto: () => '/users/me/photo',
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
+  /** Motivos de denúncia do alvo, com o que está disponível para quem pede (tasks 089 e 296 [BE]). */
+  reportReasons: (target: ReportTarget, targetId: string) => {
+    const params = new URLSearchParams({ target, target_id: targetId });
+    return `/reports/reasons?${params.toString()}`;
+  },
+  /** `POST` registra uma denúncia de perfil ou de evento (task 239 [BE]). */
+  reports: () => '/reports',
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
   connections: (options?: { cursor?: string | null; search?: string }) => {
     const params = new URLSearchParams();
