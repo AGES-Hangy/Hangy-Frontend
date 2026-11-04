@@ -1,112 +1,68 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
-import type { AdminUserRowProps, ModerationStatus } from './types';
-import { colors, palette } from '@/constants/colors';
+import { Badge, resolveModerationVariant } from '@/components/Badge';
+import type { AdminUserRowProps } from './types';
+import { colors } from '@/constants/colors';
 import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
-import { Icon } from '@/components/Icon';
-import type { IconName } from '@/components/Icon';
 
-const MIN_HEIGHT = 72;
-const BORDER_WIDTH = 1;
-const AVATAR_SIZE = 56;
+const metrics = layout.adminUserRow;
+/**
+ * No Figma a borda de 1px fica por dentro e o padding de 8 conta a partir da
+ * borda externa. No React Native o padding começa depois da borda.
+ */
+const ROW_PADDING = spacing[8] - metrics.borderWidth;
 
-type ModerationVisual = {
-  label: string;
-  icon: IconName;
-  textColor: string;
-  backgroundColor: string;
-  borderColor: string;
-};
-
-const moderationVariantMap: Record<ModerationStatus, ModerationVisual> = {
-  ACTIVE: {
-    label: 'Ativo',
-    icon: 'circle-check',
-    textColor: palette.success.default,
-    backgroundColor: palette.success.bg,
-    borderColor: palette.success.default,
-  },
-  SUSPENDED: {
-    label: 'Suspenso',
-    icon: 'triangle-alert',
-    textColor: palette.warning.default,
-    backgroundColor: palette.warning.bg,
-    borderColor: palette.warning.default,
-  },
-  BANNED: {
-    label: 'Banido',
-    icon: 'lock',
-    textColor: palette.error.default,
-    backgroundColor: palette.error.bg,
-    borderColor: palette.error.default,
-  },
-};
-
-const BADGE_HEIGHT = layout.badge.height;
-const BADGE_HORIZONTAL_PADDING = layout.badge.paddingHorizontal;
-const BADGE_ICON_SIZE = layout.badge.iconSize;
-const BADGE_ICON_STROKE_WIDTH = layout.badge.iconStrokeWidth;
-const BADGE_TEXT_GAP = layout.badge.textGap;
-const BADGE_BORDER_WIDTH = layout.badge.borderWidth;
-
-function ModerationBadge({ status }: { status: ModerationStatus }) {
-  const visual = moderationVariantMap[status];
-  return (
-    <View
-      style={[
-        styles.badge,
-        { backgroundColor: visual.backgroundColor, borderColor: visual.borderColor },
-      ]}
-      accessibilityRole="text"
-    >
-      <Icon name={visual.icon} size={BADGE_ICON_SIZE} color={visual.textColor} strokeWidth={BADGE_ICON_STROKE_WIDTH} />
-      <Text style={[typography.badge, styles.badgeText, { color: visual.textColor }]}>
-        {visual.label}
-      </Text>
-    </View>
-  );
+function reportsLabel(count: number) {
+  if (count === 0) return 'nenhuma denúncia';
+  return `${count} ${count === 1 ? 'denúncia' : 'denúncias'}`;
 }
 
 function resolveSummary(props: AdminUserRowProps): string {
+  if (props.summary !== undefined) return props.summary;
   if (props.moderationStatus === 'ACTIVE') {
-    return `${props.eventCount} ${props.eventCount === 1 ? 'evento' : 'eventos'}`;
+    const events = `${props.eventCount} ${props.eventCount === 1 ? 'evento' : 'eventos'}`;
+    return props.reportCount === undefined ? events : `${events} · ${reportsLabel(props.reportCount)}`;
   }
   if (props.moderationStatus === 'SUSPENDED') {
-    return `Suspenso até ${props.untilDate} · ${props.reportCount} ${props.reportCount === 1 ? 'denúncia' : 'denúncias'}`;
+    return `Suspenso até ${props.untilDate} · ${reportsLabel(props.reportCount)}`;
   }
-  return `Banido em ${props.untilDate} · ${props.reportCount} ${props.reportCount === 1 ? 'denúncia' : 'denúncias'}`;
+  return `Banido em ${props.untilDate} · ${reportsLabel(props.reportCount)}`;
 }
 
 export function AdminUserRow(props: AdminUserRowProps) {
   const { name, avatarUri, moderationStatus, onPress } = props;
   const summary = resolveSummary(props);
+  const statusLabel = resolveModerationVariant(moderationStatus).label;
 
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${name}. ${summary}`}
-      style={({ pressed }) => [styles.container, pressed && { opacity: pressedOpacity }]}
+      disabled={!onPress}
+      accessible
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={[name, summary, statusLabel].filter(Boolean).join('. ')}
+      style={({ pressed }) => [styles.container, pressed && onPress && { opacity: pressedOpacity }]}
     >
       <Avatar
         variant="User"
-        diameter={AVATAR_SIZE}
+        diameter={metrics.avatarSize}
         source={avatarUri ? { uri: avatarUri } : undefined}
-        accessibilityLabel={`Foto de ${name}`}
       />
 
       <View style={styles.texts}>
         <Text style={styles.name} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={styles.summary} numberOfLines={1}>
-          {summary}
-        </Text>
+        {summary ? (
+          <Text style={styles.summary} numberOfLines={1}>
+            {summary}
+          </Text>
+        ) : null}
       </View>
 
-      <ModerationBadge status={moderationStatus} />
+      <Badge family="Moderation" value={moderationStatus} />
     </Pressable>
   );
 }
@@ -115,18 +71,18 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: MIN_HEIGHT,
-    borderWidth: BORDER_WIDTH,
+    minHeight: metrics.minHeight,
+    borderWidth: metrics.borderWidth,
     borderColor: colors.border.default,
     borderRadius: radius.md,
     backgroundColor: colors.surface.card,
-    padding: spacing[8],
+    padding: ROW_PADDING,
     gap: spacing[12],
   },
   texts: {
     flex: 1,
     minWidth: 0,
-    gap: spacing[4],
+    gap: metrics.textGap,
   },
   name: {
     ...typography.labelM,
@@ -134,20 +90,7 @@ const styles = StyleSheet.create({
   },
   summary: {
     ...typography.bodyS,
-    color: colors.text.secondary,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: BADGE_TEXT_GAP,
-    height: BADGE_HEIGHT,
-    paddingHorizontal: BADGE_HORIZONTAL_PADDING,
-    borderRadius: radius.full,
-    borderWidth: BADGE_BORDER_WIDTH,
-  },
-  badgeText: {
-    includeFontPadding: false,
+    color: colors.text.tertiary,
   },
 });
 

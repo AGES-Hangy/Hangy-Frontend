@@ -14,6 +14,7 @@ export default function AdminUserRowPreview() {
       <AdminUserRow
         name="Marina Schmitt"
         eventCount={12}
+        reportCount={0}
         moderationStatus="ACTIVE"
         onPress={noop}
       />

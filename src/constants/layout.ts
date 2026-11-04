@@ -120,6 +120,13 @@ export const layout = {
     fallbackIconSize: 20,
   },
   /** Linha de pessoa/estabelecimento nos resultados de busca — h72, avatar 56, borda 1px. */
+  /** AdminUserRow do Figma: h72 · raio md · borda 1 · padding 8 · gap 12 · Avatar MD (40) · texto gap 2. */
+  adminUserRow: {
+    minHeight: 72,
+    borderWidth: 1,
+    avatarSize: 40,
+    textGap: 2,
+  },
   listItem: {
     minHeight: 72,
     avatarSize: 56,
