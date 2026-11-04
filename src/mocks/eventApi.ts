@@ -633,6 +633,10 @@ function participantes(eventId: string, statusFiltro: string | null): Participan
  *
  * Os eventos ficam entre ~400 m e ~900 m da âncora: com zoom bem fechado longe
  * deles o raio da busca não os alcança e cai no estado vazio do mapa.
+ *
+ * Para o filtro do mapa (task 295), cada um tem tags da `ARVORE_DE_TAGS` e
+ * começa `dias` depois de hoje, às 19h locais; `starts_from`, `starts_until` e
+ * `tag_ids` filtram como o backend (macro casa com as micro dela).
  */
 const EVENTOS_PROXIMOS: {
   event_id: string;
@@ -644,12 +648,15 @@ const EVENTOS_PROXIMOS: {
   location_precision?: 'EXACT' | 'APPROXIMATE';
   privacy: 'PUBLIC' | 'PRIVATE';
   is_confirmed: boolean;
+  /** Dias a partir de hoje. */
+  dias: number;
+  tagIds: string[];
 }[] = [
-  { event_id: 'guest', title: 'Show no Opinião', norte: 450, leste: -350, location_name: 'Bar Opinião', location_precision: 'EXACT', privacy: 'PUBLIC', is_confirmed: false },
-  { event_id: 'private', title: 'Futebol no Planet', norte: -300, leste: 500, location_name: 'Jardim Botânico, Porto Alegre', location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false },
-  { event_id: 'private-no-area', title: 'Aniversário surpresa', norte: -700, leste: -400, location_name: null, location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false },
-  { event_id: 'private-confirmed', title: 'Churrasco da turma', norte: 600, leste: 550, location_name: 'Rua Tenente-Coronel Fabrício Pilar, 520', location_precision: 'EXACT', privacy: 'PRIVATE', is_confirmed: true },
-  { event_id: 'sem-precisao', title: 'Feira do Bom Fim', norte: 150, leste: -850, location_name: 'Parque da Redenção', privacy: 'PUBLIC', is_confirmed: false },
+  { event_id: 'guest', title: 'Show no Opinião', norte: 450, leste: -350, location_name: 'Bar Opinião', location_precision: 'EXACT', privacy: 'PUBLIC', is_confirmed: false, dias: 0, tagIds: ['micro-5-0'] },
+  { event_id: 'private', title: 'Futebol no Planet', norte: -300, leste: 500, location_name: 'Jardim Botânico, Porto Alegre', location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false, dias: 1, tagIds: ['micro-0-0'] },
+  { event_id: 'private-no-area', title: 'Aniversário surpresa', norte: -700, leste: -400, location_name: null, location_precision: 'APPROXIMATE', privacy: 'PRIVATE', is_confirmed: false, dias: 3, tagIds: [] },
+  { event_id: 'private-confirmed', title: 'Churrasco da turma', norte: 600, leste: 550, location_name: 'Rua Tenente-Coronel Fabrício Pilar, 520', location_precision: 'EXACT', privacy: 'PRIVATE', is_confirmed: true, dias: 5, tagIds: ['micro-1-2'] },
+  { event_id: 'sem-precisao', title: 'Feira do Bom Fim', norte: 150, leste: -850, location_name: 'Parque da Redenção', privacy: 'PUBLIC', is_confirmed: false, dias: 12, tagIds: ['micro-1-0', 'micro-2-1'] },
 ];
 
 const METROS_POR_GRAU = 111320;
@@ -674,6 +681,17 @@ function eventosProximos(path: string) {
     throw new MockApiError(422, 'Invalid coordinates');
   }
   if (raio > 50000) throw new MockApiError(422, 'Radius exceeds maximum');
+  const inicioMinimo = params.get('starts_from') ? new Date(params.get('starts_from') as string) : null;
+  const inicioMaximo = params.get('starts_until') ? new Date(params.get('starts_until') as string) : null;
+  if (inicioMinimo && inicioMaximo && inicioMaximo < inicioMinimo) throw new MockApiError(400, 'Invalid date range');
+  const tagsPedidas = params.getAll('tag_ids');
+  const todasAsTags = ARVORE_DE_TAGS.flatMap((macro) => [macro.id, ...macro.children.map((micro) => micro.id)]);
+  if (tagsPedidas.some((id) => !todasAsTags.includes(id))) throw new MockApiError(404, 'Tag not found');
+  // Macro casa com as micro dela, como no backend.
+  const tagsQueCasam = new Set(
+    tagsPedidas.flatMap((id) => [id, ...(ARVORE_DE_TAGS.find((macro) => macro.id === id)?.children.map((micro) => micro.id) ?? [])]),
+  );
+  const hoje = new Date();
 
   const centro = { latitude, longitude };
   if (!ancoraDoMapa || distanciaEmMetros(ancoraDoMapa, centro) > DISTANCIA_PARA_REANCORAR_M) {
@@ -681,7 +699,12 @@ function eventosProximos(path: string) {
   }
   const ancora = ancoraDoMapa;
   const metrosPorGrauDeLongitude = METROS_POR_GRAU * Math.cos((ancora.latitude * Math.PI) / 180);
-  const items = EVENTOS_PROXIMOS.map((evento) => {
+  const items = EVENTOS_PROXIMOS.filter((evento) => {
+    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + evento.dias, 19);
+    if (inicioMinimo && inicio < inicioMinimo) return false;
+    if (inicioMaximo && inicio > inicioMaximo) return false;
+    return tagsQueCasam.size === 0 || evento.tagIds.some((id) => tagsQueCasam.has(id));
+  }).map((evento) => {
     const aproximado = evento.location_precision === 'APPROXIMATE';
     const location = {
       latitude: ancora.latitude + evento.norte / METROS_POR_GRAU,
@@ -692,7 +715,7 @@ function eventosProximos(path: string) {
     return {
       event_id: evento.event_id,
       title: evento.title,
-      event_date: '2026-10-30T19:00:00Z',
+      event_date: new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + evento.dias, 19).toISOString(),
       location,
       location_name: evento.location_name,
       ...(evento.location_precision ? { location_precision: evento.location_precision } : {}),
