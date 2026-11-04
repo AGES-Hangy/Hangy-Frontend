@@ -23,21 +23,21 @@ type ModerationVisual = {
 const moderationVariantMap: Record<ModerationStatus, ModerationVisual> = {
   ACTIVE: {
     label: 'Ativo',
-    icon: 'check',
+    icon: 'circle-check',
     textColor: palette.success.default,
     backgroundColor: palette.success.bg,
     borderColor: palette.success.default,
   },
   SUSPENDED: {
     label: 'Suspenso',
-    icon: 'clock',
+    icon: 'triangle-alert',
     textColor: palette.warning.default,
     backgroundColor: palette.warning.bg,
     borderColor: palette.warning.default,
   },
   BANNED: {
     label: 'Banido',
-    icon: 'x',
+    icon: 'lock',
     textColor: palette.error.default,
     backgroundColor: palette.error.bg,
     borderColor: palette.error.default,
@@ -69,20 +69,25 @@ function ModerationBadge({ status }: { status: ModerationStatus }) {
   );
 }
 
-export function AdminUserRow({
-  name,
-  summary,
-  avatarUri,
-  moderationStatus,
-  onPress,
-}: AdminUserRowProps) {
-  const a11yLabel = summary ? `${name}. ${summary}` : name;
+function resolveSummary(props: AdminUserRowProps): string {
+  if (props.moderationStatus === 'ACTIVE') {
+    return `${props.eventCount} ${props.eventCount === 1 ? 'evento' : 'eventos'}`;
+  }
+  if (props.moderationStatus === 'SUSPENDED') {
+    return `Suspenso até ${props.untilDate} · ${props.reportCount} ${props.reportCount === 1 ? 'denúncia' : 'denúncias'}`;
+  }
+  return `Banido em ${props.untilDate} · ${props.reportCount} ${props.reportCount === 1 ? 'denúncia' : 'denúncias'}`;
+}
+
+export function AdminUserRow(props: AdminUserRowProps) {
+  const { name, avatarUri, moderationStatus, onPress } = props;
+  const summary = resolveSummary(props);
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={a11yLabel}
+      accessibilityLabel={`${name}. ${summary}`}
       style={({ pressed }) => [styles.container, pressed && { opacity: pressedOpacity }]}
     >
       <Avatar
@@ -96,13 +101,12 @@ export function AdminUserRow({
         <Text style={styles.name} numberOfLines={1}>
           {name}
         </Text>
-        {summary ? (
-          <Text style={styles.summary} numberOfLines={1}>
-            {summary}
-          </Text>
-        ) : null}
-        <ModerationBadge status={moderationStatus} />
+        <Text style={styles.summary} numberOfLines={1}>
+          {summary}
+        </Text>
       </View>
+
+      <ModerationBadge status={moderationStatus} />
     </Pressable>
   );
 }
@@ -135,7 +139,7 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     gap: BADGE_TEXT_GAP,
     height: BADGE_HEIGHT,
     paddingHorizontal: BADGE_HORIZONTAL_PADDING,
