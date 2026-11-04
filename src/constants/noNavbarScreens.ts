@@ -10,4 +10,5 @@ export const noNavbarScreens: string[] = [
   'EditProfile',
   'BlockedUsers',
   'Followers',
+  'Report',
 ];

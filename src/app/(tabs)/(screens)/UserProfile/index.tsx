@@ -186,9 +186,14 @@ export default function UserProfile() {
   useTopAppBar({
     variant: 'Profile',
     title: name ?? 'Perfil',
-    // A task 090 [FE] (US11.1) pluga o fluxo de denúncia aqui.
+    // `visibleProfile` já é nulo no próprio perfil: ninguém se denuncia. Fica
+    // disponível depois de denunciar, para outro motivo.
     action: visibleProfile
-      ? { icon: 'flag', accessibilityLabel: 'Denunciar perfil', disabled: true, onPress: () => {} }
+      ? {
+          icon: 'flag',
+          accessibilityLabel: 'Denunciar perfil',
+          onPress: () => router.push({ pathname: '/Report', params: { type: 'USER', id: visibleProfile.id } }),
+        }
       : undefined,
       secondaryAction:
       visibleProfile && visibleProfile.user_type !== 'BUSINESS'
