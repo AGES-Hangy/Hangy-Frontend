@@ -10,6 +10,8 @@ import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { EventCard } from '@/components/EventCard';
+import { FilterPanel } from '@/components/FilterPanel';
+import type { FilterValue } from '@/components/FilterPanel/types';
 import type { Event } from '@/components/EventCard/types';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
@@ -23,7 +25,9 @@ import { typography } from '@/constants/typography';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { distanceInMeters, useNearbyEvents } from '@/hooks/useNearbyEvents';
 import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
+import { useTags } from '@/hooks/useTags';
 import type { NearbyEventItem } from '@/types/event';
+import { countActiveFilters, EMPTY_FILTER_VALUE, toNearbyEventFilters } from '@/utils/searchFilters';
 
 /** Porto Alegre — onde o mapa abre sem a posição do usuário. Negar a permissão não bloqueia a tela. */
 const DEFAULT_REGION: Region = {
@@ -184,6 +188,10 @@ export interface LiveViewProps {
   showEmptyState: boolean;
   /** `false` quando a busca já está no raio máximo e ampliar não adianta. */
   canExpandSearch: boolean;
+  /** Blocos do filtro em uso — contador do botão; com algum, o vazio oferece limpar. */
+  activeFilterCount: number;
+  onOpenFilters: () => void;
+  onClearFilters: () => void;
   locationNotice: LocationNoticeKind | null;
   canAskLocationAgain: boolean;
   onAllowLocation: () => void;
@@ -212,6 +220,9 @@ export function LiveView({
   userCoordinate,
   showEmptyState,
   canExpandSearch,
+  activeFilterCount,
+  onOpenFilters,
+  onClearFilters,
   locationNotice,
   canAskLocationAgain,
   onAllowLocation,
@@ -376,11 +387,29 @@ export function LiveView({
             </View>
           </View>
         )}
-        {isLoading && (
-          <View style={styles.loading} accessibilityLabel="Buscando eventos" accessibilityRole="progressbar">
-            <ActivityIndicator size="small" color={colors.action.primary} />
+        <View style={styles.topActions} pointerEvents="box-none">
+          {isLoading && (
+            <View style={styles.loading} accessibilityLabel="Buscando eventos" accessibilityRole="progressbar">
+              <ActivityIndicator size="small" color={colors.action.primary} />
+            </View>
+          )}
+          <View>
+            <IconButton
+              icon="sliders-horizontal"
+              variant={activeFilterCount > 0 ? 'Tonal' : 'Outline'}
+              accessibilityLabel={
+                activeFilterCount > 0 ? `Filtros, ${activeFilterCount} em uso` : 'Filtrar eventos'
+              }
+              onPress={onOpenFilters}
+              style={styles.floatingButton}
+            />
+            {activeFilterCount > 0 && (
+              <View style={styles.filterCount} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no">
+                <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+              </View>
+            )}
           </View>
-        )}
+        </View>
       </View>
 
       <View style={styles.bottomOverlay} pointerEvents="box-none">
@@ -390,7 +419,7 @@ export function LiveView({
             variant="Outline"
             accessibilityLabel="Centralizar no meu local"
             onPress={handleRecenter}
-            style={styles.recenter}
+            style={[styles.floatingButton, styles.recenter]}
           />
         )}
         {selectedEvent ? (
@@ -432,13 +461,25 @@ export function LiveView({
           </View>
         ) : showEmptyState ? (
           <View style={styles.emptyCard}>
-            <EmptyState
-              context="Map"
-              cta
-              ctaLabel="Ampliar busca"
-              onCtaPress={handleExpandSearch}
-              ctaDisabled={!canExpandSearch}
-            />
+            {activeFilterCount > 0 ? (
+              // Com filtro, ampliar a área raramente resolve: o caminho é afrouxar o filtro.
+              <EmptyState
+                context="Map"
+                title="Nenhum evento com esses filtros"
+                text="Tente outras datas ou tags, ou limpe os filtros."
+                cta
+                ctaLabel="Limpar filtros"
+                onCtaPress={onClearFilters}
+              />
+            ) : (
+              <EmptyState
+                context="Map"
+                cta
+                ctaLabel="Ampliar busca"
+                onCtaPress={handleExpandSearch}
+                ctaDisabled={!canExpandSearch}
+              />
+            )}
           </View>
         ) : null}
       </View>
@@ -452,6 +493,32 @@ export default function Live() {
   const { addToast, showSuccessToast } = useToast();
   const { events, isLoading, isEmpty, isAtMaxRadius, search, searchNow, setConfirmed } = useNearbyEvents();
   const { isOffline } = useNetworkStatus();
+  const { tags, isLoading: tagsLoading, error: tagsError, refetch: refetchTags } = useTags();
+
+  const [filterValue, setFilterValue] = useState<FilterValue>(EMPTY_FILTER_VALUE);
+  const [isFilterPanelVisible, setIsFilterPanelVisible] = useState(false);
+  // Refs para as buscas lerem o filtro e a região atuais: o debounce e os
+  // efeitos de localização não são recriados a cada troca de filtro.
+  const filterValueRef = useRef(filterValue);
+  const tagsRef = useRef(tags);
+  tagsRef.current = tags;
+  const regionRef = useRef<Region>(DEFAULT_REGION);
+
+  const searchFiltered = useCallback(
+    (region: Region) => {
+      regionRef.current = region;
+      search(region, toNearbyEventFilters(filterValueRef.current, tagsRef.current));
+    },
+    [search],
+  );
+
+  const searchFilteredNow = useCallback(
+    (region: Region) => {
+      regionRef.current = region;
+      return searchNow(region, toNearbyEventFilters(filterValueRef.current, tagsRef.current));
+    },
+    [searchNow],
+  );
 
   const [permission, setPermission] = useState<LocationPermission>('checking');
   const [canAskAgain, setCanAskAgain] = useState(true);
@@ -485,8 +552,8 @@ export default function Live() {
   useEffect(() => {
     if (permission === 'checking' || permission === 'granted' || hasSearchedRef.current) return;
     hasSearchedRef.current = true;
-    void searchNow(DEFAULT_REGION);
-  }, [permission, searchNow]);
+    void searchFilteredNow(DEFAULT_REGION);
+  }, [permission, searchFilteredNow]);
 
   // Com permissão, centraliza no usuário. A coordenada só fica no aparelho:
   // centraliza o mapa e vai como centro da busca, nada além disso.
@@ -510,13 +577,13 @@ export default function Live() {
         setUserCoordinate(coordinate);
         mapRef.current?.animateToRegion(region, MAP_ANIMATION_MS);
         hasSearchedRef.current = true;
-        void searchNow(region);
+        void searchFilteredNow(region);
       } catch {
         if (cancelled) return;
         setIsLocationUnavailable(true);
         if (!hasSearchedRef.current) {
           hasSearchedRef.current = true;
-          void searchNow(DEFAULT_REGION);
+          void searchFilteredNow(DEFAULT_REGION);
         }
       }
     }
@@ -525,7 +592,7 @@ export default function Live() {
     return () => {
       cancelled = true;
     };
-  }, [permission, locateAttempt, searchNow]);
+  }, [permission, locateAttempt, searchFilteredNow]);
 
   // O evento selecionado saiu da área buscada: o preview fecha junto.
   useEffect(() => {
@@ -542,6 +609,22 @@ export default function Live() {
         : permission === 'granted' && isLocationUnavailable
           ? 'unavailable'
           : null;
+
+  // O filtro vale já: refaz a busca na região atual, sem esperar o mapa mexer.
+  function searchWithFilters(value: FilterValue) {
+    filterValueRef.current = value;
+    setFilterValue(value);
+    void searchFilteredNow(regionRef.current);
+  }
+
+  function clearFilters() {
+    searchWithFilters(EMPTY_FILTER_VALUE);
+  }
+
+  function applyFilters(value: FilterValue) {
+    setIsFilterPanelVisible(false);
+    searchWithFilters(value);
+  }
 
   async function handleAllowLocation() {
     // Depois de uma negação definitiva o sistema não pergunta mais: só pelos Ajustes.
@@ -624,10 +707,13 @@ export default function Live() {
         events={events}
         selectedEventId={selectedEventId}
         onSelectEvent={setSelectedEventId}
-        onRegionChangeComplete={search}
+        onRegionChangeComplete={searchFiltered}
         userCoordinate={userCoordinate}
         showEmptyState={isEmpty}
         canExpandSearch={!isAtMaxRadius}
+        activeFilterCount={countActiveFilters(filterValue)}
+        onOpenFilters={() => setIsFilterPanelVisible(true)}
+        onClearFilters={clearFilters}
         locationNotice={locationNotice}
         canAskLocationAgain={canAskAgain}
         onAllowLocation={() => void handleAllowLocation()}
@@ -637,6 +723,19 @@ export default function Live() {
         onParticipationPress={(eventId) => void handleParticipationPress(eventId)}
         participationLoading={isSubmitting}
         pendingEventIds={pendingEventIds}
+      />
+
+      <FilterPanel
+        visible={isFilterPanelVisible}
+        variant="Live"
+        value={filterValue}
+        onApply={applyFilters}
+        onClear={clearFilters}
+        onClose={() => setIsFilterPanelVisible(false)}
+        tags={tags}
+        tagsLoading={tagsLoading}
+        tagsError={tagsError}
+        onRetryTags={() => void refetchTags()}
       />
 
       <Dialog
@@ -678,16 +777,43 @@ const styles = StyleSheet.create({
   topOverlayBelowBanner: {
     top: spacing[64],
   },
+  // Carregando à esquerda do botão de filtro, os dois no canto direito.
+  topActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: spacing[8],
+  },
   loading: {
-    alignSelf: 'flex-end',
     padding: spacing[8],
     borderRadius: radius.full,
     backgroundColor: colors.surface.card,
     ...elevation[2],
   },
+  // Os botões flutuam sobre o mapa, e o do Design System é plano.
+  floatingButton: {
+    backgroundColor: colors.surface.card,
+    ...elevation[2],
+  },
   recenter: {
     alignSelf: 'flex-end',
-    ...elevation[2],
+  },
+  // Contador sobre o canto do botão de filtro, como o ponto de não lidas do `TopAppBar`.
+  filterCount: {
+    position: 'absolute',
+    top: -spacing[4],
+    right: -spacing[4],
+    minWidth: spacing[20],
+    height: spacing[20],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.full,
+    backgroundColor: colors.action.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCountText: {
+    ...typography.caption,
+    color: colors.text.inverse,
   },
   // O card do Design System é plano; a sombra fica no wrapper porque aqui ele
   // flutua sobre o mapa.

@@ -6,6 +6,7 @@ import { endpoints } from '@/constants/api';
 import type { NearbyEventItem, NearbyEventsPage } from '@/types/event';
 import { isApiErrorLike } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
+import type { NearbyEventFilters } from '@/utils/searchFilters';
 
 /** Espera depois do último movimento do mapa antes de buscar — sem isto vira uma requisição por pan. */
 const SEARCH_DEBOUNCE_MS = 500;
@@ -38,11 +39,14 @@ function radiusFor(region: Region) {
 
 const RADIUS_EXCEEDED = 'Radius exceeds maximum';
 const INVALID_COORDINATES = 'Invalid coordinates';
+const TAG_NOT_FOUND = 'Tag not found';
 
 /**
  * Eventos ao redor do centro do mapa (`GET /events/nearby`). `search` tem
  * debounce; respostas que chegam depois de uma busca mais nova, ou depois de a
- * tela desmontar, são descartadas.
+ * tela desmontar, são descartadas. Os filtros vão junto da região em cada
+ * busca, então trocar o filtro com `searchNow` também descarta a resposta da
+ * busca anterior, ainda sem ele.
  */
 export function useNearbyEvents() {
   const { addToast } = useToast();
@@ -60,12 +64,13 @@ export function useNearbyEvents() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      latestRequestIdRef.current += 1;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
 
   const searchNow = useCallback(
-    async (region: Region) => {
+    async (region: Region, filters: NearbyEventFilters = { tagIds: [] }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       const requestId = ++latestRequestIdRef.current;
       const radiusM = radiusFor(region);
@@ -73,7 +78,7 @@ export function useNearbyEvents() {
 
       try {
         const page = await apiFetch<NearbyEventsPage>(
-          endpoints.eventsNearby({ latitude: region.latitude, longitude: region.longitude, radiusM }),
+          endpoints.eventsNearby({ latitude: region.latitude, longitude: region.longitude, radiusM, ...filters }),
         );
         if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
 
@@ -87,18 +92,32 @@ export function useNearbyEvents() {
         // (`apiFetch`) e o sem-rede é o `OfflineBanner` da tela.
         if (!isApiErrorLike(error)) {
           addToast({ type: 'error', message: 'Não foi possível carregar. Tente de novo.' });
-        } else if (error.status === 401 || error.kind === 'network') {
+          return;
+        }
+        if (error.status === 401 || error.status === 403 || error.detail === TAG_NOT_FOUND) {
+          // Um acesso negado ou filtro inválido não deve manter os pins da consulta anterior.
+          setEvents([]);
+          setIsEmpty(false);
+        }
+        if (error.status === 401 || error.kind === 'network') {
           return;
         } else if (error.kind === 'timeout') {
           addToast({
             type: 'error',
             message: 'A conexão demorou demais',
             actionLabel: 'Tentar de novo',
-            onAction: () => void searchNow(region),
+            onAction: () => {
+              if (isMountedRef.current && requestId === latestRequestIdRef.current) {
+                void searchNow(region, filters);
+              }
+            },
           });
         } else if (error.detail === RADIUS_EXCEEDED) {
           setIsAtMaxRadius(true);
           addToast({ type: 'warning', message: 'Não dá para ampliar mais o raio' });
+        } else if (error.detail === TAG_NOT_FOUND) {
+          // Tag apagada pela moderação depois de a árvore ser carregada.
+          addToast({ type: 'error', message: 'Uma das tags do filtro não existe mais. Revise os filtros.' });
         } else if (error.detail === INVALID_COORDINATES) {
           addToast({ type: 'error', message: 'Não conseguimos usar esse endereço. Escolha outro no mapa.' });
         } else {
@@ -112,9 +131,11 @@ export function useNearbyEvents() {
   );
 
   const search = useCallback(
-    (region: Region) => {
+    (region: Region, filters: NearbyEventFilters = { tagIds: [] }) => {
+      // Já existe uma região mais nova, mesmo durante o debounce.
+      latestRequestIdRef.current += 1;
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => void searchNow(region), SEARCH_DEBOUNCE_MS);
+      debounceRef.current = setTimeout(() => void searchNow(region, filters), SEARCH_DEBOUNCE_MS);
     },
     [searchNow],
   );

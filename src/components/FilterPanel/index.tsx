@@ -295,7 +295,12 @@ export function FilterPanel({
             </ScrollView>
 
             <View style={styles.actions}>
-              <Button label="Limpar" variant="Tertiary" disabled={isDraftEmpty(draft)} onPress={clear} />
+              <Button
+                label="Limpar"
+                variant="Tertiary"
+                disabled={isDraftEmpty(draft) && (!onClear || isDraftEmpty(value))}
+                onPress={clear}
+              />
               <Button
                 label="Aplicar filtros"
                 disabled={rangeError !== null}

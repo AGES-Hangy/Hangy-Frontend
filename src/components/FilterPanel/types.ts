@@ -47,8 +47,8 @@ export type FilterPanelProps = {
   /** "Aplicar filtros": recebe o rascunho já normalizado e fecha o painel. */
   onApply: (value: FilterValue) => void;
   /**
-   * "Limpar": avisa que o rascunho foi zerado. O painel continua aberto e o
-   * filtro ativo só muda no `onApply` — não dispare a busca daqui.
+   * "Limpar": zera o rascunho e mantém o painel aberto. No mapa, a tela
+   * também usa este callback para refazer a busca sem filtros.
    */
   onClear?: () => void;
   /** Fecha sem aplicar (×, toque fora ou voltar do Android). */
