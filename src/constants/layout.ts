@@ -44,6 +44,8 @@ export const layout = {
   },
   emptyState: {
     illustrationSize: 96,
+    /** Ícone 40 dentro do círculo de 96 — frames `Erro do servidor` e `Sem conexão`. */
+    illustrationIconSize: 40,
     textMaxWidth: 260,
     ctaHeight: 52,
   },

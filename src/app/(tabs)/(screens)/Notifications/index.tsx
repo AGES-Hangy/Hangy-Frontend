@@ -5,6 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { NotificationCard, groupConnectionRequestsByPeriod } from '@/components/NotificationCard';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { NotificationLoadError } from '@/components/NotificationLoadError';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { SectionEmptyState } from '@/components/SectionEmptyState';
@@ -17,6 +18,7 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useNotificationLoadFeedback } from '@/hooks/useNotificationLoadFeedback';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 /** Botão MD (44) + margem inferior de 16 + 16 de respiro acima dele. */
 const FLOATING_ACTION_CLEARANCE = 44 + spacing[16] + spacing[16];
@@ -78,9 +80,21 @@ export default function Notifications() {
     if (error) {
       return (
         <View style={styles.container}>
-          <NotificationLoadError
-            message={error}
-            onRetry={canRetryError && !isOffline ? () => void retryError() : undefined}
+          <ErrorScreen
+            {...loadErrorScreenProps(
+              {
+                // `invalid` é resposta fora do contrato: para quem usa, é erro do servidor.
+                kind: errorKind === 'offline' || errorKind === 'timeout' ? errorKind : 'server',
+                title: 'Não foi possível carregar',
+                message: error,
+                canRetry: canRetryError,
+              },
+              {
+                // Offline, a carga volta sozinha quando a rede voltar (efeito acima).
+                onRetry: isOffline ? undefined : () => void retryError(),
+                retryAccessibilityLabel: 'Tentar carregar notificações novamente',
+              },
+            )}
           />
           {isOffline && <OfflineBanner />}
         </View>

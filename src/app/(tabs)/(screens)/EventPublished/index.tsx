@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { EventCard } from '@/components/EventCard';
 import type { Event, EventPrivacy } from '@/components/EventCard/types';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
+import { LoadingScreen } from '@/components/LoadingScreen';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { EventShare } from '@/types/event';
+import { describeLoadError } from '@/utils/apiErrors';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 export default function EventoPublicado() {
   const { eventId, privacy, tagNames } = useLocalSearchParams<{
@@ -25,6 +31,11 @@ export default function EventoPublicado() {
   const { getShare, share, isLoading } = useEventShare(eventId);
   const [data, setData] = useState<EventShare | null>(null);
   const [hasLoadError, setHasLoadError] = useState(false);
+  /** Incrementa no "Tentar de novo" para refazer o `GET` do compartilhamento. */
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => setAttempt((current) => current + 1);
+  // Reconectou: refaz a leitura que falhou.
+  const { isOffline } = useRetryOnReconnect(hasLoadError, retry);
 
   // O frame possui cabeçalho próprio; sem isto a TopAppBar padrão apareceria
   // acima dele e duplicaria a navegação.
@@ -42,7 +53,7 @@ export default function EventoPublicado() {
     return () => {
       isMounted = false;
     };
-  }, [getShare]);
+  }, [getShare, attempt]);
 
   // Sempre a Home: o histórico das abas não garante que o "voltar" seja a
   // Home (pode cair de volta no formulário de criação).
@@ -83,16 +94,17 @@ export default function EventoPublicado() {
         <Text style={styles.headerTitle}>Evento publicado</Text>
       </View>
 
-      {isLoading && (
-        <View style={styles.centerFill}>
-          <ActivityIndicator color={colors.action.primary} />
-        </View>
-      )}
+      {isLoading && <LoadingScreen accessibilityLabel="Carregando evento publicado" />}
 
       {!isLoading && hasLoadError && (
-        <View style={styles.centerFill}>
-          <Text style={styles.errorText}>Não foi possível carregar o evento publicado.</Text>
-        </View>
+        // O `useEventShare` engole o erro (já mostra o toast), então o texto é o genérico.
+        <ErrorScreen
+          {...loadErrorScreenProps(describeLoadError(null), {
+            onRetry: retry,
+            retryAccessibilityLabel: 'Tentar carregar o evento publicado novamente',
+          })}
+          style={{ paddingBottom: insets.bottom + spacing[16] }}
+        />
       )}
 
       {!isLoading && !hasLoadError && event && (
@@ -112,27 +124,35 @@ export default function EventoPublicado() {
         </ScrollView>
       )}
 
-      <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[24] }]}>
-        <Button
-          label="Compartilhar link"
-          icon="share-2"
-          variant="Primary"
-          size="LG"
-          accessibilityLabel="Compartilhar link do evento"
-          onPress={handleShare}
-          disabled={!data || isLoading}
-          style={styles.fullWidth}
-        />
-        <Button
-          label="Ver o evento"
-          variant="Tertiary"
-          size="LG"
-          accessibilityLabel="Ver o evento"
-          onPress={handleViewEvent}
-          disabled={!data || isLoading}
-          style={styles.fullWidth}
-        />
-      </View>
+      {/* Com erro, a única ação útil é o "Tentar de novo" do ErrorScreen. */}
+      {!hasLoadError && (
+        <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[24] }]}>
+          <Button
+            label="Compartilhar link"
+            icon="share-2"
+            variant="Primary"
+            size="LG"
+            accessibilityLabel="Compartilhar link do evento"
+            onPress={handleShare}
+            disabled={!data || isLoading}
+            style={styles.fullWidth}
+          />
+          <Button
+            label="Ver o evento"
+            variant="Tertiary"
+            size="LG"
+            accessibilityLabel="Ver o evento"
+            onPress={handleViewEvent}
+            disabled={!data || isLoading}
+            style={styles.fullWidth}
+          />
+        </View>
+      )}
+      {isOffline && (
+        <View style={[styles.offlineBanner, { top: insets.top + spacing[64] }]} pointerEvents="box-none">
+          <OfflineBanner />
+        </View>
+      )}
     </View>
   );
 }
@@ -149,8 +169,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.default,
   },
   headerTitle: { ...typography.h4, color: colors.text.primary },
-  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorText: { ...typography.bodyM, color: colors.feedback.error },
+  // Abaixo do cabeçalho próprio da tela, que ocupa o lugar da TopAppBar.
+  offlineBanner: { position: 'absolute', left: 0, right: 0 },
   content: {
     alignItems: 'center',
     paddingHorizontal: spacing[24],
