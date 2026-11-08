@@ -611,11 +611,19 @@ export default function Live() {
           : null;
 
   // O filtro vale já: refaz a busca na região atual, sem esperar o mapa mexer.
-  function applyFilters(value: FilterValue) {
+  function searchWithFilters(value: FilterValue) {
     filterValueRef.current = value;
     setFilterValue(value);
-    setIsFilterPanelVisible(false);
     void searchFilteredNow(regionRef.current);
+  }
+
+  function clearFilters() {
+    searchWithFilters(EMPTY_FILTER_VALUE);
+  }
+
+  function applyFilters(value: FilterValue) {
+    setIsFilterPanelVisible(false);
+    searchWithFilters(value);
   }
 
   async function handleAllowLocation() {
@@ -705,7 +713,7 @@ export default function Live() {
         canExpandSearch={!isAtMaxRadius}
         activeFilterCount={countActiveFilters(filterValue)}
         onOpenFilters={() => setIsFilterPanelVisible(true)}
-        onClearFilters={() => applyFilters(EMPTY_FILTER_VALUE)}
+        onClearFilters={clearFilters}
         locationNotice={locationNotice}
         canAskLocationAgain={canAskAgain}
         onAllowLocation={() => void handleAllowLocation()}
@@ -722,6 +730,7 @@ export default function Live() {
         variant="Live"
         value={filterValue}
         onApply={applyFilters}
+        onClear={clearFilters}
         onClose={() => setIsFilterPanelVisible(false)}
         tags={tags}
         tagsLoading={tagsLoading}

@@ -64,6 +64,7 @@ export function useNearbyEvents() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      latestRequestIdRef.current += 1;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -91,14 +92,25 @@ export function useNearbyEvents() {
         // (`apiFetch`) e o sem-rede é o `OfflineBanner` da tela.
         if (!isApiErrorLike(error)) {
           addToast({ type: 'error', message: 'Não foi possível carregar. Tente de novo.' });
-        } else if (error.status === 401 || error.kind === 'network') {
+          return;
+        }
+        if (error.status === 401 || error.status === 403 || error.detail === TAG_NOT_FOUND) {
+          // Um acesso negado ou filtro inválido não deve manter os pins da consulta anterior.
+          setEvents([]);
+          setIsEmpty(false);
+        }
+        if (error.status === 401 || error.kind === 'network') {
           return;
         } else if (error.kind === 'timeout') {
           addToast({
             type: 'error',
             message: 'A conexão demorou demais',
             actionLabel: 'Tentar de novo',
-            onAction: () => void searchNow(region, filters),
+            onAction: () => {
+              if (isMountedRef.current && requestId === latestRequestIdRef.current) {
+                void searchNow(region, filters);
+              }
+            },
           });
         } else if (error.detail === RADIUS_EXCEEDED) {
           setIsAtMaxRadius(true);
@@ -120,6 +132,8 @@ export function useNearbyEvents() {
 
   const search = useCallback(
     (region: Region, filters: NearbyEventFilters = { tagIds: [] }) => {
+      // Já existe uma região mais nova, mesmo durante o debounce.
+      latestRequestIdRef.current += 1;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => void searchNow(region, filters), SEARCH_DEBOUNCE_MS);
     },

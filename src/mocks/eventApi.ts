@@ -701,6 +701,7 @@ function eventosProximos(path: string) {
   const metrosPorGrauDeLongitude = METROS_POR_GRAU * Math.cos((ancora.latitude * Math.PI) / 180);
   const items = EVENTOS_PROXIMOS.filter((evento) => {
     const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + evento.dias, 19);
+    if (inicio <= hoje) return false;
     if (inicioMinimo && inicio < inicioMinimo) return false;
     if (inicioMaximo && inicio > inicioMaximo) return false;
     return tagsQueCasam.size === 0 || evento.tagIds.some((id) => tagsQueCasam.has(id));
