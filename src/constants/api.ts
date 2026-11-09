@@ -198,4 +198,6 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/connections/pending${query ? `?${query}` : ''}`;
   },
+  /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
+  adminDashboard: () => '/admin/dashboard',
 } as const;
