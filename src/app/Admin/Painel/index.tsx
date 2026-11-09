@@ -195,7 +195,7 @@ function PainelContent({ dashboard, refresh }: PainelContentProps) {
       ))}
       <ReportsSectionHeader />
       {dashboard.recent_reports.length === 0 ? (
-        <SectionEmptyState icon="flag" title="Nenhuma denúncia na fila" text="Novas denúncias aparecem aqui." />
+        <SectionEmptyState icon="flag" title="Nenhuma denúncia pendente" text="Novas denúncias aparecem aqui." />
       ) : (
         dashboard.recent_reports.map(report => (
           <ReportCard key={report.report_id} {...recentReportCard(report)} />
