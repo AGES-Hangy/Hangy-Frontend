@@ -4,24 +4,9 @@ import { useFocusEffect } from 'expo-router';
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
 import type { AdminDashboard } from '@/types/admin';
-import { describeLoadError, isApiErrorLike } from '@/utils/apiErrors';
+import { describeAdminLoadError, endsAdminSession } from '@/utils/adminLoadErrors';
 import type { LoadError } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
-
-/** Mesmo `detail` que o `apiFetch` usa para encerrar a sessão no 403; lá a constante não é exportada. */
-const ADMIN_ACCESS_REQUIRED = 'Admin access required';
-
-/** Falhas em que o `apiFetch` já encerrou a sessão e está levando para o Login. */
-function endsSession(error: unknown) {
-  if (!isApiErrorLike(error)) return false;
-  return error.status === 401 || (error.status === 403 && error.detail === ADMIN_ACCESS_REQUIRED);
-}
-
-/** O 404 e o 410 da tabela de `describeLoadError` são de evento: aqui viram o erro genérico. */
-function describeDashboardLoadError(error: unknown): LoadError {
-  const loadError = describeLoadError(error);
-  return loadError.kind === 'offline' || loadError.kind === 'timeout' ? loadError : describeLoadError(null);
-}
 
 /**
  * Métricas e denúncias recentes do painel (`GET /admin/dashboard`).
@@ -54,12 +39,12 @@ export function useAdminDashboard() {
       setData(result);
     } catch (caught) {
       if (requestId !== latestRequest.current) return;
-      if (endsSession(caught)) {
+      if (endsAdminSession(caught)) {
         sessionEnded = true;
         return;
       }
 
-      const loadError = describeDashboardLoadError(caught);
+      const loadError = describeAdminLoadError(caught);
       if (!dataRef.current) {
         setError(loadError);
         return;

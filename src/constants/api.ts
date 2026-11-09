@@ -38,6 +38,9 @@ export const UPLOAD_RESPONSE_TIMEOUT_MS = 120000;
 /** Maior `limit` aceito por `GET /participants` — a tela não pagina, então pede a página cheia. */
 const PARTICIPANTS_PAGE_LIMIT = 100;
 
+/** Maior `limit` aceito por `GET /admin/audit-log`. */
+const ADMIN_AUDIT_LOG_PAGE_LIMIT = 100;
+
 /** Rotas da API de eventos. */
 export const endpoints = {
   login: () => '/auth/login',
@@ -200,4 +203,9 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /**
+   * Registro das ações administrativas (task 253 [BE]). Só `ADMIN`. A tela não
+   * pagina ainda: pede a maior página aceita (1–100) e ignora o `next_cursor`.
+   */
+  adminAuditLog: () => `/admin/audit-log?limit=${ADMIN_AUDIT_LOG_PAGE_LIMIT}`,
 } as const;
