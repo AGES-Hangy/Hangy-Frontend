@@ -20,11 +20,8 @@ export type ReportReason =
   | 'SAFETY_CONCERN'
   | 'OTHER';
 
-/**
- * Ação registrada na resolução: `BANNED`/`SUSPENDED` vêm da task 249; a da
- * denúncia arquivada depende da task 246, que ainda não subiu.
- */
-export type ReportResolutionAction = 'BANNED' | 'SUSPENDED' | 'ARCHIVED' | (string & {});
+/** `ReportResolutionActionEnum` do backend. */
+export type ReportResolutionAction = 'BANNED' | 'SUSPENDED' | 'ARCHIVED' | 'EVENT_REMOVED' | (string & {});
 
 export interface AdminReportUser {
   id: string;

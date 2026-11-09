@@ -119,6 +119,8 @@ export function resolutionCopy(report: AdminReportDetail): { title: string; text
       return { title, text: 'Ação aplicada: banimento permanente da conta.' };
     case 'SUSPENDED':
       return { title, text: 'Ação aplicada: suspensão temporária da conta.' };
+    case 'EVENT_REMOVED':
+      return { title, text: 'Ação aplicada: evento removido.' };
     default:
       return { title, text: 'Denúncia encerrada.' };
   }

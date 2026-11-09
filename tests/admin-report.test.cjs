@@ -106,6 +106,9 @@ test('state line and resolution card describe who, when and which action', () =>
     { title: 'Resolvida por Gabriel N.', text: 'Ação aplicada: banimento permanente da conta.' },
   );
 
+  const eventRemoved = { ...resolved, resolution: { ...resolved.resolution, action: 'EVENT_REMOVED' } };
+  assert.equal(resolutionCopy(eventRemoved).text, 'Ação aplicada: evento removido.');
+
   const archived = { ...resolved, status: 'REJECTED', resolution: { ...resolved.resolution, action: 'ARCHIVED' } };
   assert.equal(reportStateLine(archived), 'Arquivada hoje, 14:32');
   assert.equal(resolutionCopy(archived).title, 'Arquivada por Gabriel N.');
