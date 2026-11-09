@@ -1,15 +1,18 @@
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { AdminHeader } from '@/components/AdminHeader';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ReportCard } from '@/components/ReportCard';
+import { ReportCardSkeleton } from '@/components/ReportCardSkeleton';
 import { SectionEmptyState } from '@/components/SectionEmptyState';
 import { SectionHeader } from '@/components/SectionHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { StatCard } from '@/components/StatCard';
 import { colors } from '@/constants/colors';
-import { layout, radius, spacing } from '@/constants/layout';
+import { radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 import { useLogout } from '@/hooks/useLogout';
@@ -18,10 +21,6 @@ import { useRefreshable } from '@/hooks/useRefreshable';
 import type { AdminDashboard } from '@/types/admin';
 import { dashboardStats, recentReportCard } from '@/utils/adminDashboard';
 
-/** Barra de 56 do TopAppBar, sem o `paddingTop` 12 do frame: o `Admin/_layout` já aplica a safe area. */
-const HEADER_HEIGHT = 56;
-/** Borda inferior do TopAppBar no Figma; a constante do componente é local. */
-const HEADER_BORDER_WIDTH = 1.5;
 /**
  * O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o conteúdo desce o
  * mesmo tanto que em `BlockedUsers` para o primeiro card não ficar por baixo dele.
@@ -43,33 +42,17 @@ const STAT_CARD_MIN_HEIGHT =
   spacing[4] * 2;
 /** Dois cards, como no frame; o backend devolve até 5. */
 const SKELETON_REPORT_COUNT = 2;
-/** Mesmo `numberOfLines` do trecho no ReportCard. */
-const REPORT_EXCERPT_LINES = 2;
-/** Como no ReportCard: o padding de 12 do Figma conta a partir da borda externa. */
-const REPORT_CARD_PADDING = spacing[12] - layout.reportCard.borderWidth;
 
 /** Larguras das barras do skeleton, em fração da largura disponível. */
 const SKELETON_STAT_LABEL_WIDTH = '70%';
 const SKELETON_STAT_VALUE_WIDTH = '40%';
 const SKELETON_STAT_SUPPORT_WIDTH = '60%';
-const SKELETON_REPORT_TITLE_WIDTH = '60%';
-const SKELETON_REPORT_SUBTITLE_WIDTH = '45%';
-const SKELETON_REPORT_BADGE_WIDTH = '25%';
-const SKELETON_REPORT_REASON_WIDTH = '50%';
-const SKELETON_REPORT_EXCERPT_LAST_LINE_WIDTH = '75%';
 
-/**
- * Nenhuma variante do TopAppBar tem título à esquerda com uma ação de texto, e
- * todas somam `insets.top`, que o `Admin/_layout` já aplica.
- */
 function PainelHeader() {
   const { logout, isLoading } = useLogout();
 
   return (
-    <View style={styles.header}>
-      <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
-        Painel administrativo
-      </Text>
+    <AdminHeader title="Painel administrativo">
       <Button
         label="Sair"
         variant="Tertiary"
@@ -79,20 +62,20 @@ function PainelHeader() {
         onPress={logout}
         style={styles.logout}
       />
-    </View>
+    </AdminHeader>
   );
 }
 
 function ReportsSectionHeader() {
   return (
-    // A fila completa é a task 260: até lá a ação aparece, mas desabilitada.
+    // `replace`, como a `AdminNav`: Painel e Denúncias são seções irmãs, não uma pilha.
     <SectionHeader
       title="DENÚNCIAS RECENTES"
       variant="overline"
       action
       actionLabel="Ver todas"
       actionAccessibilityLabel="Ver todas as denúncias"
-      actionDisabled
+      onActionPress={() => router.replace('/Admin/Denuncias')}
     />
   );
 }
@@ -103,35 +86,6 @@ function StatCardSkeleton() {
       <Skeleton width={SKELETON_STAT_LABEL_WIDTH} height={typography.overline.lineHeight} radius="full" />
       <Skeleton width={SKELETON_STAT_VALUE_WIDTH} height={typography.h1.lineHeight} radius="full" />
       <Skeleton width={SKELETON_STAT_SUPPORT_WIDTH} height={typography.bodyS.lineHeight} radius="full" />
-    </View>
-  );
-}
-
-function ReportCardSkeleton() {
-  const metrics = layout.reportCard;
-
-  return (
-    <View style={[styles.skeletonCard, styles.reportSkeleton]}>
-      <View style={styles.reportSkeletonHeader}>
-        <Skeleton width={metrics.thumbSize} height={metrics.thumbSize} radius="full" />
-        <View style={styles.reportSkeletonHeaderText}>
-          <Skeleton width={SKELETON_REPORT_TITLE_WIDTH} height={typography.labelM.lineHeight} radius="full" />
-          <Skeleton width={SKELETON_REPORT_SUBTITLE_WIDTH} height={typography.bodyS.lineHeight} radius="full" />
-        </View>
-        <Skeleton width={SKELETON_REPORT_BADGE_WIDTH} height={layout.badge.height} radius="full" />
-      </View>
-      <Skeleton width={SKELETON_REPORT_REASON_WIDTH} height={typography.labelS.lineHeight} radius="full" />
-      <View style={styles.reportSkeletonExcerpt}>
-        <Skeleton height={typography.bodyS.fontSize} radius="full" />
-        <Skeleton width={SKELETON_REPORT_EXCERPT_LAST_LINE_WIDTH} height={typography.bodyS.fontSize} radius="full" />
-      </View>
-      {/* Sem `reportNumber`, o rodapé do card real tem só o chevron. */}
-      <Skeleton
-        width={metrics.chevronSize}
-        height={metrics.chevronSize}
-        radius="xs"
-        style={styles.reportSkeletonChevron}
-      />
     </View>
   );
 }
@@ -198,7 +152,11 @@ function PainelContent({ dashboard, refresh }: PainelContentProps) {
         <SectionEmptyState icon="flag" title="Nenhuma denúncia pendente" text="Novas denúncias aparecem aqui." />
       ) : (
         dashboard.recent_reports.map(report => (
-          <ReportCard key={report.report_id} {...recentReportCard(report)} />
+          <ReportCard
+            key={report.report_id}
+            {...recentReportCard(report)}
+            onPress={() => router.push(`/Admin/Denuncias/${report.report_id}`)}
+          />
         ))
       )}
     </ScrollView>
@@ -247,23 +205,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
   },
-  header: {
-    // No React Native a `height` inclui a borda.
-    height: HEADER_HEIGHT + HEADER_BORDER_WIDTH,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-    borderBottomWidth: HEADER_BORDER_WIDTH,
-    borderBottomColor: colors.border.default,
-    backgroundColor: colors.bg.base,
-  },
-  title: {
-    ...typography.h4,
-    flexShrink: 1,
-    color: colors.text.primary,
-  },
   // O texto do Tertiary fica rente à margem de 16, como o título; o padding segue como área de toque.
   logout: {
     marginRight: -spacing[16],
@@ -298,27 +239,5 @@ const styles = StyleSheet.create({
     borderWidth: STAT_CARD_BORDER_WIDTH,
     padding: spacing[16],
     gap: spacing[4],
-  },
-  reportSkeleton: {
-    borderWidth: layout.reportCard.borderWidth,
-    padding: REPORT_CARD_PADDING,
-    gap: spacing[8],
-  },
-  reportSkeletonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[8],
-  },
-  reportSkeletonHeaderText: {
-    flex: 1,
-    gap: layout.reportCard.titleGap,
-  },
-  // Duas barras da altura da fonte dentro de duas linhas de texto: o trecho real ocupa a mesma altura.
-  reportSkeletonExcerpt: {
-    height: typography.bodyS.lineHeight * REPORT_EXCERPT_LINES,
-    justifyContent: 'space-around',
-  },
-  reportSkeletonChevron: {
-    alignSelf: 'flex-end',
   },
 });

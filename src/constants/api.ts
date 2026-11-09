@@ -1,3 +1,4 @@
+import type { AdminReportStatus } from '@/types/adminReport';
 import type { UserEventsTab } from '@/types/user';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -200,6 +201,29 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /**
+   * Fila de denúncias, agrupada por alvo e paginada por cursor (task 244 [BE]).
+   * Sem `status`, devolve tudo menos as arquivadas (`REJECTED`). Os filtros por
+   * alvo são da task 297 [BE], que ainda não subiu: contrato conforme a task 260.
+   */
+  adminReports: (options: {
+    status?: AdminReportStatus;
+    search?: string;
+    targetUserId?: string | null;
+    targetEventId?: string | null;
+    limit?: number;
+    cursor?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    if (options.status) params.set('status', options.status);
+    if (options.search) params.set('search', options.search);
+    if (options.targetUserId) params.set('target_user_id', options.targetUserId);
+    if (options.targetEventId) params.set('target_event_id', options.targetEventId);
+    if (options.limit !== undefined) params.set('limit', String(options.limit));
+    if (options.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/admin/reports${query ? `?${query}` : ''}`;
+  },
   /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). */
   adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
   /**

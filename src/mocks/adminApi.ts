@@ -1,4 +1,9 @@
-import type { AdminReportDetail, AdminUserModerationInput, ModerationStatus } from '@/types/adminReport';
+import type {
+  AdminReportDetail,
+  AdminReportQueueItem,
+  AdminUserModerationInput,
+  ModerationStatus,
+} from '@/types/adminReport';
 
 /**
  * Mocks do detalhe de denúncia e das ações de moderação, ligados por
@@ -25,6 +30,12 @@ import type { AdminReportDetail, AdminUserModerationInput, ModerationStatus } fr
  * | `boom`      | `500` no detalhe                                                |
  * | `fail`      | Detalhe normal, ações devolvem `500`                            |
  * | `offline`   | Detalhe normal, ações falham por falta de rede                   |
+ *
+ * A fila (`GET /admin/reports`, task 244 [BE]) tem denúncias em Pendentes e Em
+ * análise; Resolvidas começa vazia e enche com as ações do detalhe. Pendentes
+ * tem mais de uma página. Buscar `boom` devolve `500` e `offline` falha por
+ * falta de rede. `?target_user_id=conta-denunciada` (Lucas, só em Em análise) e
+ * `?target_event_id=evento-churrasco` testam o filtro por alvo (task 297 [BE]).
  */
 
 export type AdminMockOutcome =
@@ -36,6 +47,61 @@ const ADMIN_MOCK = { id: 'admin-mock', name: 'Gabriel Nunes' };
 const CONTA_DENUNCIADA_ID = 'conta-denunciada';
 
 const HORA = 60 * 60 * 1000;
+
+const FILA_POR_PAGINA = 20;
+
+type LinhaDaFila = Omit<AdminReportQueueItem, 'opened_at'> & { horasAtras: number; alvoId: string };
+
+const FILA: LinhaDaFila[] = [
+  {
+    report_id: 'fila-1043',
+    alvoId: 'evento-churrasco',
+    report_number: 1043,
+    target_type: 'EVENT',
+    target_name: 'Churrasco na Redenção',
+    report_count: 1,
+    status: 'PENDING',
+    reason: 'INAPPROPRIATE_CONTENT',
+    description_excerpt: 'A foto de capa do evento tem conteúdo adulto e o evento está marcado como público.',
+    horasAtras: 5,
+  },
+  {
+    report_id: 'fila-1044',
+    alvoId: 'conta-bruno',
+    report_number: 1044,
+    target_type: 'USER',
+    target_name: 'Bruno Tavares',
+    report_count: 1,
+    status: 'PENDING',
+    reason: 'FAKE_PROFILE',
+    description_excerpt: 'O perfil usa fotos de outra pessoa e cobra entrada em eventos que nunca acontecem.',
+    horasAtras: 24,
+  },
+  {
+    report_id: 'fila-1042',
+    alvoId: CONTA_DENUNCIADA_ID,
+    report_number: 1042,
+    target_type: 'USER',
+    target_name: 'Lucas Ferreira',
+    report_count: 3,
+    status: 'REVIEWED',
+    reason: 'HARASSMENT',
+    description_excerpt: 'Ele mandou mensagens ofensivas no chat do evento depois que recusei a solicitação de conexão.',
+    horasAtras: 2,
+  },
+  ...Array.from({ length: 24 }, (_, index): LinhaDaFila => ({
+    report_id: `fila-${1100 + index}`,
+    alvoId: `conta-teste-${index + 1}`,
+    report_number: 1100 + index,
+    target_type: 'USER',
+    target_name: `Conta de Teste ${index + 1}`,
+    report_count: 1,
+    status: 'PENDING',
+    reason: 'SPAM',
+    description_excerpt: 'Envia o mesmo convite para todo mundo dos eventos.',
+    horasAtras: 30 + index,
+  })),
+];
 
 function denunciaInicial(reportId: string): AdminReportDetail {
   const agora = Date.now();
@@ -75,7 +141,22 @@ function denunciaInicial(reportId: string): AdminReportDetail {
   if (reportId === 'archived') return resolvida('ARCHIVED', 'ACTIVE', 'REJECTED');
   if (reportId === 'suspended') return { ...base, target: { ...base.target, moderation_status: 'SUSPENDED' } };
   if (reportId === 'banned') return { ...base, target: { ...base.target, moderation_status: 'BANNED' } };
-  return base;
+
+  const linha = FILA.find((item) => item.report_id === reportId);
+  if (!linha) return base;
+  return {
+    ...base,
+    report_number: linha.report_number,
+    status: linha.status,
+    opened_at: new Date(agora - linha.horasAtras * HORA).toISOString(),
+    target: {
+      ...base.target,
+      type: linha.target_type ?? 'USER',
+      name: linha.target_name,
+    },
+    reason: linha.reason,
+    description: linha.description_excerpt,
+  };
 }
 
 const denuncias = new Map<string, AdminReportDetail>();
@@ -118,9 +199,54 @@ function falhaDaAcao(reportId: string): AdminMockOutcome | null {
   return null;
 }
 
+function filaDeDenuncias(query: string): AdminMockOutcome {
+  const params = new URLSearchParams(query);
+  const busca = (params.get('search') ?? '').trim().toLowerCase();
+  if (busca === 'boom') return { erro: { status: 500, detail: 'Internal server error' } };
+  if (busca === 'offline') return { semRede: true };
+
+  const status = params.get('status');
+  const numero = busca.replace(/^#/, '');
+  const agora = Date.now();
+  const alvoId = params.get('target_user_id') ?? params.get('target_event_id');
+  const linhas = FILA.filter((linha) => !alvoId || linha.alvoId === alvoId).map(({ horasAtras, alvoId: _alvo, ...linha }) => ({
+    ...linha,
+    // O estado do detalhe manda: resolver lá tira a denúncia da aba aberta.
+    status: denuncias.get(linha.report_id)?.status ?? linha.status,
+    opened_at: new Date(agora - horasAtras * HORA).toISOString(),
+  }))
+    .filter((linha) => (status ? linha.status === status : linha.status !== 'REJECTED'))
+    .filter(
+      (linha) =>
+        !busca ||
+        (linha.target_name ?? '').toLowerCase().includes(busca) ||
+        String(linha.report_number) === numero,
+    )
+    .sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at));
+
+  const inicio = Number(params.get('cursor') ?? 0);
+  const fim = inicio + Number(params.get('limit') ?? FILA_POR_PAGINA);
+  return {
+    resposta: {
+      items: linhas.slice(inicio, fim),
+      next_cursor: fim < linhas.length ? String(fim) : null,
+    },
+  };
+}
+
 /** `undefined` quando a rota não é do painel administrativo. */
-export function resolveAdminMock(partes: string[], method: string, init: RequestInit): AdminMockOutcome | undefined {
+export function resolveAdminMock(
+  partes: string[],
+  method: string,
+  init: RequestInit,
+  query = '',
+): AdminMockOutcome | undefined {
   if (partes[0] !== 'admin') return undefined;
+
+  // GET /admin/reports
+  if (partes[1] === 'reports' && partes.length === 2 && method === 'GET') {
+    return filaDeDenuncias(query);
+  }
 
   // GET /admin/reports/{id}
   if (partes[1] === 'reports' && partes.length === 3 && method === 'GET') {

@@ -8,12 +8,12 @@ import { colors } from '@/constants/colors';
 import { AdminGuard } from '@/utils/AdminGuard';
 
 /**
- * Rota de cada seção da `AdminNav`. Só o Painel tem tela por enquanto:
- * Denúncias (task 260) e Usuários (task 262) entram aqui quando existirem, e
- * Conteúdo está fora do escopo do épico E11 — tocar nelas não navega.
+ * Rota de cada seção da `AdminNav`. Usuários (task 262) entra aqui quando
+ * existir, e Conteúdo está fora do escopo do épico E11 — tocar nelas não navega.
  */
-const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel'>> = {
+const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Denuncias'>> = {
   Painel: '/Admin/Painel',
+  Denuncias: '/Admin/Denuncias',
 };
 
 const DESTINATIONS: AdminNavDestination[] = ['Painel', 'Denuncias', 'Usuarios', 'Conteudo'];

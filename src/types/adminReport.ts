@@ -63,6 +63,29 @@ export interface AdminReportDetail {
   resolution: AdminReportResolution | null;
 }
 
+/**
+ * Linha de `GET /admin/reports` (task 244 [BE]). A fila é agrupada por alvo:
+ * a linha é a denúncia mais recente dele, e `report_count` soma as demais.
+ */
+export interface AdminReportQueueItem {
+  report_id: string;
+  report_number: number;
+  /** `null` quando o alvo da denúncia não existe mais. */
+  target_type: AdminReportTarget['type'] | null;
+  /** Nome da conta ou título do evento. */
+  target_name: string | null;
+  report_count: number;
+  status: AdminReportStatus | (string & {});
+  reason: ReportReason | (string & {});
+  description_excerpt: string;
+  opened_at: string;
+}
+
+export interface AdminReportQueuePage {
+  items: AdminReportQueueItem[];
+  next_cursor: string | null;
+}
+
 /** Corpo de `PATCH /admin/users/{user_id}/moderation`. */
 export type AdminUserModerationInput =
   | { action: 'BAN'; report_id?: string }
