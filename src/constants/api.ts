@@ -200,4 +200,6 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /** Lista de moderação de contas, paginada por cursor. Só `ADMIN`. A query vem de `adminUsersQuery`. */
+  adminUsers: (query: string) => `/admin/users${query ? `?${query}` : ''}`,
 } as const;
