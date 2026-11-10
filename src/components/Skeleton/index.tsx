@@ -166,7 +166,8 @@ const styles = StyleSheet.create({
   },
   itemContent: {
     flex: 1,
-    gap: spacing[8],
+    // Mesmo gap do `compactContent` do EventCard (4px)
+    gap: spacing[4],
   },
 });
 
