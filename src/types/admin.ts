@@ -71,6 +71,14 @@ export interface RecentReportCardModel {
 /** Status de moderação de usuário — `UserModerationStatusEnum` do backend. */
 export type UserModerationStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 
+/** Uma entrada do histórico de ações de moderação sobre o usuário. */
+export interface ModerationHistoryEntry {
+  /** ISO 8601. */
+  occurred_at: string;
+  /** Descrição da ação, ex.: "Banido permanentemente · Denúncia #1042". */
+  description: string;
+}
+
 /**
  * Contrato de `GET /admin/users/{user_id}` (task 249 [BE]).
  * Ficha completa do usuário para moderação.
@@ -90,10 +98,14 @@ export interface AdminUserProfile {
   banned_at: string | null;
   /** Total de eventos criados pelo usuário. */
   events_created: number;
+  /** Eventos cancelados pelo usuário. */
+  events_cancelled: number;
   /** Total de denúncias recebidas (em qualquer status). */
   reports_received: number;
-  /** Denúncias ainda abertas (PENDING ou REVIEWED). */
-  reports_open: number;
+  /** Denúncias procedentes (RESOLVED). */
+  reports_upheld: number;
+  /** Entradas do histórico de moderação, da mais recente para a mais antiga. */
+  moderation_history: ModerationHistoryEntry[];
 }
 
 /** Ação de moderação enviada para `POST /admin/users/{user_id}/moderation`. */
