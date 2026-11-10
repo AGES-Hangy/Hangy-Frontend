@@ -53,7 +53,7 @@ export type SessionEndReason = 'expired' | 'changed';
 type SessionExpiredHandler = (reason: SessionEndReason) => void;
 
 /** O 403 das rotas `/admin/*` quando a conta não é (mais) administradora. */
-const ADMIN_ACCESS_REQUIRED = 'Admin access required';
+export const ADMIN_ACCESS_REQUIRED = 'Admin access required';
 
 let onSessionExpired: SessionExpiredHandler | null = null;
 

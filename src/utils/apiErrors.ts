@@ -1,4 +1,4 @@
-import { ApiError, UploadCancelledError } from '@/utils/http';
+import { ADMIN_ACCESS_REQUIRED, ApiError, UploadCancelledError } from '@/utils/http';
 
 /**
  * Tradução dos erros da API para o que a tela mostra.
@@ -87,6 +87,18 @@ export function describeProfileLoadError(error: unknown): LoadError {
   }
 
   return loadError;
+}
+
+/** O 404 e o 410 da tabela de `describeLoadError` são de evento: nas rotas `/admin/*` viram o erro genérico. */
+export function describeAdminLoadError(error: unknown): LoadError {
+  const loadError = describeLoadError(error);
+  return loadError.kind === 'offline' || loadError.kind === 'timeout' ? loadError : describeLoadError(null);
+}
+
+/** Falhas em que o `apiFetch` já encerrou a sessão e está levando para o Login. */
+export function endsSession(error: unknown): boolean {
+  if (!isApiErrorLike(error)) return false;
+  return error.status === 401 || (error.status === 403 && error.detail === ADMIN_ACCESS_REQUIRED);
 }
 
 /** O que fazer com o erro de uma ação (aprovar, recusar, remover, cancelar). */
