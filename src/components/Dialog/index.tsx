@@ -73,6 +73,30 @@ const VARIANTS = {
     confirmLabel: 'Desbloquear',
     destructive: false,
   },
+  // Admin — banir usuário. Segue o frame "Admin — Denúncia — banir usuário" (task 261).
+  // O título leva o nome do usuário e vem por `title`.
+  BanUser: {
+    title: 'Banir usuário?',
+    description:
+      'O usuário perderá o acesso ao app permanentemente. Esta ação pode ser revertida pelo painel.',
+    confirmLabel: 'Banir',
+    destructive: true,
+  },
+  // Admin — suspender usuário. Sem frame próprio: segue o padrão destrutivo.
+  // O título leva o nome do usuário e vem por `title`.
+  SuspendUser: {
+    title: 'Suspender usuário?',
+    description: 'O usuário ficará sem acesso ao app até a data informada.',
+    confirmLabel: 'Suspender',
+    destructive: true,
+  },
+  // Admin — reverter banimento ou suspensão.
+  RevertModeration: {
+    title: 'Reverter moderação?',
+    description: 'O usuário voltará a ter acesso ao app.',
+    confirmLabel: 'Reverter',
+    destructive: false,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({

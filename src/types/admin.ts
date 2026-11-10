@@ -67,3 +67,52 @@ export interface RecentReportCardModel {
   reason: string;
   descriptionExcerpt: string;
 }
+
+/** Status de moderação de usuário — `UserModerationStatusEnum` do backend. */
+export type UserModerationStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+
+/**
+ * Contrato de `GET /admin/users/{user_id}` (task 249 [BE]).
+ * Ficha completa do usuário para moderação.
+ */
+export interface AdminUserProfile {
+  user_id: string;
+  name: string;
+  /** URI da foto de perfil, ou `null` quando não há foto. */
+  avatar_url: string | null;
+  email: string;
+  /** ISO 8601 — data de cadastro. */
+  joined_at: string;
+  moderation_status: UserModerationStatus;
+  /** Presente quando `moderation_status` é `SUSPENDED`. ISO 8601. */
+  suspended_until: string | null;
+  /** Presente quando `moderation_status` é `BANNED`. ISO 8601. */
+  banned_at: string | null;
+  /** Total de eventos criados pelo usuário. */
+  events_created: number;
+  /** Total de denúncias recebidas (em qualquer status). */
+  reports_received: number;
+  /** Denúncias ainda abertas (PENDING ou REVIEWED). */
+  reports_open: number;
+}
+
+/** Ação de moderação enviada para `POST /admin/users/{user_id}/moderation`. */
+export type ModerationAction = 'BAN' | 'SUSPEND' | 'REVERT';
+
+/** Corpo do `POST /admin/users/{user_id}/moderation`. */
+export interface ModerationPayload {
+  action: ModerationAction;
+  /**
+   * Presente apenas quando `action === 'SUSPEND'`.
+   * ISO 8601 — data/hora de fim da suspensão.
+   */
+  suspended_until?: string;
+}
+
+/** Resposta do `POST /admin/users/{user_id}/moderation`. */
+export interface ModerationResult {
+  user_id: string;
+  moderation_status: UserModerationStatus;
+  suspended_until: string | null;
+  banned_at: string | null;
+}

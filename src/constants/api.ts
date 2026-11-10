@@ -200,4 +200,11 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
+  adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
+  /**
+   * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
+   * `POST` com `{ action: 'BAN' | 'SUSPEND' | 'REVERT', suspended_until? }`.
+   */
+  adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
 } as const;

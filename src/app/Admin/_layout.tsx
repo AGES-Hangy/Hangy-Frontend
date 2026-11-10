@@ -8,11 +8,12 @@ import { colors } from '@/constants/colors';
 import { AdminGuard } from '@/utils/AdminGuard';
 
 /**
- * Rota de cada seção da `AdminNav`. Só o Painel tem tela por enquanto:
- * Denúncias (task 260) e Usuários (task 262) entram aqui quando existirem, e
- * Conteúdo está fora do escopo do épico E11 — tocar nelas não navega.
+ * Rota de cada seção da `AdminNav`. `Usuario` não é uma seção da nav, mas o
+ * layout precisa conhecê-la para o `useSegments` calcular `active` corretamente:
+ * quando o admin está na ficha de um usuário, a aba "Usuários" fica marcada.
+ * Denúncias (task 260) entra aqui quando existir. Conteúdo está fora do escopo.
  */
-const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel'>> = {
+const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Usuarios'>> = {
   Painel: '/Admin/Painel',
 };
 
