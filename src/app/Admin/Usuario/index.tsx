@@ -314,16 +314,9 @@ export default function AdminUsuario() {
 
     const action = dialogKind === 'ban' ? 'BAN' : dialogKind === 'suspend' ? 'SUSPEND' : 'REVERT';
 
-    let suspendedUntil: string | undefined;
-    if (action === 'SUSPEND') {
-      const until = new Date();
-      until.setDate(until.getDate() + 7);
-      suspendedUntil = until.toISOString();
-    }
-
     setDialogKind(null);
 
-    const result = await moderate(action, suspendedUntil);
+    const result = await moderate(action);
     if (result.kind === 'done') {
       addToast({ type: 'success', message: moderateSuccessMessage(action) });
       void refetch();

@@ -204,7 +204,7 @@ export const endpoints = {
   adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
   /**
    * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
-   * `POST` com `{ action: 'BAN' | 'SUSPEND' | 'REVERT', suspended_until? }`.
+   * `PATCH` com união discriminada por `action`: `BAN`, `SUSPEND` (+ `duration_days`) ou `REVERT`.
    */
   adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
 } as const;

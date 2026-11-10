@@ -5,13 +5,16 @@ import type { ModerationAction, ModerationPayload, ModerationResult } from '@/ty
 import { apiFetch } from '@/utils/http';
 import { isApiErrorLike } from '@/utils/apiErrors';
 
+/** Duração padrão de uma suspensão iniciada pela ficha (sem campo de data). */
+const DEFAULT_SUSPENSION_DAYS = 7;
+
 export type ModerateResult =
   | { kind: 'done'; result: ModerationResult }
   | { kind: 'failed'; message: string };
 
 /**
  * Aplica uma ação de moderação sobre um usuário
- * (`POST /admin/users/{user_id}/moderation`).
+ * (`PATCH /admin/users/{user_id}/moderation`).
  *
  * Retorna `{ moderate, isLoading }`. `moderate` resolve sempre — `kind: 'done'`
  * em sucesso, `kind: 'failed'` com mensagem legível em erro.
@@ -22,29 +25,29 @@ export function useModerateUser(userId: string) {
 
   const moderate = useCallback(async (
     action: ModerationAction,
-    suspendedUntil?: string,
   ): Promise<ModerateResult> => {
     if (inFlight.current) return { kind: 'failed', message: 'Ação em andamento' };
     inFlight.current = true;
     setIsLoading(true);
 
-    const payload: ModerationPayload = { action };
-    if (action === 'SUSPEND' && suspendedUntil) {
-      payload.suspended_until = suspendedUntil;
-    }
+    const payload: ModerationPayload =
+      action === 'SUSPEND'
+        ? { action: 'SUSPEND', duration_days: DEFAULT_SUSPENSION_DAYS }
+        : action === 'BAN'
+          ? { action: 'BAN' }
+          : { action: 'REVERT' };
 
     try {
       const result = await apiFetch<ModerationResult>(
         endpoints.adminUserModeration(userId),
         {
-          method: 'POST',
+          method: 'PATCH',
           body: JSON.stringify(payload),
         },
       );
       return { kind: 'done', result };
     } catch (caught) {
-      const message = resolveErrorMessage(caught);
-      return { kind: 'failed', message };
+      return { kind: 'failed', message: resolveErrorMessage(caught) };
     } finally {
       inFlight.current = false;
       setIsLoading(false);
@@ -57,10 +60,15 @@ export function useModerateUser(userId: string) {
 function resolveErrorMessage(error: unknown): string {
   if (!isApiErrorLike(error)) return 'Não foi possível concluir a ação. Tente de novo.';
 
-  const { kind, status } = error;
+  const { kind, status, detail } = error;
   if (kind === 'network') return 'Sem conexão com a internet';
   if (kind === 'timeout') return 'A conexão demorou demais';
-  if (status === 409) return 'Ação inválida para o estado atual do usuário';
   if (status === 404) return 'Usuário não encontrado';
+  if (status === 409) {
+    if (detail === 'Account is already banned') return 'Esta conta já está banida';
+    if (detail === 'User is not banned or suspended') return 'Esta conta já está ativa';
+    if (detail === 'Admins cannot moderate their own account') return 'Não é possível moderar a própria conta';
+    return 'Ação inválida para o estado atual do usuário';
+  }
   return 'Não foi possível concluir a ação. Tente de novo.';
 }

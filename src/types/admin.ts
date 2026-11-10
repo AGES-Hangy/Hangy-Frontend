@@ -108,23 +108,24 @@ export interface AdminUserProfile {
   moderation_history: ModerationHistoryEntry[];
 }
 
-/** Ação de moderação enviada para `POST /admin/users/{user_id}/moderation`. */
+/** Ação de moderação enviada para `PATCH /admin/users/{user_id}/moderation`. */
 export type ModerationAction = 'BAN' | 'SUSPEND' | 'REVERT';
 
-/** Corpo do `POST /admin/users/{user_id}/moderation`. */
-export interface ModerationPayload {
-  action: ModerationAction;
-  /**
-   * Presente apenas quando `action === 'SUSPEND'`.
-   * ISO 8601 — data/hora de fim da suspensão.
-   */
-  suspended_until?: string;
-}
+/** Corpo do `PATCH /admin/users/{user_id}/moderation`. */
+export type ModerationPayload =
+  | { action: 'BAN'; report_id?: string }
+  | { action: 'SUSPEND'; duration_days: number; report_id?: string }
+  | { action: 'REVERT' };
 
-/** Resposta do `POST /admin/users/{user_id}/moderation`. */
+/** Resposta do `PATCH /admin/users/{user_id}/moderation` (task 249 [BE]). */
 export interface ModerationResult {
   user_id: string;
+  name: string | null;
+  email: string;
+  role: string;
   moderation_status: UserModerationStatus;
+  /** Presente apenas quando `moderation_status === 'SUSPENDED'`. ISO 8601. */
   suspended_until: string | null;
-  banned_at: string | null;
+  /** ISO 8601 — data de cadastro. */
+  created_at: string;
 }
