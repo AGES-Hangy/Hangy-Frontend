@@ -24,10 +24,10 @@ import { colors } from '@/constants/colors';
 import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useAdminUser } from '@/hooks/useAdminUser';
-import { useModerateUser } from '@/hooks/useModerateUser';
+import { SUSPENSION_DAYS, useModerateUser } from '@/hooks/useModerateUser';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useRefreshable } from '@/hooks/useRefreshable';
-import type { AdminUserProfile } from '@/types/admin';
+import type { AdminUserProfile, ModerationAction } from '@/types/admin';
 
 const HEADER_HEIGHT = 56;
 const HEADER_BORDER_WIDTH = 1.5;
@@ -45,9 +45,10 @@ const STAT_CARD_MIN_HEIGHT =
   typography.bodyS.lineHeight +
   spacing[4] * 2;
 
-/** Padding horizontal da área de ações fixas no rodapé. */
+/** Padding da área de ações fixas no rodapé. */
 const FOOTER_PADDING_H = spacing[16];
 const FOOTER_PADDING_V = spacing[16];
+const MIN_TOUCH_TARGET = 44;
 
 const SKELETON_NAME_WIDTH = '50%';
 const SKELETON_META_WIDTH = '65%';
@@ -57,7 +58,14 @@ const SKELETON_STAT_VALUE_WIDTH = '35%';
 const SKELETON_STAT_SUPPORT_WIDTH = '55%';
 const SKELETON_HISTORY_WIDTHS = ['80%', '65%', '72%'] as const;
 
-type DialogKind = 'ban' | 'suspend' | 'revert' | null;
+/** Ação aguardando confirmação no Dialog; `null` com o Dialog fechado. */
+type PendingAction = ModerationAction | null;
+
+const DIALOG_VARIANT = {
+  BAN: 'BanUser',
+  SUSPEND: 'SuspendUser',
+  REVERT: 'RevertModeration',
+} as const satisfies Record<ModerationAction, string>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,15 +87,18 @@ function formatDayMonth(iso: string): string {
   }
 }
 
-function actionLabel(profile: AdminUserProfile): string {
-  if (profile.moderation_status === 'BANNED') return 'Reverter banimento';
-  if (profile.moderation_status === 'SUSPENDED') return 'Reverter suspensão';
-  return 'Banir usuário';
+function revertLabel(profile: AdminUserProfile): string {
+  return profile.moderation_status === 'BANNED' ? 'Reverter banimento' : 'Reverter suspensão';
 }
 
-function dialogKindForProfile(profile: AdminUserProfile): DialogKind {
-  if (profile.moderation_status === 'BANNED' || profile.moderation_status === 'SUSPENDED') return 'revert';
-  return 'ban';
+function reportsLinkLabel(count: number): string {
+  return count === 1 ? 'Ver a denúncia' : `Ver as ${count} denúncias`;
+}
+
+function dialogTitle(action: ModerationAction, name: string): string {
+  if (action === 'BAN') return `Banir ${name}?`;
+  if (action === 'SUSPEND') return `Suspender ${name}?`;
+  return `Reverter moderação de ${name}?`;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,11 +181,9 @@ function UsuarioSkeleton() {
 type UsuarioContentProps = {
   profile: AdminUserProfile;
   refresh: () => Promise<void>;
-  onViewReports: () => void;
-  onAction: (kind: DialogKind) => void;
 };
 
-function UsuarioContent({ profile, refresh, onViewReports, onAction }: UsuarioContentProps) {
+function UsuarioContent({ profile, refresh }: UsuarioContentProps) {
   const { isRefreshing, onRefresh } = useRefreshable(refresh);
 
   const reportsTone = profile.reports_received > 0 ? 'Alert' : 'Neutral';
@@ -246,9 +255,6 @@ function UsuarioContent({ profile, refresh, onViewReports, onAction }: UsuarioCo
           ))}
         </View>
       )}
-
-      {/* Espaço para o rodapé fixo não cobrir o conteúdo */}
-      <View style={styles.footerSpacer} />
     </ScrollView>
   );
 }
@@ -260,36 +266,60 @@ function UsuarioContent({ profile, refresh, onViewReports, onAction }: UsuarioCo
 type UsuarioFooterProps = {
   profile: AdminUserProfile;
   isModerating: boolean;
-  onAction: (kind: DialogKind) => void;
+  onAction: (action: ModerationAction) => void;
   onViewReports: () => void;
 };
 
+/**
+ * Conta ativa: "Banir" e "Suspender 7 dias", como no detalhe da denúncia
+ * (task 261). Banida ou suspensa: só "Reverter".
+ */
 function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: UsuarioFooterProps) {
-  const kind = dialogKindForProfile(profile);
-  const label = actionLabel(profile);
-  const variant = kind === 'ban' ? 'Danger' : 'Secondary';
-  const hasReports = profile.reports_received > 0;
+  const isActive = profile.moderation_status === 'ACTIVE';
+  const reports = profile.reports_received;
 
   return (
     <View style={styles.footer}>
-      <Button
-        label={label}
-        variant={variant}
-        isLoading={isModerating}
-        onPress={() => onAction(kind)}
-        accessibilityLabel={label}
-      />
-      {hasReports && (
+      {isActive ? (
+        <View style={styles.mainActions}>
+          <Button
+            label="Banir usuário"
+            variant="Danger"
+            size="LG"
+            onPress={() => onAction('BAN')}
+            disabled={isModerating}
+            accessibilityLabel={`Banir ${profile.name}`}
+            style={styles.mainAction}
+          />
+          <Button
+            label={`Suspender ${SUSPENSION_DAYS} dias`}
+            variant="Secondary"
+            size="LG"
+            onPress={() => onAction('SUSPEND')}
+            disabled={isModerating}
+            accessibilityLabel={`Suspender ${profile.name} por ${SUSPENSION_DAYS} dias`}
+            style={styles.mainAction}
+          />
+        </View>
+      ) : (
+        <Button
+          label={revertLabel(profile)}
+          variant="Secondary"
+          size="LG"
+          onPress={() => onAction('REVERT')}
+          disabled={isModerating}
+          accessibilityLabel={`${revertLabel(profile)} de ${profile.name}`}
+        />
+      )}
+      {reports > 0 && (
         <Pressable
           onPress={onViewReports}
-          accessibilityRole="button"
-          accessibilityLabel={`Ver as ${profile.reports_received} denúncias deste usuário`}
+          accessibilityRole="link"
+          accessibilityLabel={`${reportsLinkLabel(reports)} contra ${profile.name}`}
           hitSlop={spacing[8]}
           style={({ pressed }) => [styles.reportsLink, pressed && { opacity: pressedOpacity }]}
         >
-          <Text style={styles.reportsLinkText}>
-            Ver as {profile.reports_received} denúncias
-          </Text>
+          <Text style={styles.reportsLinkText}>{reportsLinkLabel(reports)}</Text>
         </Pressable>
       )}
     </View>
@@ -301,45 +331,40 @@ function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: Usuar
 // ---------------------------------------------------------------------------
 
 export default function AdminUsuario() {
-  const params = useLocalSearchParams<{ userId: string }>();
-  const userId = params.userId ?? '';
+  const params = useLocalSearchParams<{ id: string }>();
+  const userId = params.id ?? '';
   const { data, error, refetch } = useAdminUser(userId);
   const { moderate, isLoading: isModerating } = useModerateUser(userId);
   const { isOffline } = useNetworkStatus();
   const { addToast } = useToast();
-  const [dialogKind, setDialogKind] = useState<DialogKind>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
 
-  const handleModerate = useCallback(async () => {
-    if (!dialogKind || !data) return;
+  // O Dialog fica aberto, com o botão em loading, até o PATCH responder.
+  const handleConfirm = useCallback(async () => {
+    if (!pendingAction) return;
 
-    const action = dialogKind === 'ban' ? 'BAN' : dialogKind === 'suspend' ? 'SUSPEND' : 'REVERT';
+    const result = await moderate(pendingAction);
+    setPendingAction(null);
 
-    setDialogKind(null);
-
-    const result = await moderate(action);
     if (result.kind === 'done') {
-      addToast({ type: 'success', message: moderateSuccessMessage(action) });
+      addToast({ type: 'success', message: moderateSuccessMessage(pendingAction) });
       void refetch();
-    } else {
-      addToast({ type: 'error', message: result.message });
+      return;
     }
-  }, [dialogKind, data, moderate, addToast, refetch]);
 
+    addToast({ type: 'error', message: result.message });
+    // 409: a ficha está desatualizada (ex.: outro admin já agiu); 404: a conta sumiu.
+    if (result.status === 409) void refetch();
+    else if (result.status === 404) router.back();
+  }, [pendingAction, moderate, addToast, refetch]);
+
+  // Fila de denúncias filtrada por esta conta (task 260 lê `target_user_id`).
   const handleViewReports = useCallback(() => {
-    // task 262 — fila de denúncias do usuário
-  }, []);
+    router.push({ pathname: '/Admin/Denuncias', params: { target_user_id: userId } });
+  }, [userId]);
 
   const body = (() => {
-    if (data) {
-      return (
-        <UsuarioContent
-          profile={data}
-          refresh={refetch}
-          onViewReports={handleViewReports}
-          onAction={setDialogKind}
-        />
-      );
-    }
+    if (data) return <UsuarioContent profile={data} refresh={refetch} />;
     if (error) {
       return (
         <EmptyState
@@ -372,41 +397,21 @@ export default function AdminUsuario() {
       {data && (
         <UsuarioFooter
           profile={data}
-          isModerating={isModerating}
-          onAction={setDialogKind}
+          isModerating={isModerating || isOffline}
+          onAction={setPendingAction}
           onViewReports={handleViewReports}
         />
       )}
 
-      {/* Diálogos */}
-      {data && (
-        <>
-          <Dialog
-            visible={dialogKind === 'ban'}
-            variant="BanUser"
-            title={`Banir ${data.name}?`}
-            onConfirm={() => { void handleModerate(); }}
-            onCancel={() => setDialogKind(null)}
-            isLoading={isModerating}
-          />
-          <Dialog
-            visible={dialogKind === 'suspend'}
-            variant="SuspendUser"
-            title={`Suspender ${data.name}?`}
-            description="O usuário ficará sem acesso ao app por 7 dias."
-            onConfirm={() => { void handleModerate(); }}
-            onCancel={() => setDialogKind(null)}
-            isLoading={isModerating}
-          />
-          <Dialog
-            visible={dialogKind === 'revert'}
-            variant="RevertModeration"
-            title={`Reverter moderação de ${data.name}?`}
-            onConfirm={() => { void handleModerate(); }}
-            onCancel={() => setDialogKind(null)}
-            isLoading={isModerating}
-          />
-        </>
+      {data && pendingAction && (
+        <Dialog
+          visible
+          variant={DIALOG_VARIANT[pendingAction]}
+          title={dialogTitle(pendingAction, data.name)}
+          onConfirm={() => { void handleConfirm(); }}
+          onCancel={() => { if (!isModerating) setPendingAction(null); }}
+          isLoading={isModerating}
+        />
       )}
     </View>
   );
@@ -421,9 +426,6 @@ function moderateSuccessMessage(action: 'BAN' | 'SUSPEND' | 'REVERT'): string {
 // ---------------------------------------------------------------------------
 // Estilos
 // ---------------------------------------------------------------------------
-
-/** Altura estimada do rodapé: botão LG (52) + link (20) + padding vertical (32) + gap (12). */
-const FOOTER_HEIGHT = spacing[48] + spacing[4] + spacing[20] + FOOTER_PADDING_V * 2 + spacing[12];
 
 const styles = StyleSheet.create({
   screen: {
@@ -516,10 +518,6 @@ const styles = StyleSheet.create({
     ...typography.bodyM,
     color: colors.text.tertiary,
   },
-  // Espaço para o rodapé não cobrir o último item do scroll
-  footerSpacer: {
-    height: FOOTER_HEIGHT,
-  },
   // Rodapé fixo
   footer: {
     paddingHorizontal: FOOTER_PADDING_H,
@@ -529,9 +527,16 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border.default,
     backgroundColor: colors.bg.base,
   },
+  mainActions: {
+    flexDirection: 'row',
+    gap: spacing[12],
+  },
+  mainAction: {
+    flex: 1,
+  },
   reportsLink: {
     alignItems: 'center',
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
     justifyContent: 'center',
   },
   reportsLinkText: {

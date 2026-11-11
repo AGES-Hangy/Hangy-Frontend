@@ -5,12 +5,13 @@ import type { ModerationAction, ModerationPayload, ModerationResult } from '@/ty
 import { apiFetch } from '@/utils/http';
 import { isApiErrorLike } from '@/utils/apiErrors';
 
-/** Duração padrão de uma suspensão iniciada pela ficha (sem campo de data). */
-const DEFAULT_SUSPENSION_DAYS = 7;
+/** Duração da suspensão aplicada pela ficha, igual à do detalhe da denúncia (task 261). */
+export const SUSPENSION_DAYS = 7;
 
 export type ModerateResult =
   | { kind: 'done'; result: ModerationResult }
-  | { kind: 'failed'; message: string };
+  /** `status` é o HTTP da falha (`null` sem resposta), para a tela reagir a 404 e 409. */
+  | { kind: 'failed'; message: string; status: number | null };
 
 /**
  * Aplica uma ação de moderação sobre um usuário
@@ -26,13 +27,13 @@ export function useModerateUser(userId: string) {
   const moderate = useCallback(async (
     action: ModerationAction,
   ): Promise<ModerateResult> => {
-    if (inFlight.current) return { kind: 'failed', message: 'Ação em andamento' };
+    if (inFlight.current) return { kind: 'failed', message: 'Ação em andamento', status: null };
     inFlight.current = true;
     setIsLoading(true);
 
     const payload: ModerationPayload =
       action === 'SUSPEND'
-        ? { action: 'SUSPEND', duration_days: DEFAULT_SUSPENSION_DAYS }
+        ? { action: 'SUSPEND', duration_days: SUSPENSION_DAYS }
         : action === 'BAN'
           ? { action: 'BAN' }
           : { action: 'REVERT' };
@@ -47,7 +48,8 @@ export function useModerateUser(userId: string) {
       );
       return { kind: 'done', result };
     } catch (caught) {
-      return { kind: 'failed', message: resolveErrorMessage(caught) };
+      const status = isApiErrorLike(caught) ? caught.status : null;
+      return { kind: 'failed', message: resolveErrorMessage(caught), status };
     } finally {
       inFlight.current = false;
       setIsLoading(false);

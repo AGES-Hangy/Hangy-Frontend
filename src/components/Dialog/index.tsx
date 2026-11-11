@@ -73,22 +73,22 @@ const VARIANTS = {
     confirmLabel: 'Desbloquear',
     destructive: false,
   },
-  // Admin — banir usuário. Segue o frame "Admin — Denúncia — banir usuário" (task 261).
-  // O título leva o nome do usuário e vem por `title`.
+  // "Admin — Denúncia — banir usuário" (Sprint 4). O título leva o nome da
+  // conta e vem por `title`. Suspender não tem frame próprio: segue a mesma
+  // estrutura, só o texto muda. Mesmo texto do detalhe da denúncia (task 261).
   BanUser: {
     title: 'Banir usuário?',
     description:
-      'O usuário perderá o acesso ao app permanentemente. Esta ação pode ser revertida pelo painel.',
-    confirmLabel: 'Banir',
+      'O perfil sai do ar, as participações são canceladas e o acesso fica bloqueado. Você pode reverter em Usuários.',
+    confirmLabel: 'Banir usuário',
     destructive: true,
   },
-  // Admin — suspender usuário. Sem frame próprio: segue o padrão destrutivo.
-  // O título leva o nome do usuário e vem por `title`.
   SuspendUser: {
     title: 'Suspender usuário?',
-    description: 'O usuário ficará sem acesso ao app até a data informada.',
-    confirmLabel: 'Suspender',
-    destructive: true,
+    description:
+      'A conta fica sem acesso por 7 dias e volta sozinha depois disso. Você pode reverter em Usuários.',
+    confirmLabel: 'Suspender 7 dias',
+    destructive: false,
   },
   // Admin — reverter banimento ou suspensão.
   RevertModeration: {
