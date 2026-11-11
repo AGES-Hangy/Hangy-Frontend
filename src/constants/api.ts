@@ -198,6 +198,29 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/connections/pending${query ? `?${query}` : ''}`;
   },
+  /**
+   * "Ver todos" do bloco de eventos da busca (task 127 [BE]), paginado por
+   * cursor. Mantém o termo, as tags e as datas do bloco de origem.
+   */
+  searchEvents: (options?: {
+    q?: string;
+    tagIds?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    cursor?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    // O backend espera os UUIDs numa string só, separados por vírgula (OR).
+    if (options?.tagIds?.length) params.set('tag_ids', options.tagIds.join(','));
+    if (options?.dateFrom) params.set('date_from', options.dateFrom);
+    if (options?.dateTo) params.set('date_to', options.dateTo);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/search/events${query ? `?${query}` : ''}`;
+  },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
 } as const;

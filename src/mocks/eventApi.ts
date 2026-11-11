@@ -1530,6 +1530,40 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     } as T;
   }
 
+  // `GET /search/events` — o cenário sai do `q`: `vazio`, `erro`, `erro-pagina`,
+  // `tag-inexistente` (404 com `tagId`) ou qualquer outro termo para a lista cheia.
+  if (partes.join('/') === 'search/events' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const limit = Number(params.get('limit') ?? 20);
+    const q = (params.get('q') ?? '').trim();
+    const cursor = params.get('cursor');
+    const offset = cursor ? Number(cursor) : 0;
+    if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(offset) || offset < 0) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+    // Nunca responde: deixa a tela parada no "Carregando" para conferir o skeleton.
+    if (q === 'carregando') return new Promise<T>(() => {});
+    if (params.get('tag_ids') && q === 'tag-inexistente') throw new MockApiError(404, 'Tag not found');
+    if (q === 'erro' || (q === 'erro-pagina' && cursor)) throw new MockApiError(500, 'Internal server error');
+    const nomes = ['Futebol na PUC', 'Futebol na Orla', 'Fut 7 no Planet', 'Pelada de domingo', 'Futebol de areia', 'Copa dos Amigos', 'Futsal na quadra'];
+    const privacidades = ['PUBLIC', 'INVITE_ONLY', 'PRIVATE'] as const;
+    const todos = q === 'vazio' ? [] : Array.from({ length: 45 }, (_, index) => ({
+      event_id: `mock-search-${index + 1}`,
+      title: `${nomes[index % nomes.length]}${index >= nomes.length ? ` ${Math.floor(index / nomes.length) + 1}` : ''}`,
+      event_date: new Date(Date.now() + (index + 1) * 24 * 60 * 60 * 1000).toISOString(),
+      location_name: index % 4 === 3 ? 'Ginásio Municipal Menino Deus, bairro Centro Histórico' : 'Parque Esportivo',
+      cover_photo_url: null,
+      privacy: privacidades[index % privacidades.length],
+    }));
+    const pagina = todos.slice(offset, offset + limit);
+    const proximo = offset + limit;
+    return {
+      items: pagina,
+      total: todos.length,
+      next_cursor: proximo < todos.length ? String(proximo) : null,
+    } as T;
+  }
+
   if (partes.join('/') === 'businesses/me/followers' && method === 'GET') {
     const params = new URLSearchParams(path.split('?')[1] ?? '');
     const limit = Number(params.get('limit') ?? 20);
