@@ -96,6 +96,9 @@ export default function TabsLayout() {
             <Tabs.Screen name="(screens)/Notifications/ConnectionRequests/index" />
             <Tabs.Screen name="(screens)/Notifications/ParticipationRequests/index" />
             <Tabs.Screen name="(screens)/Notifications/index" />
+            <Tabs.Screen name="(screens)/Notifications/index" />
+            <Tabs.Screen name="(screens)/SearchAll/Businesses/index" />
+            <Tabs.Screen name="(screens)/UserProfile/index" />
             <Tabs.Screen name="(screens)/UserProfile/index" />
           </Tabs>
         </TopAppBarProvider>
