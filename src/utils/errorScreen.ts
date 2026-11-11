@@ -17,12 +17,20 @@ const APPEARANCE: Record<LoadErrorKind, Pick<ErrorScreenProps, 'icon' | 'tone'>>
 };
 
 /**
- * Texto do frame `Sem conexão`. O `LoadError.message` de offline continua curto
- * ("Sem conexão com a internet") porque também é usado em toasts.
+ * Texto dos frames `Sem conexão` e `Erro do servidor`. O `LoadError.message`
+ * continua curto ("Sem conexão com a internet", "Não foi possível carregar.
+ * Tente de novo.") porque também é usado em toasts; a tela cheia tem espaço
+ * para o texto completo do Figma.
  */
-const OFFLINE_SCREEN = {
-  title: 'Você está sem internet',
-  message: 'O Hangy precisa de conexão para carregar eventos e o mapa Ao Vivo. Verifique o Wi-Fi ou os dados móveis.',
+const SCREEN_COPY: Partial<Record<LoadErrorKind, { title: string; message: string }>> = {
+  offline: {
+    title: 'Você está sem internet',
+    message: 'O Hangy precisa de conexão para carregar eventos e o mapa Ao Vivo. Verifique o Wi-Fi ou os dados móveis.',
+  },
+  server: {
+    title: 'Algo deu errado do nosso lado',
+    message: 'Não foi possível carregar agora. Já estamos sabendo do problema — tente de novo em alguns instantes.',
+  },
 };
 
 export type LoadErrorScreenOptions = {
@@ -43,7 +51,7 @@ export function loadErrorScreenProps(
   { onRetry, onBack, retryAccessibilityLabel, isRetrying, unavailableIcon }: LoadErrorScreenOptions = {},
 ): ErrorScreenProps {
   const appearance = APPEARANCE[error.kind];
-  const copy = error.kind === 'offline' ? OFFLINE_SCREEN : { title: error.title, message: error.message };
+  const copy = SCREEN_COPY[error.kind] ?? { title: error.title, message: error.message };
   const icon = !error.canRetry && unavailableIcon ? unavailableIcon : appearance.icon;
 
   let action: ErrorScreenProps['action'];

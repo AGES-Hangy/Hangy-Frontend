@@ -767,6 +767,8 @@ export default function EventDetail() {
             icon={action.icon}
             isLoading={(action.icon === 'share' && isSharing) || isSubmitting}
             onPress={onMainAction}
+            // Sem rede, participar, cancelar e compartilhar falhariam; gerenciar só navega.
+            disabled={isOffline && event!.viewer.available_action !== 'MANAGE'}
             style={styles.ctaButton}
           />
         </View>

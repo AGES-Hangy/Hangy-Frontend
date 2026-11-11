@@ -79,7 +79,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
     paddingHorizontal: spacing[16],
-    paddingBottom: spacing[16],
+    // 32 entre o botão e a BottomNav, como nos frames.
+    paddingBottom: spacing[32],
   },
   message: {
     flex: 1,

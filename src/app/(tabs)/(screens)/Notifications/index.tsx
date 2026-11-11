@@ -90,8 +90,9 @@ export default function Notifications() {
                 canRetry: canRetryError,
               },
               {
-                // Offline, a carga volta sozinha quando a rede voltar (efeito acima).
-                onRetry: isOffline ? undefined : () => void retryError(),
+                // Como no frame `Sem conexão`, o botão aparece também offline; a
+                // carga ainda volta sozinha quando a rede voltar (efeito acima).
+                onRetry: () => void retryError(),
                 retryAccessibilityLabel: 'Tentar carregar notificações novamente',
               },
             )}
