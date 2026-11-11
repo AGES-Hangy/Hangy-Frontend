@@ -165,6 +165,8 @@ Peças:
   (título, texto, ícone, tom e ação por prop). Para um `LoadError`, use
   `loadErrorScreenProps` (`src/utils/errorScreen.ts`), que escolhe ícone, cor,
   texto e o botão — "Tentar de novo" quando `canRetry`, "Voltar" quando não.
+  Nas telas sem a barra de abas (`noNavbarScreens`), passe `withBottomInset`
+  para o botão do rodapé não ficar sob o indicador de gestos do iOS.
 - `OfflineBanner` (`src/components/OfflineBanner`): faixa absoluta (top 8,
   altura mínima 48). Não engole o conteúdo: a tela desce o conteúdo com
   `paddingTop: spacing[64]` enquanto ela aparece.
@@ -175,7 +177,8 @@ Peças:
 - `LoadingScreen` (`src/components/LoadingScreen`): indicador central de tela
   cheia, só quando não há métrica para um `Skeleton`.
 
-Uma tela nova (Busca, painel administrativo, ...) fica assim:
+Uma tela nova, ou uma das que ainda não seguem o padrão (Busca e o painel
+administrativo ainda usam `EmptyState` com "Tentar de novo"), fica assim:
 
 ```tsx
 const { items, isLoading, error, reload } = useAlgumaLista();

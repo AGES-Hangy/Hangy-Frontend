@@ -103,7 +103,7 @@ export default function EventoPublicado() {
             onRetry: retry,
             retryAccessibilityLabel: 'Tentar carregar o evento publicado novamente',
           })}
-          style={{ paddingBottom: insets.bottom + spacing[16] }}
+          withBottomInset
         />
       )}
 

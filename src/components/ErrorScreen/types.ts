@@ -35,6 +35,12 @@ export type ErrorScreenProps = {
   action?: ErrorScreenAction;
   /** Conteúdo extra abaixo do botão, por exemplo "Sair da conta" no Perfil. */
   footer?: ReactNode;
+  /**
+   * Soma a safe area inferior ao respiro do rodapé. Ligue nas telas sem a barra
+   * de abas (`noNavbarScreens`): sem ela, o botão fixo fica sob o indicador de
+   * gestos do iOS. Com a barra, ela já ocupa esse espaço.
+   */
+  withBottomInset?: boolean;
   /** Escape hatch de layout (ex.: respiro do `OfflineBanner`). Não use para trocar cor. */
   style?: StyleProp<ViewStyle>;
 };

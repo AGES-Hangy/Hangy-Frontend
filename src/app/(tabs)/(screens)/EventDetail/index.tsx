@@ -219,6 +219,7 @@ export default function EventDetail() {
     return (
       <View style={styles.errorScreen}>
         <ErrorScreen
+          withBottomInset
           title={inviteError.title}
           message={inviteError.message}
           icon="ticket"
@@ -240,6 +241,7 @@ export default function EventDetail() {
     return (
       <View style={styles.errorScreen}>
         <ErrorScreen
+          withBottomInset
           {...loadErrorScreenProps(failure, {
             onRetry: reload,
             onBack: router.back,

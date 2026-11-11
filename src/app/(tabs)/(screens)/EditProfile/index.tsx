@@ -106,6 +106,7 @@ export default function EditProfile() {
     return (
       <View style={styles.screen}>
         <ErrorScreen
+          withBottomInset
           {...loadErrorScreenProps(error, {
             onRetry: retryLoad,
             onBack: leaveScreen,

@@ -261,6 +261,7 @@ export default function EditEvent() {
     return (
       <View style={styles.screen}>
         <ErrorScreen
+          withBottomInset
           {...loadErrorScreenProps(eventError, {
             onRetry: reload,
             onBack: router.back,

@@ -181,6 +181,7 @@ export default function BlockedUsers() {
     if (error && users.length === 0) {
       return (
         <ErrorScreen
+          withBottomInset
           {...loadErrorScreenProps(error, {
             onRetry: () => { void refresh(); },
             retryAccessibilityLabel: 'Tentar carregar os usuários bloqueados novamente',

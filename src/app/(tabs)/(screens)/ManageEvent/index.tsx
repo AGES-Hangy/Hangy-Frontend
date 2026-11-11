@@ -122,6 +122,7 @@ export default function ManageEvent() {
     return (
       <View style={styles.screen}>
         <ErrorScreen
+          withBottomInset
           {...loadErrorScreenProps(failure, {
             onRetry: retryLoad,
             onBack: router.back,

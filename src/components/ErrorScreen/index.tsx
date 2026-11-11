@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
@@ -29,12 +30,16 @@ export function ErrorScreen({
   tone = 'error',
   action,
   footer,
+  withBottomInset = false,
   style,
 }: ErrorScreenProps) {
   const toneColors = TONES[tone];
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.screen, style]}>
+    <View
+      style={[styles.screen, withBottomInset && { paddingBottom: spacing[16] + insets.bottom }, style]}
+    >
       <View style={styles.message} accessibilityRole="alert" accessibilityLiveRegion="polite">
         <View
           style={[styles.illustration, { backgroundColor: toneColors.background }]}

@@ -125,6 +125,7 @@ export default function Followers() {
     if (error && followers.length === 0) {
       return (
         <ErrorScreen
+          withBottomInset
           {...loadErrorScreenProps(error, {
             onRetry: () => { void refresh(); },
             retryAccessibilityLabel: 'Tentar carregar os seguidores novamente',
