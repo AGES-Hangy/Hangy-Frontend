@@ -18,7 +18,7 @@ import { spacing } from '@/constants/layout';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSearch } from '@/hooks/useSearch';
 import { useTags } from '@/hooks/useTags';
-import type { SearchBusinessItem, SearchEventItem, SearchUserItem } from '@/types/search';
+import type { SearchAppliedFilters, SearchBusinessItem, SearchEventItem, SearchUserItem } from '@/types/search';
 import {
   buildTagNameMap,
   formatAppliedDateLabel,
@@ -28,7 +28,11 @@ import {
 const SKELETON_SECTIONS = ['EVENTOS', 'ESTABELECIMENTOS', 'PESSOAS'] as const;
 const SKELETON_ITEMS_PER_SECTION = 2;
 
+/** Espaço do `OfflineBanner` (posição absoluta no topo) para ele não cobrir o campo de busca. */
 const OFFLINE_BANNER_OFFSET = spacing[64];
+
+/** Rótulo do chip de uma tag que o catálogo ainda não trouxe (carregando ou com erro). */
+const UNKNOWN_TAG_LABEL = 'Categoria';
 
 function toSearchEvent(item: SearchEventItem): Event {
   return {
@@ -42,6 +46,26 @@ function toSearchEvent(item: SearchEventItem): Event {
     description: item.is_preview ? null : item.description,
     participantsCount: item.is_preview ? null : item.participants_count,
   };
+}
+
+/**
+ * "Ver todos" de cada bloco (US10.4, tasks 128/202/203). Os eventos herdam
+ * termo, tags e datas; estabelecimentos e pessoas só o termo, porque os
+ * filtros da busca valem apenas para eventos.
+ */
+function openSeeAllEvents(q: string, filters: SearchAppliedFilters) {
+  const params: Record<string, string> = {};
+  if (q) params.q = q;
+  // `tagId` vai como os UUIDs separados por vírgula, o mesmo formato de
+  // `tag_ids` que a tela repassa ao `GET /search/events`.
+  if (filters.tag_ids.length > 0) params.tagId = filters.tag_ids.join(',');
+  if (filters.date_from) params.dateFrom = filters.date_from;
+  if (filters.date_to) params.dateTo = filters.date_to;
+  router.push({ pathname: '/SearchAll/Events', params });
+}
+
+function openSeeAll(pathname: '/SearchAll/Businesses' | '/SearchAll/People', q: string) {
+  router.push({ pathname, params: q ? { q } : {} });
 }
 
 function businessDisplayName(item: SearchBusinessItem): string {
@@ -119,6 +143,8 @@ export default function Search() {
   const tagNameMap = useMemo(() => buildTagNameMap(tags), [tags]);
   const hasFilters = hasActiveAppliedFilters(appliedFilters);
   const dateLabel = useMemo(() => formatAppliedDateLabel(appliedFilters), [appliedFilters]);
+  // Um por chip da barra de filtros ativos: a data conta 1 e cada tag conta 1.
+  const activeFilterCount = (dateLabel ? 1 : 0) + appliedFilters.tag_ids.length;
 
   const eventsBlock = results?.events;
   const businessesBlock = results?.businesses;
@@ -130,6 +156,8 @@ export default function Search() {
     Boolean(usersBlock && usersBlock.items.length > 0);
 
   const activeQuery = results?.query ?? query.trim();
+  // Termo que gerou os resultados na tela, não o que está sendo digitado.
+  const seeAllQuery = results?.query?.trim() ?? '';
 
   return (
     <View style={styles.screen}>
@@ -143,12 +171,13 @@ export default function Search() {
           trailingIcon="sliders-horizontal"
           onTrailingIconPress={() => setIsFilterPanelVisible(true)}
           onTrailingIconPressAccessibilityLabel={
-            hasFilters ? 'Filtros ativos, abrir filtros' : 'Abrir filtros'
+            activeFilterCount > 0 ? `Filtros, ${activeFilterCount} em uso` : 'Abrir filtros'
           }
+          trailingIconBadgeCount={activeFilterCount}
           accessibilityLabel="Buscar eventos, estabelecimentos ou pessoas"
         />
 
-        {hasFilters && !isLoading && (
+        {hasFilters && (
           <View style={styles.appliedFiltersRow} accessibilityLabel="Filtros ativos">
             <ScrollView
               horizontal
@@ -170,8 +199,7 @@ export default function Search() {
               )}
 
               {appliedFilters.tag_ids.map((tagId) => {
-                const label = tagNameMap.get(tagId);
-                if (!label) return null;
+                const label = tagNameMap.get(tagId) ?? UNKNOWN_TAG_LABEL;
                 return (
                   <Chip
                     key={tagId}
@@ -243,6 +271,7 @@ export default function Search() {
                 actionLabel="Ver todos"
                 showActionIcon={false}
                 actionAccessibilityLabel="Ver todos os eventos"
+                onActionPress={() => openSeeAllEvents(seeAllQuery, appliedFilters)}
               />
               <View style={styles.sectionItems}>
                 {eventsBlock.items.map((item) => (
@@ -267,6 +296,7 @@ export default function Search() {
                 actionLabel="Ver todos"
                 showActionIcon={false}
                 actionAccessibilityLabel="Ver todos os estabelecimentos"
+                onActionPress={() => openSeeAll('/SearchAll/Businesses', seeAllQuery)}
               />
               <View style={styles.sectionItems}>
                 {businessesBlock.items.map((item) => (
@@ -292,6 +322,7 @@ export default function Search() {
                 actionLabel="Ver todas"
                 showActionIcon={false}
                 actionAccessibilityLabel="Ver todas as pessoas"
+                onActionPress={() => openSeeAll('/SearchAll/People', seeAllQuery)}
               />
               <View style={styles.sectionItems}>
                 {usersBlock.items.map((item) => (
@@ -308,7 +339,14 @@ export default function Search() {
             </View>
           )}
         </ScrollView>
-      ) : null}
+      ) : (
+        <EmptyState
+          context="Search"
+          title="Comece uma busca"
+          text="Pesquise eventos, estabelecimentos ou pessoas pelo nome, ou use os filtros para explorar eventos."
+          fill
+        />
+      )}
 
       <FilterPanel
         visible={isFilterPanelVisible}

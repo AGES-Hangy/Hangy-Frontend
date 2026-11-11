@@ -24,7 +24,7 @@ export interface Event {
   isPreview?: boolean;
   /** Descrição do evento — `null` quando ausente ou quando `is_preview=true`. */
   description?: string | null;
-  /** Total de confirmados — `null` quando `is_preview=true`. */
+  /** Total de confirmados — `null` quando `is_preview=true`; nunca exibir como "0 confirmados". */
   participantsCount?: number | null;
 }
 
@@ -32,7 +32,7 @@ export interface EventCardProps {
   variant: EventVariant;
   event: Event;
   state?: EventState;
-  /** Prévia de evento privado: oculta lista de confirmados e descrição. */
+  /** Prévia de evento privado: oculta a pilha de confirmados (`Featured`/`Mini`). Padrão: `event.isPreview`. */
   isPreview?: boolean;
   /** Exibe o estado não lido no card Request. */
   isUnread?: boolean;

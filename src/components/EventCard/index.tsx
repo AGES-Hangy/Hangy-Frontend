@@ -108,7 +108,7 @@ export function EventCard({
 			]}
 		>
 			{variant === 'Featured' && <FeaturedCard event={event} isPreview={preview} favorite={favorite} />}
-			{variant === 'Compact' && <CompactCard event={event} state={state} isPreview={preview} />}
+			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
 		</Pressable>
 	);
@@ -225,10 +225,9 @@ function FeaturedCard({ event, isPreview, favorite }: { event: Event; isPreview:
 	);
 }
 
-// Em `isPreview=true` (evento privado sem participação na busca), o card não
-// exibe lista de confirmados nem descrição — apenas título, data/local (bairro
-// vindo de `location_name`) e selo de privacidade.
-function CompactCard({ event, state }: { event: Event; state: EventCardProps['state']; isPreview: boolean }) {
+// O Compact já mostra só título, data/local e selo de privacidade, então não
+// precisa de `isPreview`: o bairro do evento privado chega em `event.location`.
+function CompactCard({ event, state }: { event: Event; state: EventCardProps['state'] }) {
 	const stateBadge = getStatusBadgeValue(state);
 	// Figma: uma única linha "data · horário · local", sem ícone — não são três
 	// blocos separados, é um texto só que trunca com reticências se não couber.

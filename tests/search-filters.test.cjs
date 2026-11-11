@@ -484,5 +484,3 @@ test('useSearch supports filter-only search and retries without tags on 404 Tag 
     date_to: '2026-11-10',
   });
 });
-
-

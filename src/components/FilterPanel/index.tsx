@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal as NativeModal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
@@ -63,6 +63,10 @@ export function FilterPanel({
   onRetryTags,
 }: FilterPanelProps) {
   const [draft, setDraft] = useState<FilterValue>(value);
+  // Insets lidos da árvore do app, não de um `SafeAreaView` dentro do `Modal`:
+  // a janela nativa do Modal às vezes mede inset 0 na primeira abertura e o
+  // card ficava embaixo da Dynamic Island/status bar.
+  const insets = useSafeAreaInsets();
 
   // Só ao abrir: depender de `value` zeraria o rascunho a cada render de uma
   // tela que monta o objeto inline.
@@ -114,7 +118,18 @@ export function FilterPanel({
     <NativeModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.scrim} onPress={onClose} accessible={false} importantForAccessibility="no" />
-        <SafeAreaView style={styles.safeArea} pointerEvents="box-none">
+        <View
+          style={[
+            styles.safeArea,
+            {
+              paddingTop: insets.top + spacing[16],
+              paddingBottom: insets.bottom + spacing[16],
+              paddingLeft: insets.left + spacing[16],
+              paddingRight: insets.right + spacing[16],
+            },
+          ]}
+          pointerEvents="box-none"
+        >
           <View
             style={styles.card}
             role="dialog"
@@ -251,7 +266,7 @@ export function FilterPanel({
               />
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
     </NativeModal>
   );
@@ -291,7 +306,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     alignItems: 'center',
-    padding: spacing[16],
   },
   card: {
     width: '100%',

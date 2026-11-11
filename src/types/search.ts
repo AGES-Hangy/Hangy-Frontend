@@ -62,4 +62,3 @@ export interface SearchResponse {
   businesses: SearchBlock<SearchBusinessItem>;
   users: SearchBlock<SearchUserItem>;
 }
-

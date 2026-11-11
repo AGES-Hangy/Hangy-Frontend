@@ -246,4 +246,3 @@ export function useSearch() {
     retry,
   };
 }
-

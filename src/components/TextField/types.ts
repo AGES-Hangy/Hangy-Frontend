@@ -123,6 +123,12 @@ export type TextFieldProps = {
   onTrailingIconPress?: () => void;
   /** Rótulo de acessibilidade do toque acima. Padrão: `"Mais opções"`. */
   onTrailingIconPressAccessibilityLabel?: string;
+  /**
+   * Contador sobre o ícone à direita (ex.: filtros em uso na Busca). Some com
+   * `0`/ausente. É só visual: inclua o número em
+   * `onTrailingIconPressAccessibilityLabel`.
+   */
+  trailingIconBadgeCount?: number;
 
   /** Padrão: o próprio `label`. */
   accessibilityLabel?: string;
