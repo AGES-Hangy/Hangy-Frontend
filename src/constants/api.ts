@@ -198,6 +198,28 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/connections/pending${query ? `?${query}` : ''}`;
   },
+  /**
+   * Busca textual categorizada em eventos, estabelecimentos e pessoas, com
+   * filtros de tags e intervalo de datas nos eventos (task 121 [BE]).
+   */
+  search: (options?: {
+    q?: string;
+    preview?: number;
+    tagIds?: string[];
+    dateFrom?: string | null;
+    dateTo?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    const trimmed = options?.q?.trim();
+    if (trimmed) params.set('q', trimmed);
+    if (options?.preview !== undefined) params.set('preview', String(options.preview));
+    // O backend espera os UUIDs numa string só, separados por vírgula (OR).
+    if (options?.tagIds?.length) params.set('tag_ids', options.tagIds.join(','));
+    if (options?.dateFrom) params.set('date_from', options.dateFrom);
+    if (options?.dateTo) params.set('date_to', options.dateTo);
+    const query = params.toString();
+    return `/search${query ? `?${query}` : ''}`;
+  },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
 } as const;
