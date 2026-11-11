@@ -18,26 +18,36 @@ const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel'>
 
 const DESTINATIONS: AdminNavDestination[] = ['Painel', 'Denuncias', 'Usuarios', 'Conteudo'];
 
+/**
+ * Telas internas do painel que não são destino da `AdminNav`: têm o
+ * `TopAppBar` com voltar no lugar da barra inferior, como no Figma. O
+ * `TopAppBar` já soma a safe area de cima, então o layout não aplica a dele.
+ */
+const SCREENS_WITHOUT_NAV = ['Auditoria'];
+
 /** Área administrativa: fora de `(tabs)`, com a `AdminNav` no lugar da `BottomNav`. */
 export default function AdminLayout() {
   const segments: string[] = useSegments();
   // `segments` é `['Admin', '<Secao>', ...]`; telas internas mantêm a seção.
   const section = segments[1];
   const active = DESTINATIONS.find((dest) => dest === section) ?? 'Painel';
+  const showsNav = !SCREENS_WITHOUT_NAV.includes(section);
 
   return (
     <AdminGuard>
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={showsNav ? ['top'] : []}>
         <View style={styles.content}>
           <Stack screenOptions={{ headerShown: false }} />
         </View>
-        <AdminNav
-          active={active}
-          onNavigate={(dest) => {
-            const route = ROUTE_BY_DESTINATION[dest];
-            if (route && dest !== active) router.replace(route);
-          }}
-        />
+        {showsNav && (
+          <AdminNav
+            active={active}
+            onNavigate={(dest) => {
+              const route = ROUTE_BY_DESTINATION[dest];
+              if (route && dest !== active) router.replace(route);
+            }}
+          />
+        )}
       </SafeAreaView>
     </AdminGuard>
   );

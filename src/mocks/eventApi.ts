@@ -1499,12 +1499,45 @@ function resolverPerfil(partes: string[], method: string, init: RequestInit): { 
  * espelha a de `apiFetch` de propósito: quem chama não sabe qual dos dois
  * respondeu.
  */
+/**
+ * Auditoria do admin (task 267): `EXPO_PUBLIC_MOCK_AUDIT_LOG=empty` devolve a
+ * lista vazia e `=error` um 500. Sem a variável, registros de hoje, ontem e de
+ * dias antes, com as frases que o backend monta.
+ */
+const cenarioAuditoria = process.env.EXPO_PUBLIC_MOCK_AUDIT_LOG;
+
+function registrosDeAuditoria() {
+  const hoje = new Date();
+  const em = (diasAtras: number, hora: number, minuto: number) => {
+    const data = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - diasAtras, hora, minuto);
+    // Um registro "de hoje" nunca fica no futuro, mesmo testando de madrugada.
+    return new Date(Math.min(data.getTime(), hoje.getTime())).toISOString();
+  };
+  const voce = { id: ID_DA_CONTA, name: 'Você' };
+  const marina = { id: 'admin-marina', name: 'Marina S.' };
+  return [
+    { audit_log_id: 'audit-1', actor: voce, action: 'USER_BANNED', target_type: 'USER', target_id: 'u-1', summary: 'Você baniu Lucas Ferreira', created_at: em(0, 14, 32) },
+    { audit_log_id: 'audit-2', actor: marina, action: 'REPORT_ARCHIVED', target_type: 'REPORT', target_id: 'r-1039', summary: 'Marina S. arquivou a denúncia #1039', created_at: em(0, 11, 7) },
+    { audit_log_id: 'audit-3', actor: voce, action: 'USER_SUSPENDED', target_type: 'USER', target_id: 'u-2', summary: 'Você suspendeu Rafael Antunes', created_at: em(0, 9, 41) },
+    { audit_log_id: 'audit-4', actor: voce, action: 'USER_REVERTED', target_type: 'USER', target_id: 'u-3', summary: 'Você reverteu a ação sobre Ana Souza', created_at: em(1, 18, 20) },
+    { audit_log_id: 'audit-5', actor: marina, action: 'EVENT_REMOVED', target_type: 'EVENT', target_id: 'e-1', summary: 'Marina S. removeu o evento Churrasco na Redenção', created_at: em(1, 16, 55) },
+    { audit_log_id: 'audit-6', actor: voce, action: 'TAG_CREATED', target_type: 'TAG', target_id: 't-1', summary: 'Você criou a tag Beach Tennis', created_at: em(4, 10, 2) },
+    { audit_log_id: 'audit-7', actor: { id: null, name: 'Administrador removido' }, action: 'TAG_UPDATED', target_type: 'TAG', target_id: 't-2', summary: 'Administrador removido editou a tag Yoga', created_at: em(4, 8, 15) },
+    { audit_log_id: 'audit-8', actor: marina, action: 'TAG_DELETED', target_type: 'TAG', target_id: 't-3', summary: 'Marina S. removeu a tag Poker', created_at: em(6, 21, 40) },
+  ];
+}
+
 export async function resolveMock<T>(path: string, init: RequestInit = {}): Promise<T> {
   await wait();
 
   const method = (init.method ?? 'GET').toUpperCase();
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
+
+  if (partes.join('/') === 'admin/audit-log' && method === 'GET') {
+    if (cenarioAuditoria === 'error') throw new MockApiError(500, 'Internal server error');
+    return { items: cenarioAuditoria === 'empty' ? [] : registrosDeAuditoria(), next_cursor: null } as T;
+  }
 
   if (partes.join('/') === 'users/me/blocked' && method === 'GET') {
     const params = new URLSearchParams(path.split('?')[1] ?? '');
