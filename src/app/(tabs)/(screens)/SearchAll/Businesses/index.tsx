@@ -77,17 +77,17 @@ function ListFooter({ isLoadingMore, hasMore }: { isLoadingMore: boolean; hasMor
     );
   }
   if (!hasMore) {
-  return (
-    <View
-      style={styles.footer}
-      accessible
-      accessibilityRole="text"
-      accessibilityLabel="Fim da lista"
-    >
-      <View style={styles.footerLine} />
-    </View>
-  );
-}
+    return (
+      <View
+        style={styles.footer}
+        accessible
+        accessibilityRole="text"
+        accessibilityLabel="Fim da lista"
+      >
+        <View style={styles.footerLine} />
+      </View>
+    );
+  }
   return null;
 }
 
@@ -205,8 +205,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerLine: {
-  width: FOOTER_LINE_WIDTH,
-  height: StyleSheet.hairlineWidth,
-  backgroundColor: colors.border.default,
+    width: FOOTER_LINE_WIDTH,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border.default,
   },
 });
