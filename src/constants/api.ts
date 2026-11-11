@@ -72,12 +72,32 @@ export const endpoints = {
    * Eventos ao redor de um ponto (task 119). A coordenada é o centro do mapa e
    * só existe nesta query — a posição do usuário não é persistida no backend.
    */
-  eventsNearby: ({ latitude, longitude, radiusM }: { latitude: number; longitude: number; radiusM: number }) => {
+  eventsNearby: ({
+    latitude,
+    longitude,
+    radiusM,
+    startsFrom,
+    startsUntil,
+    tagIds = [],
+  }: {
+    latitude: number;
+    longitude: number;
+    radiusM: number;
+    /** Início mínimo do evento, ISO 8601 com offset (task 295). */
+    startsFrom?: string;
+    /** Início máximo do evento, ISO 8601 com offset. */
+    startsUntil?: string;
+    /** Evento com pelo menos uma das tags; macro inclui as micro dela. */
+    tagIds?: string[];
+  }) => {
     const params = new URLSearchParams({
       latitude: latitude.toFixed(6),
       longitude: longitude.toFixed(6),
       radius_m: String(Math.round(radiusM)),
     });
+    if (startsFrom) params.append('starts_from', startsFrom);
+    if (startsUntil) params.append('starts_until', startsUntil);
+    tagIds.forEach((tagId) => params.append('tag_ids', tagId));
     return `/events/nearby?${params.toString()}`;
   },
   /** Sem `status`, a API devolve confirmados; `status=PENDING` exige ser o organizador. */
@@ -178,4 +198,44 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/connections/pending${query ? `?${query}` : ''}`;
   },
+  /**
+   * Busca textual categorizada em eventos, estabelecimentos e pessoas, com
+   * filtros de tags e intervalo de datas nos eventos (task 121 [BE]).
+   */
+  search: (options?: {
+    q?: string;
+    preview?: number;
+    tagIds?: string[];
+    dateFrom?: string | null;
+    dateTo?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    const trimmed = options?.q?.trim();
+    if (trimmed) params.set('q', trimmed);
+    if (options?.preview !== undefined) params.set('preview', String(options.preview));
+    // O backend espera os UUIDs numa string só, separados por vírgula (OR).
+    if (options?.tagIds?.length) params.set('tag_ids', options.tagIds.join(','));
+    if (options?.dateFrom) params.set('date_from', options.dateFrom);
+    if (options?.dateTo) params.set('date_to', options.dateTo);
+    const query = params.toString();
+    return `/search${query ? `?${query}` : ''}`;
+  },
+  /** Estabelecimentos da busca, paginado por cursor, com busca opcional por nome (task 237 [BE]). */
+  searchBusinesses: (options?: { limit?: number; cursor?: string | null; q?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/search/businesses${query ? `?${query}` : ''}`;
+  },
+  /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
+  adminDashboard: () => '/admin/dashboard',
+  /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
+  adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
+  /**
+   * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
+   * `PATCH` com união discriminada por `action`: `BAN`, `SUSPEND` (+ `duration_days`) ou `REVERT`.
+   */
+  adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
 } as const;

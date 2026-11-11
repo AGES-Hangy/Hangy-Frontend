@@ -73,6 +73,30 @@ const VARIANTS = {
     confirmLabel: 'Desbloquear',
     destructive: false,
   },
+  // "Admin — Denúncia — banir usuário" (Sprint 4). O título leva o nome da
+  // conta e vem por `title`. Suspender não tem frame próprio: segue a mesma
+  // estrutura, só o texto muda. Mesmo texto do detalhe da denúncia (task 261).
+  BanUser: {
+    title: 'Banir usuário?',
+    description:
+      'O perfil sai do ar, as participações são canceladas e o acesso fica bloqueado. Você pode reverter em Usuários.',
+    confirmLabel: 'Banir usuário',
+    destructive: true,
+  },
+  SuspendUser: {
+    title: 'Suspender usuário?',
+    description:
+      'A conta fica sem acesso por 7 dias e volta sozinha depois disso. Você pode reverter em Usuários.',
+    confirmLabel: 'Suspender 7 dias',
+    destructive: false,
+  },
+  // Admin — reverter banimento ou suspensão.
+  RevertModeration: {
+    title: 'Reverter moderação?',
+    description: 'O usuário voltará a ter acesso ao app.',
+    confirmLabel: 'Reverter',
+    destructive: false,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({

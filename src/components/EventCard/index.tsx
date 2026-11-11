@@ -67,6 +67,7 @@ export function EventCard({
 	variant,
 	event,
 	state = 'Default',
+	isPreview,
 	isUnread = false,
 	onPress,
 	actionsDisabled,
@@ -75,6 +76,7 @@ export function EventCard({
 	onFavoritePress,
 	isFavorited = false,
 }: EventCardProps) {
+	const preview = isPreview ?? event.isPreview ?? false;
 	const favorite = onFavoritePress ? { isFavorited, onPress: onFavoritePress } : undefined;
 	const dateTime = formatEventDateTime(event.date);
 	const accessibleLabel = [event.title, dateTime, event.location, event.privacy && getPrivacyBadgeLabel(event.privacy)]
@@ -84,7 +86,7 @@ export function EventCard({
 		return <RequestCard event={event} isUnread={isUnread} onPress={onPress} actionsDisabled={actionsDisabled} onAccept={onAcceptRequest} onReject={onRejectRequest} />;
 	}
 	if (variant === 'Mini') {
-		return <MiniCard event={event} onPress={onPress} favorite={favorite} accessibleLabel={accessibleLabel} />;
+		return <MiniCard event={event} isPreview={preview} onPress={onPress} favorite={favorite} accessibleLabel={accessibleLabel} />;
 	}
 
 	return (
@@ -105,7 +107,7 @@ export function EventCard({
 				pressed && styles.pressed,
 			]}
 		>
-			{variant === 'Featured' && <FeaturedCard event={event} favorite={favorite} />}
+			{variant === 'Featured' && <FeaturedCard event={event} isPreview={preview} favorite={favorite} />}
 			{variant === 'Compact' && <CompactCard event={event} state={state} />}
 			{variant === 'MapPreview' && <MapPreviewCard event={event} />}
 		</Pressable>
@@ -186,9 +188,10 @@ function AttendeesGroup({ attendees }: { attendees: Event['attendeeAvatars'] }) 
 	);
 }
 
-function FeaturedCard({ event, favorite }: { event: Event; favorite?: FavoriteToggle }) {
+function FeaturedCard({ event, isPreview, favorite }: { event: Event; isPreview: boolean; favorite?: FavoriteToggle }) {
 	const tags = event.tags ?? [];
-	const hasFooter = tags.length > 0 || (event.attendeeAvatars?.length ?? 0) > 0;
+	const attendees = isPreview ? undefined : event.attendeeAvatars;
+	const hasFooter = tags.length > 0 || (attendees?.length ?? 0) > 0;
 	const dateTime = formatEventDateTime(event.date);
 
 	return (
@@ -215,13 +218,15 @@ function FeaturedCard({ event, favorite }: { event: Event; favorite?: FavoriteTo
 			{hasFooter && (
 				<View style={styles.featuredFooter}>
 					<TagRow tags={tags} />
-					<AttendeesGroup attendees={event.attendeeAvatars} />
+					<AttendeesGroup attendees={attendees} />
 				</View>
 			)}
 		</View>
 	);
 }
 
+// O Compact já mostra só título, data/local e selo de privacidade, então não
+// precisa de `isPreview`: o bairro do evento privado chega em `event.location`.
 function CompactCard({ event, state }: { event: Event; state: EventCardProps['state'] }) {
 	const stateBadge = getStatusBadgeValue(state);
 	// Figma: uma única linha "data · horário · local", sem ícone — não são três
@@ -305,18 +310,21 @@ function MapPreviewPrivacyIcon({ privacy }: { privacy: EventPrivacy }) {
 
 function MiniCard({
 	event,
+	isPreview,
 	onPress,
 	favorite,
 	accessibleLabel,
 }: {
 	event: Event;
+	isPreview: boolean;
 	onPress?: () => void;
 	favorite?: FavoriteToggle;
 	accessibleLabel: string;
 }) {
 	const tag = event.tags?.[0];
+	const attendees = isPreview ? undefined : event.attendeeAvatars;
 	const dateTime = formatEventDateTime(event.date);
-	const hasFooter = Boolean(tag || event.attendeeAvatars?.length);
+	const hasFooter = Boolean(tag || attendees?.length);
 
 	return (
 		<View style={[styles.cardElevated, styles.carousel, styles.miniCard]}>
@@ -351,7 +359,7 @@ function MiniCard({
 
 			{hasFooter && <View style={styles.miniFooter}>
 				{tag ? <Chip label={tag} categoryType="macro" size="sm" isSelected /> : <View />}
-				<AttendeesGroup attendees={event.attendeeAvatars} />
+				<AttendeesGroup attendees={attendees} />
 			</View>}
 			{/* Irmão do Pressable do card, não filho: tocar na estrela não abre o evento. */}
 			<FavoriteButton event={event} favorite={favorite} style={styles.miniFavoritePosition} />
