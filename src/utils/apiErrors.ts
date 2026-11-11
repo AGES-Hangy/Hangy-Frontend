@@ -62,6 +62,16 @@ export function describeLoadError(error: unknown): LoadError {
         canRetry: false,
       };
     }
+
+    if (status !== null && status >= 500) {
+      // Título do frame `Erro do servidor`; o texto segue o contrato global.
+      return {
+        kind: 'server',
+        title: 'Algo deu errado do nosso lado',
+        message: 'Não foi possível carregar. Tente de novo.',
+        canRetry: true,
+      };
+    }
   }
 
   return {
@@ -70,6 +80,19 @@ export function describeLoadError(error: unknown): LoadError {
     message: 'Não foi possível carregar. Tente de novo.',
     canRetry: true,
   };
+}
+
+/**
+ * Para listas da própria conta (feed, conexões): o 404/410 do `describeLoadError`
+ * fala de evento, e numa lista não há evento indisponível — qualquer falha que
+ * não seja rede ou timeout é tratada como erro do servidor, com "Tentar de novo".
+ */
+export function describeListLoadError(error: unknown): LoadError {
+  const loadError = describeLoadError(error);
+  if (loadError.kind === 'offline' || loadError.kind === 'timeout' || loadError.kind === 'server') {
+    return loadError;
+  }
+  return describeLoadError(null);
 }
 
 export function describeProfileLoadError(error: unknown): LoadError {

@@ -138,6 +138,84 @@ O alias de import `@/*` aponta para `src/*` (configurado em
 `tsconfig.json`), então prefira `import { colors } from '@/constants/colors'`
 em vez de caminhos relativos longos.
 
+## Estados globais: erro, offline e carregamento
+
+Nenhuma tela inventa o próprio estado de erro (task 141). O contrato é este:
+
+| Situação | O que o usuário vê | Quem cuida |
+| --- | --- | --- |
+| `401` | "Sua sessão expirou. Entre de novo." e volta para o Login | `apiFetch`, uma vez só — a tela não trata |
+| `5xx` na primeira carga | `ErrorScreen` "Algo deu errado do nosso lado" com "Tentar de novo" | a tela |
+| Sem rede | `OfflineBanner` fixo no topo; ações de escrita desabilitadas | a tela |
+| Sem rede na primeira carga | `ErrorScreen` "Você está sem internet" (+ a faixa) | a tela |
+| Timeout na primeira carga | `ErrorScreen` "A conexão demorou demais" | a tela |
+| Timeout ao atualizar algo já na tela | `Toast` de erro com "Tentar de novo" | a tela |
+| Reconectou | some a faixa e a carga que falhou é refeita sozinha | `useRetryOnReconnect` |
+| 200 com lista vazia | `EmptyState` — vazio nunca é erro | a tela |
+
+Peças:
+
+- `apiFetch` (`src/utils/http.ts`): toda chamada à API passa por ele. Ele põe
+  o token, aplica o timeout, trata o 401 e transforma qualquer falha num
+  `ApiError` (`kind`, `status`, `detail`). Não use `fetch` direto para a API.
+- `describeLoadError` (`src/utils/apiErrors.ts`): o hook traduz o erro do `GET`
+  num `LoadError` (`kind`, `title`, `message`, `canRetry`) e o expõe como
+  `error`, junto com um `reload` que refaz a requisição original.
+- `ErrorScreen` (`src/components/ErrorScreen`): tela cheia de erro, genérica
+  (título, texto, ícone, tom e ação por prop). Para um `LoadError`, use
+  `loadErrorScreenProps` (`src/utils/errorScreen.ts`), que escolhe ícone, cor,
+  texto e o botão — "Tentar de novo" quando `canRetry`, "Voltar" quando não.
+  Nas telas sem a barra de abas (`noNavbarScreens`), passe `withBottomInset`
+  para o botão do rodapé não ficar sob o indicador de gestos do iOS.
+- `OfflineBanner` (`src/components/OfflineBanner`): faixa absoluta (top 8,
+  altura mínima 48). Não engole o conteúdo: a tela desce o conteúdo com
+  `paddingTop: spacing[64]` enquanto ela aparece.
+- `useRetryOnReconnect(shouldRetry, retry)` (`src/hooks`): devolve o
+  `isOffline` e, quando a rede volta, chama `retry` se `shouldRetry`.
+- `Skeleton` (`src/components/Skeleton`): primeira carga de lista ou detalhe,
+  com a métrica do componente real para a tela não saltar.
+- `LoadingScreen` (`src/components/LoadingScreen`): indicador central de tela
+  cheia, só quando não há métrica para um `Skeleton`.
+
+Uma tela nova, ou uma das que ainda não seguem o padrão (Busca e o painel
+administrativo ainda usam `EmptyState` com "Tentar de novo"), fica assim:
+
+```tsx
+const { items, isLoading, error, reload } = useAlgumaLista();
+// Antes de qualquer return: reconectou, refaz a carga que falhou.
+const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry), reload);
+
+if (isLoading) return <AlgumaListaSkeleton />;
+
+if (error) {
+  return (
+    <View style={styles.screen}>
+      <ErrorScreen
+        {...loadErrorScreenProps(error, {
+          onRetry: reload,
+          onBack: router.back, // só para 404/410
+          retryAccessibilityLabel: 'Tentar carregar a lista novamente',
+        })}
+      />
+      {isOffline && <OfflineBanner />}
+    </View>
+  );
+}
+
+if (items.length === 0) return <EmptyState context="Search" />;
+
+return (
+  <View style={styles.screen}>
+    <FlatList contentContainerStyle={isOffline && { paddingTop: spacing[64] }} /* ... */ />
+    {isOffline && <OfflineBanner />}
+  </View>
+);
+```
+
+Ações de escrita (salvar, publicar, aprovar, remover, cancelar) recebem
+`disabled={isOffline}`. Com conteúdo já na tela, a falha de uma atualização ou
+da página seguinte vira toast, não `ErrorScreen`.
+
 O GitLab é a origem do projeto neste primeiro momento. O espelho para o
 GitHub será configurado depois que esta base for validada.
 
