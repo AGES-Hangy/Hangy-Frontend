@@ -1,4 +1,4 @@
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,6 +21,8 @@ const UNNAMED_BUSINESS = 'Estabelecimento sem nome';
 const SKELETON_ROW_COUNT = 6;
 const SKELETON_NAME_WIDTH = '55%';
 const SKELETON_SUBTITLE_WIDTH = '35%';
+/** Largura da linha que marca o fim da lista. */
+const FOOTER_LINE_WIDTH = 32;
 /**
  * O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o conteúdo desce o
  * mesmo tanto para a lista não ficar por baixo dele.
@@ -75,19 +77,24 @@ function ListFooter({ isLoadingMore, hasMore }: { isLoadingMore: boolean; hasMor
     );
   }
   if (!hasMore) {
-    return (
-      <View style={styles.footer}>
-        <Text style={styles.footerEnd}>Fim da lista</Text>
-      </View>
-    );
-  }
+  return (
+    <View
+      style={styles.footer}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel="Fim da lista"
+    >
+      <View style={styles.footerLine} />
+    </View>
+  );
+}
   return null;
 }
 
 export default function SearchAllBusinesses() {
   const insets = useSafeAreaInsets();
   const { isOffline } = useNetworkStatus();
-   // `q` vem da busca. O backend só lista estabelecimentos com termo (mín. 2 caracteres).
+  // `q` vem da busca. O backend só lista estabelecimentos com termo (mín. 2 caracteres).
   const { q } = useLocalSearchParams<{ q?: string }>();
   const { businesses, total, isLoading, isLoadingMore, error, hasMore, loadMore, refresh } =
     useSearchBusinesses(q);
@@ -122,7 +129,9 @@ export default function SearchAllBusinesses() {
         ItemSeparatorComponent={RowSeparator}
         ListHeaderComponent={
           businesses.length > 0 ? (
-            <SectionHeader title={`ESTABELECIMENTOS · ${total ?? businesses.length}`} variant="overline" />
+            <View style={styles.header}>
+              <SectionHeader title={`ESTABELECIMENTOS · ${total ?? businesses.length}`} variant="overline" />
+            </View>
           ) : undefined
         }
         // Mesma mensagem do bloco de origem da busca (`EmptyState` de `Search`).
@@ -164,6 +173,9 @@ const styles = StyleSheet.create({
   rowWrapper: {
     paddingHorizontal: spacing[16],
   },
+  header: {
+    paddingHorizontal: spacing[16],
+  },
   separator: {
     height: spacing[12],
   },
@@ -192,8 +204,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[16],
     alignItems: 'center',
   },
-  footerEnd: {
-    ...typography.caption,
-    color: colors.text.tertiary,
+  footerLine: {
+  width: FOOTER_LINE_WIDTH,
+  height: StyleSheet.hairlineWidth,
+  backgroundColor: colors.border.default,
   },
 });
