@@ -220,6 +220,15 @@ export const endpoints = {
     const query = params.toString();
     return `/search${query ? `?${query}` : ''}`;
   },
+  /** Estabelecimentos da busca, paginado por cursor, com busca opcional por nome (task 237 [BE]). */
+  searchBusinesses: (options?: { limit?: number; cursor?: string | null; q?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/search/businesses${query ? `?${query}` : ''}`;
+  },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
 } as const;

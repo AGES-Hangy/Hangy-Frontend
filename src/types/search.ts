@@ -1,12 +1,16 @@
 import type { EventPrivacy, LocationPrecision } from '@/types/event';
 
 /**
- * Contratos de `GET /search` (task 121 [BE]) — busca categorizada em eventos,
- * estabelecimentos e pessoas, com filtros de tags e intervalo de datas.
+ * Contratos de `GET /search` e `GET /search/*`.
  *
  * Campos opcionais da API são tipados como `string | null` / `number | null`
- * para o compilador cobrar o tratamento antes de renderizar.
+ * para o compilador cobrar o tratamento antes de renderizar. Em qualquer
+ * divergência com o backend, o backend é a fonte de verdade.
  */
+
+// ---------------------------------------------------------------------------
+// GET /search — busca categorizada (task 121 [BE])
+// ---------------------------------------------------------------------------
 
 export interface SearchAppliedFilters {
   tag_ids: string[];
@@ -61,4 +65,24 @@ export interface SearchResponse {
   events: SearchBlock<SearchEventItem>;
   businesses: SearchBlock<SearchBusinessItem>;
   users: SearchBlock<SearchUserItem>;
+}
+
+// ---------------------------------------------------------------------------
+// GET /search/businesses — listagem paginada por cursor (task 237 [BE])
+// ---------------------------------------------------------------------------
+
+/** Item de `GET /search/businesses`. */
+export interface BusinessSearchItem {
+  user_id: string;
+  business_name: string | null;
+  photo_url: string | null;
+  city: string | null;
+  is_following: boolean;
+}
+
+/** `GET /search/businesses`. `total` é o número geral de resultados. */
+export interface BusinessSearchResponse {
+  items: BusinessSearchItem[];
+  next_cursor: string | null;
+  total: number;
 }
