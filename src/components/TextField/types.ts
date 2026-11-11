@@ -42,6 +42,8 @@ export type TextFieldProps = {
   hint?: string;
   value?: string;
   onChangeText?: (text: string) => void;
+  /** Chamado ao confirmar pelo botão de ação do teclado (ex.: "Buscar"). */
+  onSubmitEditing?: () => void;
   /**
    * Foco e blur do campo. Rodam depois dos handlers internos, que controlam o
    * estado visual `Focused` e a abertura do dropdown — passar estes não

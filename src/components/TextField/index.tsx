@@ -247,6 +247,7 @@ export function TextField({
   hint,
   value = '',
   onChangeText,
+  onSubmitEditing,
   onFocus,
   onBlur,
   placeholder,
@@ -416,7 +417,10 @@ export function TextField({
           multiline={config.multiline}
           secureTextEntry={config.secure && isSecureHidden}
           keyboardType={isDateField && Platform.OS === 'web' ? 'numbers-and-punctuation' : keyboardType ?? config.keyboardType}
-          autoCapitalize={autoCapitalize}
+          returnKeyType={type === 'Search' ? 'search' : undefined}
+          onSubmitEditing={onSubmitEditing}
+          autoCapitalize={autoCapitalize ?? (type === 'Search' ? 'none' : undefined)}
+          autoCorrect={type === 'Search' ? false : undefined}
           maxLength={isDateField && Platform.OS === 'web' ? (dateMode === 'time' ? 5 : 10) : maxLength}
           onFocus={(event) => {
             setFocused(true);

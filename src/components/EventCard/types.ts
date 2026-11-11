@@ -20,12 +20,20 @@ export interface Event {
   isFavorited?: boolean;
   /** Prévia de quem confirmou — pilha de avatares no rodapé de `Featured` e `Mini`. */
   attendeeAvatars?: (ImageProps['source'] | null)[];
+  /** Prévia de evento privado sem participação (`is_preview` da busca). */
+  isPreview?: boolean;
+  /** Descrição do evento — `null` quando ausente ou quando `is_preview=true`. */
+  description?: string | null;
+  /** Total de confirmados — `null` quando `is_preview=true`. */
+  participantsCount?: number | null;
 }
 
 export interface EventCardProps {
   variant: EventVariant;
   event: Event;
   state?: EventState;
+  /** Prévia de evento privado: oculta lista de confirmados e descrição. */
+  isPreview?: boolean;
   /** Exibe o estado não lido no card Request. */
   isUnread?: boolean;
   onPress?: () => void;

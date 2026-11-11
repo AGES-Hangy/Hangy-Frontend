@@ -12,13 +12,12 @@ import { colors } from '@/constants/colors';
 import { elevation, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import {
-  blockApplies,
   fromDateKey,
   normalizeFilterValue,
   toDateKey,
   validateDateRange,
 } from '@/utils/searchFilters';
-import type { DatePreset, DistanceKm, FilterPanelProps, FilterValue, ResultType } from './types';
+import type { DatePreset, FilterPanelProps, FilterValue } from './types';
 
 const DATE_OPTIONS: { preset: DatePreset; label: string }[] = [
   { preset: 'today', label: 'Hoje' },
@@ -26,22 +25,6 @@ const DATE_OPTIONS: { preset: DatePreset; label: string }[] = [
   { preset: 'weekend', label: 'Este fim de semana' },
   { preset: 'custom', label: 'Escolher data' },
 ];
-
-const RESULT_OPTIONS: { type: ResultType | undefined; label: string }[] = [
-  { type: undefined, label: 'Tudo' },
-  { type: 'events', label: 'Eventos' },
-  { type: 'people', label: 'Pessoas' },
-  { type: 'businesses', label: 'Estabelecimentos' },
-];
-
-const DISTANCE_OPTIONS: DistanceKm[] = [1, 5, 10, 25];
-
-/** Nome de cada tipo no aviso "Não se aplica a ...". */
-const RESULT_TYPE_NAMES: Record<ResultType, string> = {
-  events: 'eventos',
-  people: 'pessoas',
-  businesses: 'estabelecimentos',
-};
 
 /** Mesma largura máxima do `Modal`: o Figma só diz "largura fluida" (361 no mock). */
 const MAX_WIDTH = 420;
@@ -88,12 +71,9 @@ export function FilterPanel({
   }, [visible]);
 
   const isSearch = variant === 'Search';
-  const resultType = isSearch ? draft.resultType : undefined;
-  const dateApplies = blockApplies('date', resultType);
-  const distanceApplies = blockApplies('distance', resultType);
 
   const rangeError =
-    dateApplies && draft.datePreset === 'custom' ? validateDateRange(draft.dateFrom, draft.dateTo) : null;
+    draft.datePreset === 'custom' ? validateDateRange(draft.dateFrom, draft.dateTo) : null;
 
   const visibleMicros = useMemo(
     () => getVisibleMicros(tags, draft.tagIds, suggestedMicroTags ?? []),
@@ -128,7 +108,6 @@ export function FilterPanel({
     onClear?.();
   };
 
-  const notAppliedHint = resultType ? `Não se aplica a ${RESULT_TYPE_NAMES[resultType]}.` : '';
   const today = fromDateKey(toDateKey(new Date()));
 
   return (
@@ -156,33 +135,19 @@ export function FilterPanel({
               contentContainerStyle={styles.content}
               keyboardShouldPersistTaps="handled"
             >
-              {isSearch && (
-                <TagPickerGroup label="Mostrar">
-                  {RESULT_OPTIONS.map((option) => (
-                    <Chip
-                      key={option.label}
-                      label={option.label}
-                      isSelected={draft.resultType === option.type}
-                      onPress={() => update({ resultType: option.type })}
-                    />
-                  ))}
-                </TagPickerGroup>
-              )}
-
               <View style={styles.block}>
                 <TagPickerGroup label="Data do evento">
                   {DATE_OPTIONS.map((option) => (
                     <Chip
                       key={option.preset}
                       label={option.label}
-                      isSelected={dateApplies && draft.datePreset === option.preset}
-                      disabled={!dateApplies}
+                      isSelected={draft.datePreset === option.preset}
                       onPress={() => selectDatePreset(option.preset)}
                     />
                   ))}
                 </TagPickerGroup>
 
-                {dateApplies && draft.datePreset === 'custom' && (
+                {draft.datePreset === 'custom' && (
                   <View style={styles.dateRange}>
                     <TextField
                       type="Date"
@@ -212,32 +177,9 @@ export function FilterPanel({
                 {/* Na busca, deixar claro que pessoas e estabelecimentos
                     continuam aparecendo — senão parece que a busca quebrou. */}
                 {isSearch && (
-                  <Text style={styles.hint}>
-                    {dateApplies ? 'Aplica-se apenas aos resultados de eventos.' : notAppliedHint}
-                  </Text>
+                  <Text style={styles.hint}>Aplica-se apenas aos resultados de eventos.</Text>
                 )}
               </View>
-
-              {isSearch && (
-                <View style={styles.block}>
-                  <TagPickerGroup label="Distância">
-                    {DISTANCE_OPTIONS.map((km) => (
-                      <Chip
-                        key={km}
-                        label={`Até ${km} km`}
-                        isSelected={distanceApplies && draft.maxDistanceKm === km}
-                        disabled={!distanceApplies}
-                        onPress={() => update({ maxDistanceKm: draft.maxDistanceKm === km ? undefined : km })}
-                      />
-                    ))}
-                  </TagPickerGroup>
-                  <Text style={styles.hint}>
-                    {distanceApplies
-                      ? 'A partir da sua localização. Aplica-se a eventos e estabelecimentos.'
-                      : notAppliedHint}
-                  </Text>
-                </View>
-              )}
 
               {tagsLoading ? (
                 <Text style={styles.hint} accessibilityLiveRegion="polite">
