@@ -27,13 +27,14 @@ export function useAdminReport(reportId: string | undefined) {
   const [error, setError] = useState<LoadError | null>(null);
   const latestRequest = useRef(0);
 
-  const load = useCallback(async () => {
+  /** Resolve `true` quando a denúncia chegou; `false` em erro ou resposta descartada. */
+  const load = useCallback(async (): Promise<boolean> => {
     const requestId = ++latestRequest.current;
 
     if (!reportId) {
       setIsLoading(false);
       setError(describeReportLoadError({ kind: 'http', status: 404, detail: 'Report not found' }));
-      return;
+      return false;
     }
 
     setIsLoading(true);
@@ -41,13 +42,15 @@ export function useAdminReport(reportId: string | undefined) {
 
     try {
       const report = await apiFetch<AdminReportDetail>(endpoints.adminReport(reportId));
-      if (requestId !== latestRequest.current) return;
+      if (requestId !== latestRequest.current) return false;
       setLoaded({ id: reportId, report });
+      return true;
     } catch (caught) {
-      if (requestId !== latestRequest.current) return;
+      if (requestId !== latestRequest.current) return false;
       const loadError = describeReportLoadError(caught);
       if (loadError.kind === 'unavailable') setLoaded(null);
       setError(loadError);
+      return false;
     } finally {
       if (requestId === latestRequest.current) setIsLoading(false);
     }

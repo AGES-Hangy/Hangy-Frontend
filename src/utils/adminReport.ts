@@ -1,4 +1,5 @@
-import type { AdminReportDetail, ReportReason } from '@/types/adminReport';
+import type { ReportReason } from '@/types/admin';
+import type { AdminReportDetail } from '@/types/adminReport';
 import { formatDayMonth, formatRelativeTime, formatTime } from '@/utils/datetime';
 
 /** Texto de cada `ReportTypeEnum` do backend. */

@@ -1,12 +1,17 @@
-import type { AdminReportDetail, AdminUserModerationInput, ModerationStatus } from '@/types/adminReport';
+import type { ModerationPayload, UserModerationStatus } from '@/types/admin';
+import type { AdminReportDetail } from '@/types/adminReport';
+
+type ModerationStatus = UserModerationStatus;
 
 /**
  * Mocks do detalhe de denúncia e das ações de moderação, ligados por
  * `USE_API_MOCKS` via `resolveMock` (`@/mocks/eventApi`).
  *
- * Existem porque as tasks 245 e 249 [BE] ainda não entraram na `develop` e a
- * 246 (arquivar) ainda não subiu. O estado é mutável: banir, suspender e
- * arquivar mudam o mock, e o `GET` seguinte já vem resolvido.
+ * Espelham as tasks 245 (detalhe), 246 (arquivar) e 249 (moderar) [BE], já na
+ * `develop` do backend, para testar a tela sem banco semeado. O estado é
+ * mutável: banir, suspender e arquivar mudam o mock, e o `GET` seguinte já
+ * vem resolvido. Só o `PATCH` de moderação com `report_id` passa por aqui: o
+ * da ficha do usuário (sem denúncia) segue como na `develop`.
  *
  * ## Cenários de teste
  *
@@ -20,7 +25,7 @@ import type { AdminReportDetail, AdminUserModerationInput, ModerationStatus } fr
  * | `archived`  | Já arquivada (`REJECTED`)                                       |
  * | `suspended` | Conta já suspensa por outra denúncia; suspender de novo funciona |
  * | `banned`    | Conta já banida: suspender devolve `409 Account is already banned` |
- * | `taken`     | Qualquer ação devolve `409 Report is no longer open` e o `GET` seguinte vem resolvido |
+ * | `taken`     | Qualquer ação devolve `409 Report already resolved` e o `GET` seguinte vem resolvido |
  * | `missing`   | `404 Report not found`                                          |
  * | `boom`      | `500` no detalhe                                                |
  * | `fail`      | Detalhe normal, ações devolvem `500`                            |
@@ -112,9 +117,9 @@ function falhaDaAcao(reportId: string): AdminMockOutcome | null {
   if (reportId === 'taken') {
     // Outro admin resolveu enquanto a tela estava aberta.
     if (aberta(reportId)) resolver(reportId, 'BANNED', 'BANNED', 'RESOLVED');
-    return { erro: { status: 409, detail: 'Report is no longer open' } };
+    return { erro: { status: 409, detail: 'Report already resolved' } };
   }
-  if (!aberta(reportId)) return { erro: { status: 409, detail: 'Report is no longer open' } };
+  if (!aberta(reportId)) return { erro: { status: 409, detail: 'Report already resolved' } };
   return null;
 }
 
@@ -130,7 +135,7 @@ export function resolveAdminMock(partes: string[], method: string, init: Request
     return { resposta: denuncia(reportId) };
   }
 
-  // PATCH /admin/reports/{id}/archive — contrato proposto da task 246.
+  // PATCH /admin/reports/{id}/archive (task 246 [BE]).
   if (partes[1] === 'reports' && partes[3] === 'archive' && method === 'PATCH') {
     const reportId = partes[2];
     const falha = falhaDaAcao(reportId);
@@ -138,10 +143,11 @@ export function resolveAdminMock(partes: string[], method: string, init: Request
     return { resposta: resolver(reportId, 'ARCHIVED', null, 'REJECTED') };
   }
 
-  // PATCH /admin/users/{id}/moderation
+  // PATCH /admin/users/{id}/moderation com `report_id` (banir ou suspender pela denúncia).
   if (partes[1] === 'users' && partes[3] === 'moderation' && method === 'PATCH') {
-    const body = JSON.parse(String(init.body ?? '{}')) as AdminUserModerationInput;
-    const reportId = body.report_id ?? '';
+    const body = JSON.parse(String(init.body ?? '{}')) as ModerationPayload;
+    if (body.action === 'REVERT' || !body.report_id) return undefined;
+    const reportId = body.report_id;
     const falha = falhaDaAcao(reportId);
     if (falha) return falha;
 
@@ -160,6 +166,7 @@ export function resolveAdminMock(partes: string[], method: string, init: Request
         user_id: atualizada.target.id,
         name: atualizada.target.name,
         email: 'lucas@exemplo.com',
+        role: 'USER',
         moderation_status: status,
         suspended_until: suspensoAte,
         created_at: `${atualizada.target.member_since}T12:00:00Z`,

@@ -2,37 +2,44 @@ import { useCallback, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
-import type {
-  AdminUserModerationInput,
-  AdminUserModerationOutput,
-  ModerationStatus,
-} from '@/types/adminReport';
+import { SUSPENSION_DAYS } from '@/hooks/useModerateUser';
+import type { ModerationPayload, ModerationResult, UserModerationStatus } from '@/types/admin';
 import { describeActionError, isApiErrorLike } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
 
-/**
- * Duração fixa do "Suspender 7 dias". O endpoint aceita outros valores, mas o
- * produto ainda não pediu um seletor de duração.
- */
-export const SUSPENSION_DAYS = 7;
+export { SUSPENSION_DAYS };
 
 export type ReportModerationAction = 'BAN' | 'SUSPEND' | 'ARCHIVE';
 
 export type ReportModerationResult =
   /** Ação aplicada; `moderationStatus` é o novo status da conta (ausente ao arquivar). */
-  | { status: 'done'; moderationStatus?: ModerationStatus }
+  | { status: 'done'; moderationStatus?: UserModerationStatus }
   /** A denúncia ou a conta mudou por fora: a tela deve recarregar o detalhe. */
   | { status: 'stale' }
+  /** Recusada por regra que recarregar não muda (ex.: a própria conta). */
+  | { status: 'rejected' }
   | { status: 'failed' }
   | { status: 'ignored' };
 
-/** `detail` dos 409 de `PATCH /admin/users/{id}/moderation` (task 249 [BE]). */
-const REPORT_NOT_OPEN = 'Report is no longer open';
+/**
+ * `detail` dos 409 de `PATCH /admin/users/{id}/moderation` (task 249 [BE]) e de
+ * `PATCH /admin/reports/{id}/archive` (task 246 [BE]), em `routes/admin.py`.
+ */
+const REPORT_ALREADY_RESOLVED = 'Report already resolved';
 const ACCOUNT_ALREADY_BANNED = 'Account is already banned';
+const OWN_ACCOUNT = 'Admins cannot moderate their own account';
+const REPORT_NOT_ABOUT_USER = 'Report is not about this user';
 
-function staleMessage(detail: string | null): string {
+/** 409 que não mudam ao recarregar: só avisa, sem buscar de novo. */
+const REJECTED_MESSAGE: Record<string, string> = {
+  [OWN_ACCOUNT]: 'Não é possível moderar a própria conta.',
+  [REPORT_NOT_ABOUT_USER]: 'Esta denúncia não é sobre esta conta.',
+};
+
+function staleMessage(status: number, detail: string | null): string {
   if (detail === ACCOUNT_ALREADY_BANNED) return 'Esta conta já está banida.';
-  if (detail === REPORT_NOT_OPEN) return 'Esta denúncia já foi encerrada por outra pessoa.';
+  if (detail === REPORT_ALREADY_RESOLVED) return 'Esta denúncia já foi encerrada por outra pessoa.';
+  if (status === 409) return 'A denúncia ou a conta mudou. Confira o estado atual.';
   return 'Esta denúncia ou a conta não existe mais.';
 }
 
@@ -50,7 +57,7 @@ export function useReportModeration() {
   const run = useCallback(
     async (
       action: ReportModerationAction,
-      request: () => Promise<ModerationStatus | undefined>,
+      request: () => Promise<UserModerationStatus | undefined>,
     ): Promise<ReportModerationResult> => {
       if (inFlight.current) return { status: 'ignored' };
       inFlight.current = true;
@@ -65,8 +72,14 @@ export function useReportModeration() {
         if (isApiErrorLike(caught) && (caught.status === 401 || caught.status === 403)) {
           return { status: 'failed' };
         }
+        if (isApiErrorLike(caught) && caught.status === 409 && caught.detail && REJECTED_MESSAGE[caught.detail]) {
+          const message = REJECTED_MESSAGE[caught.detail];
+          setError(message);
+          addToast({ type: 'warning', message });
+          return { status: 'rejected' };
+        }
         if (isApiErrorLike(caught) && (caught.status === 404 || caught.status === 409)) {
-          const message = staleMessage(caught.detail);
+          const message = staleMessage(caught.status, caught.detail);
           setError(message);
           addToast({ type: 'warning', message });
           return { status: 'stale' };
@@ -85,8 +98,8 @@ export function useReportModeration() {
   );
 
   const moderate = useCallback(
-    async (userId: string, body: AdminUserModerationInput) => {
-      const updated = await apiFetch<AdminUserModerationOutput>(endpoints.adminUserModeration(userId), {
+    async (userId: string, body: ModerationPayload) => {
+      const updated = await apiFetch<ModerationResult>(endpoints.adminUserModeration(userId), {
         method: 'PATCH',
         body: JSON.stringify(body),
       });

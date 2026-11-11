@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,20 +53,33 @@ function targetName(report: AdminReportDetail) {
   return report.target.name?.trim() || 'Conta removida';
 }
 
+/** Sem histórico (link direto, refresh na Web), voltar cai no Painel, não na área comum. */
+function goBack() {
+  if (router.canGoBack()) router.back();
+  else router.replace('/Admin/Painel');
+}
+
 /**
  * Props do `AdminUserRow` para a conta denunciada. O `summary` traz o texto do
  * frame do detalhe; as contagens exigidas por cada status ficam como dado real
  * (a denúncia aberta conta como uma das denúncias da conta).
  */
 function targetRowProps(report: AdminReportDetail): AdminUserRowProps {
-  const base = { name: targetName(report), summary: targetSummary(report) };
-  const { moderation_status: status, event_count: eventCount } = report.target;
-  const moderated = {
-    untilDate: report.resolution ? formatDayMonth(report.resolution.resolved_at) : '',
-    reportCount: report.previous_reports.total + 1,
+  const base = {
+    name: targetName(report),
+    summary: targetSummary(report),
+    avatarUri: report.organizer?.photo_url ?? undefined,
   };
-  if (status === 'BANNED') return { ...base, ...moderated, moderationStatus: 'BANNED' };
-  if (status === 'SUSPENDED') return { ...base, ...moderated, moderationStatus: 'SUSPENDED' };
+  const { moderation_status: status, event_count: eventCount } = report.target;
+  const reportCount = report.previous_reports.total + 1;
+  // O `summary` substitui o texto montado com `untilDate`; mesmo assim, a data
+  // só vai quando tem o significado da prop: "banido em" é a data da resolução
+  // que baniu. O detalhe não traz o fim da suspensão, então ela fica vazia.
+  if (status === 'BANNED') {
+    const bannedOn = report.resolution?.action === 'BANNED' ? formatDayMonth(report.resolution.resolved_at) : '';
+    return { ...base, moderationStatus: 'BANNED', untilDate: bannedOn, reportCount };
+  }
+  if (status === 'SUSPENDED') return { ...base, moderationStatus: 'SUSPENDED', untilDate: '', reportCount };
   return { ...base, moderationStatus: 'ACTIVE', eventCount };
 }
 
@@ -105,11 +118,17 @@ function LoadingSkeleton() {
 export default function AdminReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { report, isLoading, error, reload, patchReport } = useAdminReport(id);
+  // Com a denúncia na tela, `isLoading` é o recarregamento depois de um conflito
+  // e `error` é a falha dele: o que está na tela pode estar desatualizado.
+  const isRefreshing = report !== null && isLoading;
+  const refreshFailed = report !== null && !isLoading && error !== null;
+
   const { ban, suspend, archive, pendingAction } = useReportModeration();
   const { user } = useCurrentUser();
   const { addToast } = useToast();
   const insets = useSafeAreaInsets();
   const [dialog, setDialog] = useState<ReportModerationAction | null>(null);
+  const actionsLocked = pendingAction !== null || isRefreshing;
 
   const title = report ? `Denúncia #${report.report_number}` : 'Denúncia';
 
@@ -129,7 +148,8 @@ export default function AdminReportDetailScreen() {
 
     // Outra pessoa já resolveu, ou a conta mudou: o que está na tela não vale mais.
     if (result.status === 'stale') {
-      void reload();
+      const refreshed = await reload();
+      if (!refreshed) addToast({ type: 'error', message: 'Não foi possível atualizar a denúncia.' });
       return;
     }
     if (result.status !== 'done') return;
@@ -178,7 +198,10 @@ export default function AdminReportDetailScreen() {
             </Text>
           </View>
 
-          <SectionHeader title="CONTA DENUNCIADA" variant="overline" />
+          <SectionHeader
+            title={report.target.type === 'EVENT' ? 'ORGANIZADOR DO EVENTO DENUNCIADO' : 'CONTA DENUNCIADA'}
+            variant="overline"
+          />
           <AdminUserRow {...targetRowProps(report)} />
 
           <SectionHeader title="MOTIVO" variant="overline" />
@@ -200,7 +223,22 @@ export default function AdminReportDetailScreen() {
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: spacing[16] + insets.bottom }]}>
-          {open ? (
+          {refreshFailed ? (
+            <View style={styles.outdated}>
+              <Text style={[typography.bodyS, styles.outdatedText]}>
+                {`Não foi possível atualizar esta denúncia. ${error?.message ?? ''}`.trim()}
+              </Text>
+              <Button
+                label="Tentar de novo"
+                variant="Tertiary"
+                size="SM"
+                onPress={() => {
+                  void reload();
+                }}
+                style={styles.secondaryAction}
+              />
+            </View>
+          ) : open ? (
             <>
               <View style={styles.mainActions}>
                 <Button
@@ -208,7 +246,7 @@ export default function AdminReportDetailScreen() {
                   variant="Danger"
                   size="LG"
                   onPress={() => setDialog('BAN')}
-                  disabled={pendingAction !== null}
+                  disabled={actionsLocked}
                   accessibilityLabel={`Banir ${targetName(report)}`}
                   style={styles.mainAction}
                 />
@@ -217,7 +255,7 @@ export default function AdminReportDetailScreen() {
                   variant="Secondary"
                   size="LG"
                   onPress={() => setDialog('SUSPEND')}
-                  disabled={pendingAction !== null}
+                  disabled={actionsLocked}
                   accessibilityLabel={`Suspender ${targetName(report)} por ${SUSPENSION_DAYS} dias`}
                   style={styles.mainAction}
                 />
@@ -227,7 +265,7 @@ export default function AdminReportDetailScreen() {
                 variant="Tertiary"
                 size="SM"
                 onPress={() => setDialog('ARCHIVE')}
-                disabled={pendingAction !== null}
+                disabled={actionsLocked}
                 accessibilityLabel={`Arquivar a denúncia #${report.report_number} sem ação na conta`}
                 style={styles.secondaryAction}
               />
@@ -267,7 +305,7 @@ export default function AdminReportDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <TopAppBar variant="Detail" title={title} applyTopInset={false} />
+      <TopAppBar variant="Detail" title={title} applyTopInset={false} onBack={goBack} />
       {renderBody()}
     </View>
   );
@@ -341,6 +379,13 @@ const styles = StyleSheet.create({
   },
   secondaryAction: {
     alignSelf: 'center',
+  },
+  outdated: {
+    gap: spacing[8],
+  },
+  outdatedText: {
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
   resolution: {
     gap: spacing[4],

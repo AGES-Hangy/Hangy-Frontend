@@ -93,6 +93,7 @@ function moderationHook(apiFetch) {
   const hook = host('src/hooks/useReportModeration.ts', {
     '@/components/Toast': { useToast: () => ({ addToast: (toast) => toasts.push(toast) }) },
     '@/constants/api': { endpoints },
+    '@/hooks/useModerateUser': { SUSPENSION_DAYS: 7 },
     '@/utils/apiErrors': apiErrors,
     '@/utils/http': { apiFetch },
   });
@@ -133,7 +134,7 @@ test('arquivar usa o endpoint da denúncia e não toca na conta', async () => {
 
 test('409 e 404 viram "stale" com aviso, para a tela recarregar', async () => {
   const errors = [
-    apiError(409, 'Report is no longer open'),
+    apiError(409, 'Report already resolved'),
     apiError(409, 'Account is already banned'),
     apiError(404, 'User not found'),
   ];
@@ -146,6 +147,24 @@ test('409 e 404 viram "stale" com aviso, para a tela recarregar', async () => {
     { type: 'warning', message: 'Esta denúncia já foi encerrada por outra pessoa.' },
     { type: 'warning', message: 'Esta conta já está banida.' },
     { type: 'warning', message: 'Esta denúncia ou a conta não existe mais.' },
+  ]);
+});
+
+test('409 da própria conta só avisa, sem recarregar', async () => {
+  const errors = [
+    apiError(409, 'Admins cannot moderate their own account'),
+    apiError(409, 'Report is not about this user'),
+    apiError(409, 'Some new conflict'),
+  ];
+  const { render, toasts } = moderationHook(async () => { throw errors.shift(); });
+
+  assert.equal((await render().ban('u', 'r')).status, 'rejected');
+  assert.equal((await render().suspend('u', 'r')).status, 'rejected');
+  assert.equal((await render().ban('u', 'r')).status, 'stale');
+  assert.deepEqual(JSON.parse(JSON.stringify(toasts)), [
+    { type: 'warning', message: 'Não é possível moderar a própria conta.' },
+    { type: 'warning', message: 'Esta denúncia não é sobre esta conta.' },
+    { type: 'warning', message: 'A denúncia ou a conta mudou. Confira o estado atual.' },
   ]);
 });
 
@@ -246,6 +265,15 @@ test('404 vira "denúncia não encontrada" sem tentar de novo; 500 deixa tentar'
   assert.equal(broken.render().error.canRetry, true);
 });
 
+test('id que não é UUID (422) também é "denúncia não encontrada", sem tentar de novo', async () => {
+  const invalid = reportHook('123', async () => { throw apiError(422, [{ msg: 'Input should be a valid UUID' }]); });
+  invalid.render();
+  await flush();
+  const state = invalid.render();
+  assert.equal(state.error.title, 'Denúncia não encontrada');
+  assert.equal(state.error.canRetry, false);
+});
+
 test('mock: banir resolve a denúncia e o GET seguinte já vem resolvido', () => {
   const { resolveAdminMock } = loadMock();
   const ban = resolveAdminMock(['admin', 'users', 'conta-denunciada', 'moderation'], 'PATCH', {
@@ -259,7 +287,7 @@ test('mock: banir resolve a denúncia e o GET seguinte já vem resolvido', () =>
   assert.equal(resposta.resolution.action, 'BANNED');
 
   const again = resolveAdminMock(['admin', 'reports', 'mock-ban', 'archive'], 'PATCH', {});
-  assert.deepEqual({ ...again.erro }, { status: 409, detail: 'Report is no longer open' });
+  assert.deepEqual({ ...again.erro }, { status: 409, detail: 'Report already resolved' });
 });
 
 test('mock: cenários de erro respondem como o backend', () => {
@@ -270,12 +298,22 @@ test('mock: cenários de erro respondem como o backend', () => {
     });
 
   assert.equal(suspend('banned').erro.detail, 'Account is already banned');
-  assert.equal(suspend('taken').erro.detail, 'Report is no longer open');
+  assert.equal(suspend('taken').erro.detail, 'Report already resolved');
   assert.equal(resolveAdminMock(['admin', 'reports', 'taken'], 'GET', {}).resposta.status, 'RESOLVED');
   assert.equal(suspend('offline').semRede, true);
   assert.equal(resolveAdminMock(['admin', 'reports', 'missing'], 'GET', {}).erro.status, 404);
   assert.equal(resolveAdminMock(['admin', 'reports', 'archived'], 'GET', {}).resposta.status, 'REJECTED');
   assert.equal(resolveAdminMock(['events', '1'], 'GET', {}), undefined);
+});
+
+test('mock: moderação sem denúncia (ficha do usuário) não passa pelo mock da denúncia', () => {
+  const { resolveAdminMock } = loadMock();
+  const patch = (body) =>
+    resolveAdminMock(['admin', 'users', 'u', 'moderation'], 'PATCH', { body: JSON.stringify(body) });
+
+  assert.equal(patch({ action: 'REVERT' }), undefined);
+  assert.equal(patch({ action: 'BAN' }), undefined);
+  assert.equal(patch({ action: 'SUSPEND', duration_days: 7 }), undefined);
 });
 
 function loadMock() {

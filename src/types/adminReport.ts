@@ -1,24 +1,11 @@
+import type { ReportReason, ReportStatus, UserModerationStatus } from '@/types/admin';
+
 /**
  * Contrato de `GET /admin/reports/{report_id}` (task 245 [BE]) e de
- * `PATCH /admin/users/{user_id}/moderation` (task 249 [BE]).
+ * `PATCH /admin/reports/{report_id}/archive` (task 246 [BE]), espelhando
+ * `app/presentation/dtos/admin_report.py`. Motivo, status da denúncia e status
+ * da conta são os mesmos tipos de `@/types/admin`.
  */
-
-/** `ReportStatusEnum` do backend. `REJECTED` é a denúncia arquivada. */
-export type AdminReportStatus = 'PENDING' | 'REVIEWED' | 'RESOLVED' | 'REJECTED';
-
-/** `ModerationStatusEnum` do backend. */
-export type ModerationStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
-
-/** `ReportTypeEnum` do backend. */
-export type ReportReason =
-  | 'SPAM'
-  | 'HARASSMENT'
-  | 'INAPPROPRIATE_CONTENT'
-  | 'FAKE_PROFILE'
-  | 'HATE_SPEECH'
-  | 'MISLEADING_EVENT'
-  | 'SAFETY_CONCERN'
-  | 'OTHER';
 
 /** `ReportResolutionActionEnum` do backend. */
 export type ReportResolutionAction = 'BANNED' | 'SUSPENDED' | 'ARCHIVED' | 'EVENT_REMOVED' | (string & {});
@@ -36,7 +23,17 @@ export interface AdminReportTarget {
   /** `YYYY-MM-DD`. */
   member_since: string;
   event_count: number;
-  moderation_status: ModerationStatus | (string & {});
+  moderation_status: UserModerationStatus | (string & {});
+}
+
+/** Organizador por trás de um evento denunciado. Só vem quando `target.type === 'EVENT'`. */
+export interface AdminReportOrganizer {
+  user_id: string;
+  name: string | null;
+  photo_url: string | null;
+  moderation_status: UserModerationStatus | (string & {});
+  events_count: number;
+  reports_count: number;
 }
 
 export interface AdminReportResolution {
@@ -48,7 +45,7 @@ export interface AdminReportResolution {
 export interface AdminReportDetail {
   report_id: string;
   report_number: number;
-  status: AdminReportStatus | (string & {});
+  status: ReportStatus | (string & {});
   opened_at: string;
   target: AdminReportTarget;
   reason: ReportReason | (string & {});
@@ -61,18 +58,6 @@ export interface AdminReportDetail {
     resolved_with_action: number;
   };
   resolution: AdminReportResolution | null;
-}
-
-/** Corpo de `PATCH /admin/users/{user_id}/moderation`. */
-export type AdminUserModerationInput =
-  | { action: 'BAN'; report_id?: string }
-  | { action: 'SUSPEND'; duration_days: number; report_id?: string };
-
-export interface AdminUserModerationOutput {
-  user_id: string;
-  name: string | null;
-  email: string;
-  moderation_status: ModerationStatus;
-  suspended_until: string | null;
-  created_at: string;
+  /** Ausente fora de denúncias de evento. */
+  organizer?: AdminReportOrganizer | null;
 }

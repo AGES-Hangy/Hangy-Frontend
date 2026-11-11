@@ -114,8 +114,11 @@ export function describeProfileLoadError(error: unknown): LoadError {
 
 export function describeReportLoadError(error: unknown): LoadError {
   const loadError = describeLoadError(error);
+  // O backend valida `report_id` como UUID: um id malformado (link ou rota
+  // digitada) volta 422, e tentar de novo nunca vai funcionar.
+  const malformedId = isApiErrorLike(error) && error.status === 422;
 
-  if (loadError.kind === 'unavailable' || loadError.kind === 'cancelled') {
+  if (malformedId || loadError.kind === 'unavailable' || loadError.kind === 'cancelled') {
     return {
       kind: 'unavailable',
       title: 'Denúncia não encontrada',
