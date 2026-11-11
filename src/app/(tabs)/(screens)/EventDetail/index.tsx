@@ -249,6 +249,12 @@ export default function EventDetail() {
   }
 
   const canFavorite = user?.userType === 'PERSONAL' && event.status !== 'CANCELLED';
+  // Regra de denúncia da task 090: o organizador nunca denuncia o próprio
+  // evento; privado e por convite só com participação aprovada. Quais motivos
+  // valem para quem não participa vem da API, na tela de denúncia.
+  const canReport =
+    !event.viewer.is_organizer &&
+    (event.privacy === 'PUBLIC' || event.viewer.participation_status === 'CONFIRMED');
   const action = MAIN_ACTION[event.viewer.available_action] ?? null;
   const preview = event.participants_preview;
   // O backend manda `name` nulo quando a conta não tem nome cadastrado.
@@ -517,6 +523,16 @@ export default function EventDetail() {
                   accessibilityLabel={isFavorited ? 'Remover dos favoritos' : 'Favoritar evento'}
                   disabled={isOffline}
                   onPress={toggleFavorite}
+                />
+              )}
+              {canReport && (
+                <IconButton
+                  icon="flag"
+                  variant="Tonal"
+                  accessibilityLabel="Denunciar evento"
+                  onPress={() =>
+                    router.push({ pathname: '/Report', params: { type: 'EVENT', id: event.event_id } })
+                  }
                 />
               )}
               {event.viewer.is_organizer && (
