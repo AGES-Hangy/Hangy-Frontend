@@ -90,6 +90,13 @@ const VARIANTS = {
     confirmLabel: 'Suspender 7 dias',
     destructive: false,
   },
+  // Admin — reverter banimento ou suspensão.
+  RevertModeration: {
+    title: 'Reverter moderação?',
+    description: 'O usuário voltará a ter acesso ao app.',
+    confirmLabel: 'Reverter',
+    destructive: false,
+  },
   ArchiveReport: {
     title: 'Arquivar denúncia?',
     description: 'A denúncia sai da fila e a conta denunciada não sofre nenhuma ação.',

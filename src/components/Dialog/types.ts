@@ -11,6 +11,7 @@ export type DialogVariant =
   | 'Unblock'
   | 'BanUser'
   | 'SuspendUser'
+  | 'RevertModeration'
   | 'ArchiveReport';
 
 export type DialogProps = {

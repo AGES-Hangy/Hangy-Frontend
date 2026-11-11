@@ -198,16 +198,52 @@ export const endpoints = {
     const query = params.toString();
     return `/users/me/connections/pending${query ? `?${query}` : ''}`;
   },
+  /**
+   * Busca textual categorizada em eventos, estabelecimentos e pessoas, com
+   * filtros de tags e intervalo de datas nos eventos (task 121 [BE]).
+   */
+  search: (options?: {
+    q?: string;
+    preview?: number;
+    tagIds?: string[];
+    dateFrom?: string | null;
+    dateTo?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    const trimmed = options?.q?.trim();
+    if (trimmed) params.set('q', trimmed);
+    if (options?.preview !== undefined) params.set('preview', String(options.preview));
+    // O backend espera os UUIDs numa string só, separados por vírgula (OR).
+    if (options?.tagIds?.length) params.set('tag_ids', options.tagIds.join(','));
+    if (options?.dateFrom) params.set('date_from', options.dateFrom);
+    if (options?.dateTo) params.set('date_to', options.dateTo);
+    const query = params.toString();
+    return `/search${query ? `?${query}` : ''}`;
+  },
+  /** Estabelecimentos da busca, paginado por cursor, com busca opcional por nome (task 237 [BE]). */
+  searchBusinesses: (options?: { limit?: number; cursor?: string | null; q?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/search/businesses${query ? `?${query}` : ''}`;
+  },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
-  /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). */
+  /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). Só `ADMIN`. */
   adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
   /**
-   * Arquiva a denúncia sem tocar na conta (task 246 [BE]). A task ainda não
-   * subiu: `PATCH` sem corpo nesta rota é o contrato proposto — confirmar
-   * quando ela existir.
+   * Arquiva a denúncia sem tocar na conta (task 246 [BE]). Só `ADMIN`. `PATCH`
+   * sem corpo; devolve o detalhe atualizado, com `status: REJECTED`.
    */
   adminReportArchive: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/archive`,
-  /** Banir, suspender ou reverter uma conta; com `report_id`, resolve a denúncia junto (task 249 [BE]). */
+  /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
+  adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
+  /**
+   * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
+   * `PATCH` com união discriminada por `action`: `BAN`, `SUSPEND` (+ `duration_days`) ou `REVERT`.
+   * Com `report_id`, resolve a denúncia junto.
+   */
   adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
 } as const;
