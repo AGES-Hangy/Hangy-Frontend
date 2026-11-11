@@ -123,12 +123,12 @@ export default function SearchAllBusinesses() {
         ListHeaderComponent={
           businesses.length > 0 ? (
             <SectionHeader title={`ESTABELECIMENTOS · ${total ?? businesses.length}`} variant="overline" />
-          ) : null
+          ) : undefined
         }
         // Mesma mensagem do bloco de origem da busca (`EmptyState` de `Search`).
         ListEmptyComponent={<EmptyState context="Search" fill />}
         ListFooterComponent={
-          businesses.length > 0 ? <ListFooter isLoadingMore={isLoadingMore} hasMore={hasMore} /> : null
+          businesses.length > 0 ? <ListFooter isLoadingMore={isLoadingMore} hasMore={hasMore} /> : undefined
         }
         // A trava contra requisição duplicada vive em `loadMore` (ref no hook).
         onEndReached={hasMore ? () => void loadMore() : undefined}
