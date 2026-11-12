@@ -24,10 +24,10 @@ export default function AdminLayout() {
   // `segments` é `['Admin', '<Secao>', ...]`; telas internas mantêm a seção.
   const section = segments[1];
   const active = DESTINATIONS.find((dest) => dest === section) ?? 'Painel';
-  // O detalhe da denúncia (`Denuncias/[id]`) não tem a `AdminNav` no frame do
-  // Figma: o rodapé é das ações da própria tela, que já soma a safe area. As
-  // outras telas internas (ex.: `Usuarios/[id]`) mantêm a barra.
-  const hidesNav = section === 'Denuncias' && segments.length > 2;
+  // Telas internas de uma seção (fichas como `Denuncias/[id]` e
+  // `Usuarios/[id]`) não têm a `AdminNav`: o rodapé é das ações da própria
+  // tela, que soma a safe area de baixo.
+  const hidesNav = segments.length > 2;
 
   return (
     <AdminGuard>

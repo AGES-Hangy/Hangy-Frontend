@@ -41,16 +41,23 @@ const DIALOG_VARIANT: Record<ReportModerationAction, DialogVariant> = {
   BAN: 'BanUser',
   SUSPEND: 'SuspendUser',
   ARCHIVE: 'ArchiveReport',
+  REMOVE_EVENT: 'RemoveEvent',
 };
 
 const RESOLUTION_ACTION: Record<ReportModerationAction, ReportResolutionAction> = {
   BAN: 'BANNED',
   SUSPEND: 'SUSPENDED',
   ARCHIVE: 'ARCHIVED',
+  REMOVE_EVENT: 'EVENT_REMOVED',
 };
 
 function targetName(report: AdminReportDetail) {
   return report.target.name?.trim() || 'Conta removida';
+}
+
+/** O evento denunciado, quando ainda está no ar: libera "Remover evento". */
+function removableEvent(report: AdminReportDetail) {
+  return report.target.type === 'EVENT' && report.event?.moderation_status === 'ACTIVE' ? report.event : null;
 }
 
 /** Sem histórico (link direto, refresh na Web), voltar cai no Painel, não na área comum. */
@@ -86,6 +93,7 @@ function targetRowProps(report: AdminReportDetail): AdminUserRowProps {
 function dialogTitle(action: ReportModerationAction, report: AdminReportDetail) {
   if (action === 'BAN') return `Banir ${targetName(report)}?`;
   if (action === 'SUSPEND') return `Suspender ${targetName(report)}?`;
+  if (action === 'REMOVE_EVENT' && report.event) return `Remover ${report.event.title}?`;
   return undefined;
 }
 
@@ -93,6 +101,7 @@ function successMessage(action: ReportModerationAction, report: AdminReportDetai
   const closed = `Denúncia #${report.report_number} encerrada.`;
   if (action === 'BAN') return `${targetName(report)} foi banido. ${closed}`;
   if (action === 'SUSPEND') return `${targetName(report)} foi suspenso por ${SUSPENSION_DAYS} dias. ${closed}`;
+  if (action === 'REMOVE_EVENT') return `Evento removido. ${closed}`;
   return `Denúncia #${report.report_number} arquivada.`;
 }
 
@@ -123,7 +132,7 @@ export default function AdminReportDetailScreen() {
   const isRefreshing = report !== null && isLoading;
   const refreshFailed = report !== null && !isLoading && error !== null;
 
-  const { ban, suspend, archive, pendingAction } = useReportModeration();
+  const { ban, suspend, archive, removeEvent, pendingAction } = useReportModeration();
   const { user } = useCurrentUser();
   const { addToast } = useToast();
   const insets = useSafeAreaInsets();
@@ -136,12 +145,17 @@ export default function AdminReportDetailScreen() {
     if (!report || !dialog) return;
     const action = dialog;
 
+    const event = removableEvent(report);
+    if (action === 'REMOVE_EVENT' && !event) return;
+
     const result =
       action === 'BAN'
         ? await ban(report.target.id, report.report_id)
         : action === 'SUSPEND'
           ? await suspend(report.target.id, report.report_id)
-          : await archive(report.report_id);
+          : action === 'REMOVE_EVENT' && event
+            ? await removeEvent(event.id, report.report_id)
+            : await archive(report.report_id);
 
     if (result.status === 'ignored') return;
     setDialog(null);
@@ -157,6 +171,9 @@ export default function AdminReportDetailScreen() {
     patchReport({
       status: action === 'ARCHIVE' ? 'REJECTED' : 'RESOLVED',
       moderationStatus: result.moderationStatus,
+      ...(action === 'REMOVE_EVENT' && report.event
+        ? { event: { ...report.event, moderation_status: 'REMOVED' } }
+        : {}),
       resolution: {
         resolved_by: { id: user?.userId ?? '', name: user?.name ?? null },
         resolved_at: new Date().toISOString(),
@@ -187,6 +204,7 @@ export default function AdminReportDetailScreen() {
 
     const open = isReportOpen(report.status);
     const resolution = resolutionCopy(report);
+    const event = removableEvent(report);
 
     return (
       <>
@@ -197,6 +215,25 @@ export default function AdminReportDetailScreen() {
               {reportStateLine(report)}
             </Text>
           </View>
+
+          {report.target.type === 'EVENT' && report.event ? (
+            <>
+              <SectionHeader title="EVENTO DENUNCIADO" variant="overline" />
+              <View
+                style={styles.event}
+                accessible
+                accessibilityLabel={`Evento ${report.event.title}${report.event.moderation_status === 'REMOVED' ? ', removido' : ''}`}
+              >
+                <Icon name="calendar" size={metrics.reasonIconSize} color={colors.text.secondary} />
+                <Text style={[typography.labelM, styles.eventTitle]} numberOfLines={2}>
+                  {report.event.title}
+                </Text>
+                {report.event.moderation_status === 'REMOVED' ? (
+                  <Text style={[typography.bodyS, styles.eventRemoved]}>Removido</Text>
+                ) : null}
+              </View>
+            </>
+          ) : null}
 
           <SectionHeader
             title={report.target.type === 'EVENT' ? 'ORGANIZADOR DO EVENTO DENUNCIADO' : 'CONTA DENUNCIADA'}
@@ -240,10 +277,22 @@ export default function AdminReportDetailScreen() {
             </View>
           ) : open ? (
             <>
+              {event ? (
+                <Button
+                  label="Remover evento"
+                  variant="Danger"
+                  size="LG"
+                  onPress={() => setDialog('REMOVE_EVENT')}
+                  disabled={actionsLocked}
+                  accessibilityLabel={`Remover o evento ${event.title}`}
+                />
+              ) : null}
               <View style={styles.mainActions}>
                 <Button
                   label="Banir usuário"
-                  variant="Danger"
+                  // Em denúncia de evento, remover é a ação principal; banir o
+                  // organizador continua disponível, sem competir com ela.
+                  variant={event ? 'Secondary' : 'Danger'}
                   size="LG"
                   onPress={() => setDialog('BAN')}
                   disabled={actionsLocked}
@@ -336,6 +385,18 @@ const styles = StyleSheet.create({
   stateText: {
     flexShrink: 1,
     color: colors.text.tertiary,
+  },
+  event: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[8],
+  },
+  eventTitle: {
+    flexShrink: 1,
+    color: colors.text.primary,
+  },
+  eventRemoved: {
+    color: palette.error.default,
   },
   reason: {
     flexDirection: 'row',

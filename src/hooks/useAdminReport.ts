@@ -8,7 +8,7 @@ import { apiFetch } from '@/utils/http';
 type LoadedReport = { id: string; report: AdminReportDetail } | null;
 
 /** Campos que uma ação de moderação muda na denúncia, aplicados sem novo `GET`. */
-export type AdminReportPatch = Partial<Pick<AdminReportDetail, 'status' | 'resolution'>> & {
+export type AdminReportPatch = Partial<Pick<AdminReportDetail, 'status' | 'resolution' | 'event'>> & {
   moderationStatus?: AdminReportDetail['target']['moderation_status'];
 };
 

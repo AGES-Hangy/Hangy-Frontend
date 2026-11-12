@@ -74,6 +74,7 @@ function host(file, imports, args = []) {
 const endpoints = {
   adminReport: (id) => `/admin/reports/${id}`,
   adminReportArchive: (id) => `/admin/reports/${id}/archive`,
+  adminEventModeration: (id) => `/admin/events/${id}/moderation`,
   adminUserModeration: (id) => `/admin/users/${id}/moderation`,
 };
 
@@ -304,6 +305,52 @@ test('mock: cenários de erro respondem como o backend', () => {
   assert.equal(resolveAdminMock(['admin', 'reports', 'missing'], 'GET', {}).erro.status, 404);
   assert.equal(resolveAdminMock(['admin', 'reports', 'archived'], 'GET', {}).resposta.status, 'REJECTED');
   assert.equal(resolveAdminMock(['events', '1'], 'GET', {}), undefined);
+});
+
+test('remover evento usa a rota do evento, com a denúncia, e não toca na conta', async () => {
+  const calls = [];
+  const { render } = moderationHook(async (url, init) => {
+    calls.push({ url, method: init.method, body: JSON.parse(init.body) });
+    return { event_id: 'event-1', moderation_status: 'REMOVED' };
+  });
+
+  const result = await render().removeEvent('event-1', 'report-1');
+  assert.deepEqual({ ...result }, { status: 'done', moderationStatus: undefined });
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    { url: '/admin/events/event-1/moderation', method: 'PATCH', body: { action: 'REMOVE', report_id: 'report-1' } },
+  ]);
+});
+
+test('remover evento: já removido recarrega; denúncia de outro alvo só avisa', async () => {
+  const errors = [apiError(409, 'Event already removed'), apiError(400, 'Report does not belong to this event')];
+  const { render, toasts } = moderationHook(async () => { throw errors.shift(); });
+
+  assert.equal((await render().removeEvent('e', 'r')).status, 'stale');
+  assert.equal((await render().removeEvent('e', 'r')).status, 'rejected');
+  assert.deepEqual(JSON.parse(JSON.stringify(toasts)), [
+    { type: 'warning', message: 'Este evento já foi removido.' },
+    { type: 'warning', message: 'Esta denúncia não é sobre este evento.' },
+  ]);
+});
+
+test('mock: remover evento resolve a denúncia e marca o evento como removido', () => {
+  const { resolveAdminMock } = loadMock();
+  const remove = () =>
+    resolveAdminMock(['admin', 'events', 'evento-denunciado', 'moderation'], 'PATCH', {
+      body: JSON.stringify({ action: 'REMOVE', report_id: 'event' }),
+    });
+
+  const before = resolveAdminMock(['admin', 'reports', 'event'], 'GET', {}).resposta;
+  assert.equal(before.target.type, 'EVENT');
+  assert.equal(before.event.moderation_status, 'ACTIVE');
+
+  assert.equal(remove().resposta.moderation_status, 'REMOVED');
+  const after = resolveAdminMock(['admin', 'reports', 'event'], 'GET', {}).resposta;
+  assert.equal(after.status, 'RESOLVED');
+  assert.equal(after.resolution.action, 'EVENT_REMOVED');
+  assert.equal(after.event.moderation_status, 'REMOVED');
+  assert.equal(after.target.moderation_status, 'ACTIVE');
+  assert.equal(remove().erro.status, 409);
 });
 
 test('mock: moderação sem denúncia (ficha do usuário) não passa pelo mock da denúncia', () => {

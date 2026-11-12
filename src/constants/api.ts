@@ -246,4 +246,10 @@ export const endpoints = {
    * Com `report_id`, resolve a denúncia junto.
    */
   adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
+  /**
+   * Remove um evento por moderação (`PATCH`, `{ action: 'REMOVE', report_id? }`). Só `ADMIN`.
+   * Com `report_id`, a denúncia (e as outras abertas do mesmo evento) vira `RESOLVED`
+   * com `resolution = EVENT_REMOVED`. A conta do organizador não muda.
+   */
+  adminEventModeration: (eventId: string) => `/admin/events/${encodeURIComponent(eventId)}/moderation`,
 } as const;

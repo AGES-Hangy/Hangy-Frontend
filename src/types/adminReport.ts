@@ -1,8 +1,9 @@
 import type { ReportReason, ReportStatus, UserModerationStatus } from '@/types/admin';
 
 /**
- * Contrato de `GET /admin/reports/{report_id}` (task 245 [BE]) e de
- * `PATCH /admin/reports/{report_id}/archive` (task 246 [BE]), espelhando
+ * Contrato de `GET /admin/reports/{report_id}` (task 245 [BE]), de
+ * `PATCH /admin/reports/{report_id}/archive` (task 246 [BE]) e de
+ * `PATCH /admin/events/{event_id}/moderation`, espelhando
  * `app/presentation/dtos/admin_report.py`. Motivo, status da denúncia e status
  * da conta são os mesmos tipos de `@/types/admin`.
  */
@@ -24,6 +25,34 @@ export interface AdminReportTarget {
   member_since: string;
   event_count: number;
   moderation_status: UserModerationStatus | (string & {});
+}
+
+/** `EventModerationStatusEnum` do backend. */
+export type EventModerationStatus = 'ACTIVE' | 'REMOVED';
+
+/**
+ * O evento denunciado. Só vem quando `target.type === 'EVENT'`
+ * (AGES-Hangy/Hangy-Backend#136); `id` é o `event_id` de "Remover evento".
+ */
+export interface AdminReportEvent {
+  id: string;
+  title: string;
+  moderation_status: EventModerationStatus | (string & {});
+}
+
+/** Corpo de `PATCH /admin/events/{event_id}/moderation`. Hoje só existe `REMOVE`. */
+export interface EventModerationPayload {
+  action: 'REMOVE';
+  report_id?: string;
+}
+
+/** Resposta de `PATCH /admin/events/{event_id}/moderation`. */
+export interface EventModerationResult {
+  event_id: string;
+  moderation_status: EventModerationStatus;
+  removed_at: string;
+  report_id: string | null;
+  report_status: string | null;
 }
 
 /** Organizador por trás de um evento denunciado. Só vem quando `target.type === 'EVENT'`. */
@@ -60,4 +89,6 @@ export interface AdminReportDetail {
   resolution: AdminReportResolution | null;
   /** Ausente fora de denúncias de evento. */
   organizer?: AdminReportOrganizer | null;
+  /** Ausente fora de denúncias de evento (e no backend anterior ao #136). */
+  event?: AdminReportEvent | null;
 }

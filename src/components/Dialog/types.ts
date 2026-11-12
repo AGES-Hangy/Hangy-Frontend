@@ -12,7 +12,8 @@ export type DialogVariant =
   | 'BanUser'
   | 'SuspendUser'
   | 'RevertModeration'
-  | 'ArchiveReport';
+  | 'ArchiveReport'
+  | 'RemoveEvent';
 
 export type DialogProps = {
   visible: boolean;

@@ -103,6 +103,14 @@ const VARIANTS = {
     confirmLabel: 'Arquivar denúncia',
     destructive: false,
   },
+  // Denúncia de evento. Sem frame próprio: mesma estrutura do banir.
+  RemoveEvent: {
+    title: 'Remover evento?',
+    description:
+      'O evento sai do ar, as participações são canceladas e todos são avisados. A conta do organizador não muda.',
+    confirmLabel: 'Remover evento',
+    destructive: true,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({

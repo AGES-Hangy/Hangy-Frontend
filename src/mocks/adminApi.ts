@@ -10,7 +10,7 @@ type ModerationStatus = UserModerationStatus;
  * Espelham as tasks 245 (detalhe), 246 (arquivar) e 249 (moderar) [BE], já na
  * `develop` do backend, para testar a tela sem banco semeado. O estado é
  * mutável: banir, suspender e arquivar mudam o mock, e o `GET` seguinte já
- * vem resolvido. Só o `PATCH` de moderação com `report_id` passa por aqui: o
+ * vem resolvido. Remover evento usa `PATCH /admin/events/{id}/moderation`. Só o `PATCH` de moderação com `report_id` passa por aqui: o
  * da ficha do usuário (sem denúncia) segue como na `develop`.
  *
  * ## Cenários de teste
@@ -30,6 +30,8 @@ type ModerationStatus = UserModerationStatus;
  * | `boom`      | `500` no detalhe                                                |
  * | `fail`      | Detalhe normal, ações devolvem `500`                            |
  * | `offline`   | Detalhe normal, ações falham por falta de rede                   |
+ * | `event`     | Denúncia de evento: "Remover evento" funciona                    |
+ * | `event-removed` | Denúncia de evento já resolvida com o evento removido        |
  */
 
 export type AdminMockOutcome =
@@ -39,6 +41,7 @@ export type AdminMockOutcome =
 
 const ADMIN_MOCK = { id: 'admin-mock', name: 'Gabriel Nunes' };
 const CONTA_DENUNCIADA_ID = 'conta-denunciada';
+const EVENTO_DENUNCIADO_ID = 'evento-denunciado';
 
 const HORA = 60 * 60 * 1000;
 
@@ -76,6 +79,30 @@ function denunciaInicial(reportId: string): AdminReportDetail {
     resolution: { resolved_by: ADMIN_MOCK, resolved_at: new Date(agora - HORA).toISOString(), action },
   });
 
+  if (reportId === 'event' || reportId === 'event-removed') {
+    const deEvento: AdminReportDetail = {
+      ...base,
+      reason: 'MISLEADING_EVENT',
+      description: 'O evento prometia show ao vivo e era só uma playlist. Cobraram entrada na porta.',
+      target: { ...base.target, type: 'EVENT', name: 'Rafael Costa' },
+      organizer: {
+        user_id: CONTA_DENUNCIADA_ID,
+        name: 'Rafael Costa',
+        photo_url: null,
+        moderation_status: 'ACTIVE',
+        events_count: 12,
+        reports_count: 3,
+      },
+      event: { id: EVENTO_DENUNCIADO_ID, title: 'Sunset no Gasômetro', moderation_status: 'ACTIVE' },
+    };
+    if (reportId === 'event') return deEvento;
+    return {
+      ...deEvento,
+      status: 'RESOLVED',
+      event: { id: EVENTO_DENUNCIADO_ID, title: 'Sunset no Gasômetro', moderation_status: 'REMOVED' },
+      resolution: { resolved_by: ADMIN_MOCK, resolved_at: new Date(agora - HORA).toISOString(), action: 'EVENT_REMOVED' },
+    };
+  }
   if (reportId === 'resolved') return resolvida('BANNED', 'BANNED', 'RESOLVED');
   if (reportId === 'archived') return resolvida('ARCHIVED', 'ACTIVE', 'REJECTED');
   if (reportId === 'suspended') return { ...base, target: { ...base.target, moderation_status: 'SUSPENDED' } };
@@ -141,6 +168,35 @@ export function resolveAdminMock(partes: string[], method: string, init: Request
     const falha = falhaDaAcao(reportId);
     if (falha) return falha;
     return { resposta: resolver(reportId, 'ARCHIVED', null, 'REJECTED') };
+  }
+
+  // PATCH /admin/events/{id}/moderation com `report_id` (remover evento pela denúncia).
+  if (partes[1] === 'events' && partes[3] === 'moderation' && method === 'PATCH') {
+    const body = JSON.parse(String(init.body ?? '{}')) as { action?: string; report_id?: string };
+    if (!body.report_id) return undefined;
+    const reportId = body.report_id;
+    const falha = falhaDaAcao(reportId);
+    if (falha) return falha;
+
+    const atual = denuncia(reportId);
+    if (!atual.event || atual.event.id !== partes[2]) {
+      return { erro: { status: 400, detail: 'Report does not belong to this event' } };
+    }
+    if (atual.event.moderation_status === 'REMOVED') {
+      return { erro: { status: 409, detail: 'Event already removed' } };
+    }
+    const removidoEm = new Date().toISOString();
+    const resolvida = resolver(reportId, 'EVENT_REMOVED', null, 'RESOLVED');
+    denuncias.set(reportId, { ...resolvida, event: { ...atual.event, moderation_status: 'REMOVED' } });
+    return {
+      resposta: {
+        event_id: atual.event.id,
+        moderation_status: 'REMOVED',
+        removed_at: removidoEm,
+        report_id: reportId,
+        report_status: 'RESOLVED',
+      },
+    };
   }
 
   // PATCH /admin/users/{id}/moderation com `report_id` (banir ou suspender pela denúncia).
