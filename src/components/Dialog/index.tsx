@@ -74,8 +74,8 @@ const VARIANTS = {
     destructive: false,
   },
   // "Admin — Denúncia — banir usuário" (Sprint 4). O título leva o nome da
-  // conta e vem por `title`. Suspender não tem frame próprio: segue a mesma
-  // estrutura, só o texto muda. Mesmo texto do detalhe da denúncia (task 261).
+  // conta e vem por `title`. Suspender e arquivar não têm frame próprio:
+  // seguem a mesma estrutura, só o texto muda.
   BanUser: {
     title: 'Banir usuário?',
     description:
@@ -96,6 +96,20 @@ const VARIANTS = {
     description: 'O usuário voltará a ter acesso ao app.',
     confirmLabel: 'Reverter',
     destructive: false,
+  },
+  ArchiveReport: {
+    title: 'Arquivar denúncia?',
+    description: 'A denúncia sai da fila e a conta denunciada não sofre nenhuma ação.',
+    confirmLabel: 'Arquivar denúncia',
+    destructive: false,
+  },
+  // Denúncia de evento. Sem frame próprio: mesma estrutura do banir.
+  RemoveEvent: {
+    title: 'Remover evento?',
+    description:
+      'O evento sai do ar, as participações são canceladas e todos são avisados. A conta do organizador não muda.',
+    confirmLabel: 'Remover evento',
+    destructive: true,
   },
 } as const satisfies Record<DialogVariant, unknown>;
 

@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';
@@ -277,9 +278,11 @@ type UsuarioFooterProps = {
 function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: UsuarioFooterProps) {
   const isActive = profile.moderation_status === 'ACTIVE';
   const reports = profile.reports_received;
+  // Sem a `AdminNav` embaixo (telas internas), o rodapé soma a safe area.
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.footer}>
+    <View style={[styles.footer, { paddingBottom: FOOTER_PADDING_V + insets.bottom }]}>
       {isActive ? (
         <View style={styles.mainActions}>
           <Button

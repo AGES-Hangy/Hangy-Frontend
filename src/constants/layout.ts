@@ -84,6 +84,14 @@ export const layout = {
     reasonIconSize: 14,
     chevronSize: 20,
   },
+  /** Detalhe da denúncia no painel administrativo. */
+  adminReport: {
+    reasonIconSize: 16,
+    resolutionIconSize: 16,
+    borderWidth: 1,
+    /** Bloco do relato no skeleton: 3 linhas de Body M + 1 de Body S + paddings do frame. */
+    statementSkeletonHeight: 104,
+  },
   eventCard: {
     pressedOpacity: 0.82,
     featuredWidth: 320,

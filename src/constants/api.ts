@@ -231,11 +231,25 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). Só `ADMIN`. */
+  adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
+  /**
+   * Arquiva a denúncia sem tocar na conta (task 246 [BE]). Só `ADMIN`. `PATCH`
+   * sem corpo; devolve o detalhe atualizado, com `status: REJECTED`.
+   */
+  adminReportArchive: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/archive`,
   /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
   adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
   /**
    * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
    * `PATCH` com união discriminada por `action`: `BAN`, `SUSPEND` (+ `duration_days`) ou `REVERT`.
+   * Com `report_id`, resolve a denúncia junto.
    */
   adminUserModeration: (userId: string) => `/admin/users/${encodeURIComponent(userId)}/moderation`,
+  /**
+   * Remove um evento por moderação (`PATCH`, `{ action: 'REMOVE', report_id? }`). Só `ADMIN`.
+   * Com `report_id`, a denúncia (e as outras abertas do mesmo evento) vira `RESOLVED`
+   * com `resolution = EVENT_REMOVED`. A conta do organizador não muda.
+   */
+  adminEventModeration: (eventId: string) => `/admin/events/${encodeURIComponent(eventId)}/moderation`,
 } as const;
