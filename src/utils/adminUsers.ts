@@ -1,5 +1,5 @@
 import type { AdminUserRowProps, ModerationStatus } from '@/components/AdminUserRow/types';
-import type { AdminModerationStatus, AdminUser } from '@/types/admin';
+import type { AdminUser, UserModerationStatus } from '@/types/admin';
 import { formatDayMonth } from '@/utils/datetime';
 
 /** Abas da lista. `ALL` não filtra. */
@@ -21,7 +21,7 @@ export type AdminUsersPageSummary = {
   hasMore: boolean;
 };
 
-export function adminUsersStatusOf(filter: AdminUsersStatusFilter): AdminModerationStatus | null {
+export function adminUsersStatusOf(filter: AdminUsersStatusFilter): UserModerationStatus | null {
   return filter === 'ALL' ? null : filter;
 }
 
