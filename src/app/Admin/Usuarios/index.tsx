@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
@@ -59,9 +60,13 @@ function userKey(user: AdminUser) {
   return user.user_id;
 }
 
-// Sem `onPress` até o detalhe (task 263) existir.
 function renderUser({ item }: ListRenderItemInfo<AdminUser>) {
-  return <AdminUserRow {...adminUserRowProps(item)} />;
+  return (
+    <AdminUserRow
+      {...adminUserRowProps(item)}
+      onPress={() => router.push({ pathname: '/Admin/Usuarios/[id]', params: { id: item.user_id } })}
+    />
+  );
 }
 
 function RowSeparator() {
