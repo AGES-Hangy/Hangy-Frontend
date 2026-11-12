@@ -9,7 +9,7 @@ import type {
   AdminUsersQueryInput,
   AdminUsersStatusFilter,
 } from '@/utils/adminUsers';
-import { describeAdminLoadError, endsSession, isApiErrorLike } from '@/utils/apiErrors';
+import { describeListLoadError, endsSession, isApiErrorLike } from '@/utils/apiErrors';
 import type { LoadError } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
 
@@ -88,7 +88,7 @@ export function useAdminUsers({ search, filter, onQuerySettled }: UseAdminUsersP
         return;
       }
 
-      const loadError = describeAdminLoadError(caught);
+      const loadError = describeListLoadError(caught);
       if (usersRef.current.length === 0) {
         setError(loadError);
         return;
@@ -139,7 +139,7 @@ export function useAdminUsers({ search, filter, onQuerySettled }: UseAdminUsersP
       loadMorePaused.current = true;
       addToast({
         type: 'error',
-        message: describeAdminLoadError(caught).message,
+        message: describeListLoadError(caught).message,
         actionLabel: 'Tentar de novo',
         onAction: () => { void fetchNextPage(); },
       });

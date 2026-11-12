@@ -130,12 +130,6 @@ export function describeReportLoadError(error: unknown): LoadError {
   return loadError;
 }
 
-/** O 404 e o 410 da tabela de `describeLoadError` são de evento: nas rotas `/admin/*` viram o erro genérico. */
-export function describeAdminLoadError(error: unknown): LoadError {
-  const loadError = describeLoadError(error);
-  return loadError.kind === 'offline' || loadError.kind === 'timeout' ? loadError : describeLoadError(null);
-}
-
 /** Falhas em que o `apiFetch` já encerrou a sessão e está levando para o Login. */
 export function endsSession(error: unknown): boolean {
   if (!isApiErrorLike(error)) return false;

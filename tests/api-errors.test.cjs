@@ -22,7 +22,7 @@ function load(file, imports) {
   return context.exports;
 }
 
-const { describeAdminLoadError, endsSession } = load('src/utils/apiErrors.ts', {
+const { describeListLoadError, endsSession } = load('src/utils/apiErrors.ts', {
   '@/utils/http': { ADMIN_ACCESS_REQUIRED, ApiError: class {}, UploadCancelledError: class {} },
 });
 
@@ -47,22 +47,31 @@ test('endsSession: servidor, rede, timeout e erro que não é da API não encerr
   }
 });
 
-test('describeAdminLoadError: mantém sem conexão e timeout', () => {
-  assert.equal(describeAdminLoadError(network).kind, 'offline');
-  assert.equal(describeAdminLoadError(timeout).kind, 'timeout');
+test('describeListLoadError: mantém sem conexão e timeout', () => {
+  assert.equal(describeListLoadError(network).kind, 'offline');
+  assert.equal(describeListLoadError(timeout).kind, 'timeout');
 });
 
-test('describeAdminLoadError: 404 e 410 não falam de evento e permitem tentar de novo', () => {
+test('describeListLoadError: 404 e 410 não falam de evento e permitem tentar de novo', () => {
   for (const error of [http(404), http(410)]) {
-    const loadError = describeAdminLoadError(error);
+    const loadError = describeListLoadError(error);
     assert.equal(loadError.kind, 'server');
     assert.equal(loadError.message, GENERIC);
     assert.equal(loadError.canRetry, true);
   }
 });
 
-test('describeAdminLoadError: 5xx e erro que não é da API viram o erro genérico', () => {
-  for (const error of [http(500), http(503), new Error('boom'), null]) {
-    assert.equal(describeAdminLoadError(error).message, GENERIC);
+test('describeListLoadError: 5xx fica com o título do frame `Erro do servidor`', () => {
+  for (const error of [http(500), http(503)]) {
+    const loadError = describeListLoadError(error);
+    assert.equal(loadError.kind, 'server');
+    assert.equal(loadError.title, 'Algo deu errado do nosso lado');
+    assert.equal(loadError.message, GENERIC);
+  }
+});
+
+test('describeListLoadError: erro que não é da API vira o erro genérico', () => {
+  for (const error of [new Error('boom'), null]) {
+    assert.equal(describeListLoadError(error).message, GENERIC);
   }
 });

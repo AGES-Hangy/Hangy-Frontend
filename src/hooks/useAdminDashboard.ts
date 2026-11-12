@@ -4,7 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
 import type { AdminDashboard } from '@/types/admin';
-import { describeAdminLoadError, endsSession } from '@/utils/apiErrors';
+import { describeListLoadError, endsSession } from '@/utils/apiErrors';
 import type { LoadError } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
 
@@ -44,7 +44,7 @@ export function useAdminDashboard() {
         return;
       }
 
-      const loadError = describeAdminLoadError(caught);
+      const loadError = describeListLoadError(caught);
       if (!dataRef.current) {
         setError(loadError);
         return;
