@@ -8,12 +8,17 @@ export type AdminUsersStatusFilter = 'ALL' | 'SUSPENDED' | 'BANNED';
 /** `max_length` de `search` no backend: acima disso, a API responde 422. */
 export const ADMIN_USERS_SEARCH_MAX_LENGTH = 100;
 
+/** `MAX_ADMIN_USERS_LIMIT` do backend: acima disso, a API responde 400. */
+export const ADMIN_USERS_PAGE_MAX = 100;
+
 export const UNNAMED_ADMIN_USER = 'Conta sem nome';
 
 export type AdminUsersQueryInput = {
   search: string;
   filter: AdminUsersStatusFilter;
   cursor?: string | null;
+  /** Só ao recarregar a parte já carregada; sem ele, vale a página padrão do backend. */
+  limit?: number;
 };
 
 export type AdminUsersPageSummary = {
@@ -25,7 +30,7 @@ export function adminUsersStatusOf(filter: AdminUsersStatusFilter): UserModerati
   return filter === 'ALL' ? null : filter;
 }
 
-export function adminUsersQuery({ search, filter, cursor }: AdminUsersQueryInput): string {
+export function adminUsersQuery({ search, filter, cursor, limit }: AdminUsersQueryInput): string {
   const params = new URLSearchParams();
   const moderationStatus = adminUsersStatusOf(filter);
   const term = search.trim().slice(0, ADMIN_USERS_SEARCH_MAX_LENGTH);
@@ -33,7 +38,14 @@ export function adminUsersQuery({ search, filter, cursor }: AdminUsersQueryInput
   if (moderationStatus) params.set('status', moderationStatus);
   if (term) params.set('search', term);
   if (cursor) params.set('cursor', cursor);
+  if (limit) params.set('limit', String(limit));
   return params.toString();
+}
+
+/** Quantas contas pedir para recarregar a lista que está na tela; `undefined` sem lista. */
+export function adminUsersReloadLimit(loadedCount: number): number | undefined {
+  if (loadedCount <= 0) return undefined;
+  return Math.min(loadedCount, ADMIN_USERS_PAGE_MAX);
 }
 
 function reportsSummary(count: number): string {

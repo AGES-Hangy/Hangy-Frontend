@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 
@@ -104,7 +104,7 @@ export default function AdminUsuarios() {
   const listRef = useRef<FlatList<AdminUser>>(null);
   const { isOffline } = useNetworkStatus();
 
-  const { users, isLoading, isLoadingMore, error, refetch, loadMore, hasMore } = useAdminUsers({
+  const { users, isLoading, isLoadingMore, error, refetch, reloadLoaded, loadMore, hasMore } = useAdminUsers({
     search,
     filter,
     onQuerySettled: summary => {
@@ -114,6 +114,17 @@ export default function AdminUsuarios() {
     },
   });
   const { isRefreshing, onRefresh } = useRefreshable(refetch);
+
+  // O primeiro foco é a montagem, que já busca; os seguintes são a volta da ficha,
+  // onde a conta pode ter sido moderada.
+  const hasFocused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (!hasFocused.current) {
+      hasFocused.current = true;
+      return;
+    }
+    reloadLoaded();
+  }, [reloadLoaded]));
 
   const list = (
     <FlatList

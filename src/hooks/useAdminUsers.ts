@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
 import type { AdminUser, AdminUsersResponse } from '@/types/admin';
-import { adminUsersQuery } from '@/utils/adminUsers';
+import { adminUsersQuery, adminUsersReloadLimit } from '@/utils/adminUsers';
 import type {
   AdminUsersPageSummary,
   AdminUsersQueryInput,
@@ -75,7 +75,8 @@ export function useAdminUsers({ search, filter, onQuerySettled }: UseAdminUsersP
       const page = await apiFetch<AdminUsersResponse>(endpoints.adminUsers(adminUsersQuery(input)));
       if (requestId !== latestRequest.current) return;
 
-      listInput.current = input;
+      // Sem o `limit`: o `loadMore` continua com a página padrão.
+      listInput.current = { search: input.search, filter: input.filter };
       applyPage(page.items, page.next_cursor);
       if (announcePending.current) {
         announcePending.current = false;
@@ -97,7 +98,7 @@ export function useAdminUsers({ search, filter, onQuerySettled }: UseAdminUsersP
         type: 'error',
         message: loadError.message,
         actionLabel: 'Tentar de novo',
-        onAction: () => { void fetchFirstPage(requested.current); },
+        onAction: () => { void fetchFirstPage({ ...requested.current, limit: input.limit }); },
       });
     } finally {
       if (requestId === latestRequest.current) {
@@ -153,6 +154,17 @@ export function useAdminUsers({ search, filter, onQuerySettled }: UseAdminUsersP
 
   const refetch = useCallback(() => fetchFirstPage(requested.current), [fetchFirstPage]);
 
+  /**
+   * Recarrega do começo, numa requisição só, a parte da lista que está na tela.
+   * Passa pelo `fetchFirstPage` e avança o mesmo id: busca, aba ou `loadMore` em voo
+   * descartam a resposta que chegar depois.
+   */
+  const reloadLoaded = useCallback(() => {
+    const limit = adminUsersReloadLimit(usersRef.current.length);
+    if (limit === undefined) return;
+    void fetchFirstPage({ ...requested.current, limit });
+  }, [fetchFirstPage]);
+
   const loadMore = useCallback(() => {
     if (loadMorePaused.current) return;
     void fetchNextPage();
@@ -193,5 +205,5 @@ export function useAdminUsers({ search, filter, onQuerySettled }: UseAdminUsersP
     };
   }, [query]);
 
-  return { users, isLoading, isLoadingMore, error, refetch, loadMore, hasMore };
+  return { users, isLoading, isLoadingMore, error, refetch, reloadLoaded, loadMore, hasMore };
 }

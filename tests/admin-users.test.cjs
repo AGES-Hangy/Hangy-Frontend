@@ -24,11 +24,13 @@ function load(file, imports = {}) {
 
 const datetime = load('src/utils/datetime.ts');
 const {
+  ADMIN_USERS_PAGE_MAX,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   UNNAMED_ADMIN_USER,
   adminUserRowProps,
   adminUsersAnnouncement,
   adminUsersQuery,
+  adminUsersReloadLimit,
   adminUsersStatusOf,
 } = load('src/utils/adminUsers.ts', { '@/utils/datetime': datetime });
 
@@ -95,6 +97,21 @@ test('adminUsersQuery: cursor só quando presente', () => {
   }
   const cursor = 'MjAyNi0xMS0xMHxhYmM+/w==';
   assert.equal(params(adminUsersQuery({ search: '', filter: 'ALL', cursor })).get('cursor'), cursor);
+});
+
+test('adminUsersQuery: limit só quando presente', () => {
+  for (const limit of [undefined, 0]) {
+    assert.equal(params(adminUsersQuery({ search: '', filter: 'ALL', limit })).has('limit'), false);
+  }
+  assert.equal(params(adminUsersQuery({ search: '', filter: 'SUSPENDED', limit: 45 })).get('limit'), '45');
+});
+
+test('adminUsersReloadLimit: sem lista, nada; com lista, o tamanho dela até o máximo do backend', () => {
+  assert.equal(adminUsersReloadLimit(0), undefined);
+  assert.equal(adminUsersReloadLimit(1), 1);
+  assert.equal(adminUsersReloadLimit(45), 45);
+  assert.equal(adminUsersReloadLimit(ADMIN_USERS_PAGE_MAX), ADMIN_USERS_PAGE_MAX);
+  assert.equal(adminUsersReloadLimit(140), ADMIN_USERS_PAGE_MAX);
 });
 
 test('adminUserRowProps: ACTIVE leva eventCount e reportCount', () => {
