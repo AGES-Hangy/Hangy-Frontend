@@ -9,8 +9,9 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Dialog } from '@/components/Dialog';
-import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { Icon } from '@/components/Icon';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { IconButton } from '@/components/IconButton';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
@@ -26,13 +27,15 @@ import { useEvent } from '@/hooks/useEvent';
 import { useEventShare } from '@/hooks/useEventShare';
 import { useExperiencePhotos } from '@/hooks/useExperiencePhotos';
 import type { PickedImage } from '@/hooks/useImageUpload';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useFavoriteEvent } from '@/hooks/useFavoriteEvent';
 import { useInviteAccept, type InviteAcceptError } from '@/hooks/useInviteAccept';
 import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { ViewerAction } from '@/types/event';
+import { describeActionError, describeLoadError } from '@/utils/apiErrors';
 import { formatDateTime } from '@/utils/datetime';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 import { getToken } from '@/utils/auth';
 import { hasEventEnded } from '@/utils/eventDuration';
 import type { ApiError } from '@/utils/http';
@@ -94,7 +97,8 @@ export default function EventDetail() {
   const { share, isLoading: isSharing } = useEventShare(resolvedEventId);
   const { join, cancel, isSubmitting } = useParticipation(event?.event_id ?? resolvedEventId ?? '');
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const { isOffline } = useNetworkStatus();
+  // Reconectou: refaz a carga do evento que falhou.
+  const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry), reload);
   const { width: windowWidth } = useWindowDimensions();
   const {
     photos,
@@ -180,6 +184,8 @@ export default function EventDetail() {
       } catch (err) {
         if (cancelled) return;
         const apiError = err as InviteAcceptError;
+        // O 401 já virou "sessão expirou" e Login no `apiFetch`.
+        if (apiError.status === 401) return;
         if (apiError.status === 410) {
           setInviteError({ title: 'Este convite expirou', message: 'Peça um novo link pra quem te convidou.' });
         } else if (apiError.status === 403) {
@@ -200,9 +206,10 @@ export default function EventDetail() {
   }, [inviteToken]);
 
   if (inviteToken && inviteStage === 'accepting') {
+    // Sem métrica de conteúdo para um Skeleton: só o indicador central.
     return (
       <View style={styles.errorScreen}>
-        <EmptyState context="MyEvents" title="Confirmando sua participação..." text="Só um instante." cta={false} />
+        <LoadingScreen accessibilityLabel="Confirmando sua participação" />
         {offlineBanner}
       </View>
     );
@@ -211,13 +218,14 @@ export default function EventDetail() {
   if (inviteToken && inviteStage === 'error' && inviteError) {
     return (
       <View style={styles.errorScreen}>
-        <EmptyState
-          context="MyEvents"
+        <ErrorScreen
+          withBottomInset
           title={inviteError.title}
-          text={inviteError.message}
-          cta
-          ctaLabel="Voltar para o início"
-          onCtaPress={() => router.replace('/Home')}
+          message={inviteError.message}
+          icon="ticket"
+          tone="neutral"
+          action={{ label: 'Voltar para o início', onPress: () => router.replace('/Home') }}
+          style={{ paddingTop: insets.top }}
         />
         {offlineBanner}
       </View>
@@ -227,21 +235,19 @@ export default function EventDetail() {
   if (isLoading) return <EventDetailSkeleton offlineBanner={offlineBanner} />;
 
   if (error || !event) {
-    const failure = error ?? {
-      title: 'Evento indisponível',
-      message: 'Evento não encontrado ou não disponível para você',
-      canRetry: false,
-    };
+    const failure = error ?? describeLoadError({ kind: 'http', status: 404, detail: 'Event not found' });
 
+    // Sem TopAppBar: o conteúdo respeita a área segura sozinho.
     return (
       <View style={styles.errorScreen}>
-        <EmptyState
-          context="MyEvents"
-          title={failure.title}
-          text={failure.message}
-          cta
-          ctaLabel={failure.canRetry ? 'Tentar de novo' : 'Voltar'}
-          onCtaPress={failure.canRetry ? reload : router.back}
+        <ErrorScreen
+          withBottomInset
+          {...loadErrorScreenProps(failure, {
+            onRetry: reload,
+            onBack: router.back,
+            retryAccessibilityLabel: 'Tentar carregar o evento novamente',
+          })}
+          style={{ paddingTop: insets.top }}
         />
         {offlineBanner}
       </View>
@@ -434,12 +440,15 @@ export default function EventDetail() {
       reload();
     } catch (err) {
       const apiError = err as ParticipationError;
+      // O 401 já virou "sessão expirou" e Login no `apiFetch`.
+      if (apiError.status === 401) return;
       if (apiError.status === 404) {
         addToast({ type: 'warning', message: 'Este evento não está mais disponível.' });
       } else if (apiError.status === 409) {
         addToast({ type: 'warning', message: 'Este evento está lotado' });
       } else {
-        addToast({ type: 'error', message: 'Não foi possível concluir. Tente de novo.' });
+        // Sem rede e timeout ganham o texto do contrato global; o resto, o genérico.
+        addToast({ type: 'error', message: describeActionError(apiError).message });
       }
       reload();
     }
@@ -451,8 +460,16 @@ export default function EventDetail() {
       await cancel();
       addToast({ type: 'success', message: 'Participação cancelada.' });
       reload();
-    } catch {
-      addToast({ type: 'error', message: 'Não foi possível cancelar. Tente de novo.' });
+    } catch (err) {
+      const apiError = err as ParticipationError;
+      if (apiError.status === 401) return;
+      // Sem rede e timeout ganham o texto do contrato global.
+      addToast({
+        type: 'error',
+        message: apiError.kind === 'network' || apiError.kind === 'timeout'
+          ? describeActionError(apiError).message
+          : 'Não foi possível cancelar. Tente de novo.',
+      });
     }
   }
 
@@ -750,6 +767,8 @@ export default function EventDetail() {
             icon={action.icon}
             isLoading={(action.icon === 'share' && isSharing) || isSubmitting}
             onPress={onMainAction}
+            // Sem rede, participar, cancelar e compartilhar falhariam; gerenciar só navega.
+            disabled={isOffline && event!.viewer.available_action !== 'MANAGE'}
             style={styles.ctaButton}
           />
         </View>

@@ -4,7 +4,7 @@ import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 
 import { Dialog } from '@/components/Dialog';
-import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { ProfileEventList } from '@/components/Profile/ProfileEventList';
@@ -27,11 +27,14 @@ import { useMyPhotos } from '@/hooks/useMyPhotos';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
 import { useProfilePhotosLoadMore } from '@/hooks/useProfilePhotosLoadMore';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUserEvents } from '@/hooks/useUserEvents';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import type { ProfilePatch } from '@/hooks/useUserProfile';
 import type { ConnectionAnswerResult, UserEventsTab, UserProfile as UserProfileData } from '@/types/user';
+import { describeProfileLoadError } from '@/utils/apiErrors';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 import { toPhotoViewerItems } from '@/utils/photoViewer';
 
 /**
@@ -223,6 +226,10 @@ export default function UserProfile() {
     feedbackKey.current = null;
     void reloadEvents();
   }, [reloadEvents]);
+
+  // Reconectou: refaz a primeira carga do perfil que falhou. Com o perfil na
+  // tela, o toast com "Tentar de novo" já cuida da recarga.
+  useRetryOnReconnect(!visibleProfile && Boolean(error?.canRetry), retryFailed);
 
   const reloadFailure =
     visibleProfile && error ? error : visibleProfile && events && eventsError ? eventsError : null;
@@ -478,13 +485,11 @@ export default function UserProfile() {
   if (isUnavailable && !isLoadingViewer) {
     return (
       <View style={styles.stateScreen}>
-        <EmptyState
-          context="Search"
-          title={error?.title ?? 'Perfil indisponível'}
-          text={error?.message ?? 'Este perfil não está disponível.'}
-          cta
-          ctaLabel="Voltar"
-          onCtaPress={goBack}
+        <ErrorScreen
+          {...loadErrorScreenProps(
+            error ?? describeProfileLoadError({ kind: 'http', status: 404, detail: 'User not found' }),
+            { onBack: goBack, unavailableIcon: 'user' },
+          )}
         />
         {isOffline && <OfflineBanner />}
       </View>
@@ -495,13 +500,13 @@ export default function UserProfile() {
     if (error && !isLoadingViewer) {
       return (
         <View style={styles.stateScreen}>
-          <EmptyState
-            context="Search"
-            title={error.title}
-            text={error.message}
-            cta
-            ctaLabel="Tentar de novo"
-            onCtaPress={retryFailed}
+          <ErrorScreen
+            {...loadErrorScreenProps(error, {
+              onRetry: retryFailed,
+              onBack: goBack,
+              retryAccessibilityLabel: 'Tentar carregar o perfil novamente',
+              unavailableIcon: 'user',
+            })}
           />
           {isOffline && <OfflineBanner />}
         </View>

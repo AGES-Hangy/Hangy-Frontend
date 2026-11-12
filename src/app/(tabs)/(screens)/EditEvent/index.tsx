@@ -16,8 +16,10 @@ import { AddressAutocompleteField } from '@/components/AddressAutocompleteField'
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { FileUpload } from '@/components/FileUpload';
 import { Icon } from '@/components/Icon';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { TextField } from '@/components/TextField';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
@@ -25,9 +27,11 @@ import { typography } from '@/constants/typography';
 import { useEditEvent } from '@/hooks/useEditEvent';
 import { useEvent } from '@/hooks/useEvent';
 import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { announce, moveAccessibilityFocus, restoreLostFocus } from '@/utils/accessibility';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 import { durationMinutesBetween, endDateFrom, isValidDuration } from '@/utils/eventDuration';
 
 import { EventDuration } from '@/components/CreateEvent/EventDuration';
@@ -128,6 +132,8 @@ export default function EditEvent() {
 
   const { event, isLoading: isLoadingEvent, error: eventError, reload } = useEvent(id);
   const { saveEvent, isSaving, saveError } = useEditEvent(id);
+  // Reconectou: refaz a carga do evento que falhou. Offline, salvar fica desabilitado.
+  const { isOffline } = useRetryOnReconnect(Boolean(eventError?.canRetry), reload);
   const { tags, isLoading: tagsLoading, error: tagsError, refetch: refetchTags } = useTags();
   const {
     pickAndUpload: pickAndUploadCover,
@@ -247,22 +253,27 @@ export default function EditEvent() {
     if (node) restoreLostFocus(node);
   }, [coverState]);
 
-  if (isLoadingEvent || !form) return <EditEventSkeleton />;
+  if (isLoadingEvent) return <EditEventSkeleton />;
 
+  // Antes do `!form`: sem evento o formulário nunca é montado, e a tela ficava
+  // presa no skeleton em vez de mostrar o erro.
   if (eventError) {
     return (
-      <View style={styles.errorScreen}>
-        <EmptyState
-          context="MyEvents"
-          title={eventError.title}
-          text={eventError.message}
-          cta
-          ctaLabel={eventError.canRetry ? 'Tentar de novo' : 'Voltar'}
-          onCtaPress={eventError.canRetry ? reload : router.back}
+      <View style={styles.screen}>
+        <ErrorScreen
+          withBottomInset
+          {...loadErrorScreenProps(eventError, {
+            onRetry: reload,
+            onBack: router.back,
+            retryAccessibilityLabel: 'Tentar carregar o evento novamente',
+          })}
         />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
+
+  if (!form) return <EditEventSkeleton />;
 
   if (!event?.viewer.is_organizer) {
     return (
@@ -417,7 +428,7 @@ export default function EditEvent() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, isOffline && styles.contentBelowBanner]}
           keyboardShouldPersistTaps="handled"
           pointerEvents={isSaving ? 'none' : 'auto'}
         >
@@ -584,10 +595,11 @@ export default function EditEvent() {
             style={styles.saveButton}
             onPress={handleSave}
             isLoading={isSaving}
-            disabled={!hasChanges || isCoverUploading}
+            disabled={!hasChanges || isCoverUploading || isOffline}
           />
         </View>
       </KeyboardAvoidingView>
+      {isOffline && <OfflineBanner />}
 
       <Dialog
         visible={showDiscardConfirm}
@@ -631,6 +643,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     backgroundColor: colors.bg.base,
+  },
+  // O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o formulário desce
+  // o mesmo respiro das outras telas.
+  contentBelowBanner: {
+    paddingTop: spacing[64],
   },
   flex: {
     flex: 1,

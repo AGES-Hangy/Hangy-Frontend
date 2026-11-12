@@ -1,7 +1,6 @@
 import { useState } from 'react';
 
-import { API_BASE_URL } from '@/constants/api';
-import { getToken } from '@/utils/auth';
+import { ApiError, apiFetch } from '@/utils/http';
 
 type ParticipationResult = {
   participant_id: string;
@@ -9,12 +8,12 @@ type ParticipationResult = {
   joined_at: string;
 };
 
-export type ParticipationError = { status: number; detail?: string };
-
-async function authHeaders() {
-  const token = await getToken();
-  return { Authorization: `Bearer ${token}` };
-}
+/**
+ * Falha de participar/cancelar. É o `ApiError` do `apiFetch`: o 401 já foi
+ * tratado pelo interceptor global (toast + Login), e `status` é `null` quando
+ * a requisição nem chegou ao servidor (sem rede, timeout).
+ */
+export type ParticipationError = ApiError;
 
 export function useParticipation(eventId: string) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -22,13 +21,7 @@ export function useParticipation(eventId: string) {
   async function join(): Promise<ParticipationResult> {
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/events/${eventId}/participation`, {
-        method: 'POST',
-        headers: await authHeaders(),
-      });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw { status: response.status, detail: json.detail } as ParticipationError;
-      return json as ParticipationResult;
+      return await apiFetch<ParticipationResult>(`/events/${eventId}/participation`, { method: 'POST' });
     } finally {
       setIsSubmitting(false);
     }
@@ -37,14 +30,7 @@ export function useParticipation(eventId: string) {
   async function cancel(): Promise<void> {
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/events/${eventId}/participation`, {
-        method: 'DELETE',
-        headers: await authHeaders(),
-      });
-      if (!response.ok) {
-        const json = await response.json().catch(() => ({}));
-        throw { status: response.status, detail: json.detail } as ParticipationError;
-      }
+      await apiFetch<void>(`/events/${eventId}/participation`, { method: 'DELETE' });
     } finally {
       setIsSubmitting(false);
     }

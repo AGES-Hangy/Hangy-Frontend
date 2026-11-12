@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { EventCard } from '@/components/EventCard';
-import { Icon } from '@/components/Icon';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { SectionHeader } from '@/components/SectionHeader';
-import { colors, palette } from '@/constants/colors';
+import { colors } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import type { Event } from '@/components/EventCard/types';
@@ -13,36 +14,32 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFavoriteEvent } from '@/hooks/useFavoriteEvent';
 import { useFeed, type FeedSection } from '@/hooks/useFeed';
 import { useRefreshable } from '@/hooks/useRefreshable';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 export default function Home() {
-  const { sections, isLoading, error, isOffline, reload, refresh } = useFeed();
+  const { sections, isLoading, error, reload, refresh } = useFeed();
   const { isRefreshing, onRefresh } = useRefreshable(refresh);
   const { user } = useCurrentUser();
+  // Reconectou: refaz a carga que falhou, sem o usuário tocar em nada.
+  const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry), reload);
   // O feed só traz eventos publicados, então basta o tipo da conta.
   const canFavorite = user?.userType === 'PERSONAL';
 
   if (isLoading) {
-    return <FeedSkeleton />;
+    return <FeedSkeleton offline={isOffline} />;
   }
 
   if (error) {
     return (
       <View style={styles.stateContainer}>
-        <View style={styles.errorContent}>
-          <View style={styles.errorMessage}>
-            <Icon name={isOffline ? 'map-pin-off' : 'circle-alert'} color={isOffline ? palette.warning.default : colors.feedback.error} size={40} />
-            <Text style={styles.stateTitle}>{isOffline ? 'Você está sem internet' : 'Algo deu errado do nosso lado'}</Text>
-            <Text style={styles.stateText}>{isOffline ? 'o Hangy precisa de conexão para carregar eventos e o mapa Ao vivo. Verifique o Wi-Fi ou os dados móveis.' : error}</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Tentar carregar o feed novamente"
-            onPress={() => void reload()}
-            style={styles.retryButton}
-          >
-            <Text style={styles.retryLabel}>Tentar de novo</Text>
-          </Pressable>
-        </View>
+        <ErrorScreen
+          {...loadErrorScreenProps(error, {
+            onRetry: () => void reload(),
+            retryAccessibilityLabel: 'Tentar carregar o feed novamente',
+          })}
+        />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
@@ -51,8 +48,9 @@ export default function Home() {
 
   if (visibleSections.length === 0) {
     return (
-      <View style={styles.stateContainer}>
+      <View style={[styles.stateContainer, isOffline && styles.contentBelowBanner]}>
         <EmptyState context="Home" cta ctaAtBottom ctaDisabled />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
@@ -65,7 +63,7 @@ export default function Home() {
         renderItem={({ item }) => (
           <FeedSectionRow section={item} canFavorite={canFavorite} onEventUnavailable={refresh} />
         )}
-        contentContainerStyle={styles.feedContent}
+        contentContainerStyle={[styles.feedContent, isOffline && styles.contentBelowBanner]}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
         refreshControl={
@@ -77,6 +75,7 @@ export default function Home() {
           />
         }
       />
+      {isOffline && <OfflineBanner />}
     </View>
   );
 }
@@ -140,22 +139,25 @@ function FeedEventCard({
   );
 }
 
-function FeedSkeleton() {
+function FeedSkeleton({ offline }: { offline: boolean }) {
   return (
     <View style={styles.container}>
-      <FlatList
-        data={['first', 'second', 'third']}
-        keyExtractor={(item) => item}
-        renderItem={() => (
-          <View style={styles.section}>
+      <View
+        style={[styles.feedContent, offline && styles.contentBelowBanner]}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Carregando eventos"
+      >
+        {['first', 'second', 'third'].map((key) => (
+          <View key={key} style={styles.section}>
             <View style={styles.skeletonHeader} />
             <View style={styles.skeletonRow}>
               {[0, 1].map((item) => <View key={item} style={styles.skeletonCard} />)}
             </View>
           </View>
-        )}
-        contentContainerStyle={styles.feedContent}
-      />
+        ))}
+      </View>
+      {offline && <OfflineBanner />}
     </View>
   );
 }
@@ -169,42 +171,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
   },
-  errorContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[16],
-    paddingBottom: spacing[16],
-  },
-  errorMessage: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[12],
-    maxWidth: 320,
-  },
-  stateTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  stateText: {
-    ...typography.bodyM,
-    color: colors.text.secondary,
-    textAlign: 'center',
-  },
-  retryButton: {
-    minHeight: 44,
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[16],
-    borderRadius: radius.full,
-    backgroundColor: colors.action.primary,
-  },
-  retryLabel: {
-    ...typography.labelM,
-    color: colors.text.inverse,
+  // O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o conteúdo desce
+  // o mesmo respiro das outras telas para a faixa não cobrir a primeira seção.
+  contentBelowBanner: {
+    paddingTop: spacing[64],
   },
   feedContent: {
     paddingHorizontal: spacing[16],
