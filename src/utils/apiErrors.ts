@@ -1,4 +1,4 @@
-import { ApiError, UploadCancelledError } from '@/utils/http';
+import { ADMIN_ACCESS_REQUIRED, ApiError, UploadCancelledError } from '@/utils/http';
 
 /**
  * Tradução dos erros da API para o que a tela mostra.
@@ -128,6 +128,12 @@ export function describeReportLoadError(error: unknown): LoadError {
   }
 
   return loadError;
+}
+
+/** Falhas em que o `apiFetch` já encerrou a sessão e está levando para o Login. */
+export function endsSession(error: unknown): boolean {
+  if (!isApiErrorLike(error)) return false;
+  return error.status === 401 || (error.status === 403 && error.detail === ADMIN_ACCESS_REQUIRED);
 }
 
 /** O que fazer com o erro de uma ação (aprovar, recusar, remover, cancelar). */

@@ -1,5 +1,6 @@
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { AdminHeader } from '@/components/AdminHeader';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { OfflineBanner } from '@/components/OfflineBanner';
@@ -18,10 +19,6 @@ import { useRefreshable } from '@/hooks/useRefreshable';
 import type { AdminDashboard } from '@/types/admin';
 import { dashboardStats, recentReportCard } from '@/utils/adminDashboard';
 
-/** Barra de 56 do TopAppBar, sem o `paddingTop` 12 do frame: o `Admin/_layout` já aplica a safe area. */
-const HEADER_HEIGHT = 56;
-/** Borda inferior do TopAppBar no Figma; a constante do componente é local. */
-const HEADER_BORDER_WIDTH = 1.5;
 /**
  * O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o conteúdo desce o
  * mesmo tanto que em `BlockedUsers` para o primeiro card não ficar por baixo dele.
@@ -58,28 +55,24 @@ const SKELETON_REPORT_BADGE_WIDTH = '25%';
 const SKELETON_REPORT_REASON_WIDTH = '50%';
 const SKELETON_REPORT_EXCERPT_LAST_LINE_WIDTH = '75%';
 
-/**
- * Nenhuma variante do TopAppBar tem título à esquerda com uma ação de texto, e
- * todas somam `insets.top`, que o `Admin/_layout` já aplica.
- */
 function PainelHeader() {
   const { logout, isLoading } = useLogout();
 
   return (
-    <View style={styles.header}>
-      <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
-        Painel administrativo
-      </Text>
-      <Button
-        label="Sair"
-        variant="Tertiary"
-        size="SM"
-        accessibilityLabel="Sair da conta"
-        isLoading={isLoading}
-        onPress={logout}
-        style={styles.logout}
-      />
-    </View>
+    <AdminHeader
+      title="Painel administrativo"
+      action={
+        <Button
+          label="Sair"
+          variant="Tertiary"
+          size="SM"
+          accessibilityLabel="Sair da conta"
+          isLoading={isLoading}
+          onPress={logout}
+          style={styles.logout}
+        />
+      }
+    />
   );
 }
 
@@ -246,23 +239,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg.base,
-  },
-  header: {
-    // No React Native a `height` inclui a borda.
-    height: HEADER_HEIGHT + HEADER_BORDER_WIDTH,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-    borderBottomWidth: HEADER_BORDER_WIDTH,
-    borderBottomColor: colors.border.default,
-    backgroundColor: colors.bg.base,
-  },
-  title: {
-    ...typography.h4,
-    flexShrink: 1,
-    color: colors.text.primary,
   },
   // O texto do Tertiary fica rente à margem de 16, como o título; o padding segue como área de toque.
   logout: {

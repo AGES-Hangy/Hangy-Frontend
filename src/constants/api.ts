@@ -238,6 +238,8 @@ export const endpoints = {
    * sem corpo; devolve o detalhe atualizado, com `status: REJECTED`.
    */
   adminReportArchive: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/archive`,
+  /** Lista de moderação de contas, paginada por cursor. Só `ADMIN`. A query vem de `adminUsersQuery`. */
+  adminUsers: (query: string) => `/admin/users${query ? `?${query}` : ''}`,
   /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
   adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
   /**
