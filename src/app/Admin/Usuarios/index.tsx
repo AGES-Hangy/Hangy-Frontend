@@ -6,6 +6,7 @@ import type { ListRenderItemInfo } from 'react-native';
 import { AdminHeader } from '@/components/AdminHeader';
 import { AdminUserRow } from '@/components/AdminUserRow';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ProfileTabs } from '@/components/ProfileTabs';
 import type { ProfileTabItem } from '@/components/ProfileTabs';
@@ -15,8 +16,8 @@ import { colors } from '@/constants/colors';
 import { layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useRefreshable } from '@/hooks/useRefreshable';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import type { AdminUser } from '@/types/admin';
 import { announce } from '@/utils/accessibility';
 import {
@@ -25,6 +26,7 @@ import {
   adminUsersAnnouncement,
 } from '@/utils/adminUsers';
 import type { AdminUsersStatusFilter } from '@/utils/adminUsers';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 const FILTER_TABS: ReadonlyArray<ProfileTabItem<AdminUsersStatusFilter>> = [
   { value: 'ALL', label: 'Todos' },
@@ -102,7 +104,6 @@ export default function AdminUsuarios() {
   // Muda só com a resposta: durante a digitação, o vazio ainda fala da busca que está na tela.
   const [settledSearch, setSettledSearch] = useState('');
   const listRef = useRef<FlatList<AdminUser>>(null);
-  const { isOffline } = useNetworkStatus();
 
   const { users, isLoading, isLoadingMore, error, refetch, reloadLoaded, loadMore, hasMore } = useAdminUsers({
     search,
@@ -114,6 +115,8 @@ export default function AdminUsuarios() {
     },
   });
   const { isRefreshing, onRefresh } = useRefreshable(refetch);
+  // `error` só existe sem lista na tela: com lista, a falha é toast e não há o que refazer sozinho.
+  const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry), refetch);
 
   // O primeiro foco é a montagem, que já busca; os seguintes são a volta da ficha,
   // onde a conta pode ter sido moderada.
@@ -175,15 +178,11 @@ export default function AdminUsuarios() {
 
     if (error) {
       return (
-        <EmptyState
-          context="Search"
-          icon="circle-alert"
-          title={error.title}
-          text={error.message}
-          cta
-          ctaLabel="Tentar de novo"
-          onCtaPress={() => { void refetch(); }}
-          fill
+        <ErrorScreen
+          {...loadErrorScreenProps(error, {
+            onRetry: () => { void refetch(); },
+            retryAccessibilityLabel: 'Tentar de novo, carregar as contas',
+          })}
         />
       );
     }
