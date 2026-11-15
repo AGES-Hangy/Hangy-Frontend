@@ -8,6 +8,7 @@ import type {
 } from '@/types/event';
 import type { ApiUploadOptions, UploadFile } from '@/utils/http';
 import type { PersonalProfileResponse } from '@/types/profile';
+import type { ReportCreateInput, ReportReasonCode, ReportTarget } from '@/types/report';
 import type {
   ConnectionAnswerResult,
   ConnectionRequestResult,
@@ -480,6 +481,11 @@ function estadoInicial() {
     eventosIndisponiveis: [] as string[],
     // `cancelled` vale para o mock inteiro; o favoritar só responde `404` para o evento cancelado.
     eventosCancelados: [] as string[],
+    /**
+     * Denúncias abertas, como `ALVO:id:MOTIVO`. O perfil `reported` já nasce
+     * com uma por Abuso, para ver o motivo "em análise" sem enviar nada.
+     */
+    denunciasAbertas: ['USER:reported:HARASSMENT'] as string[],
     /** Campos editados por `PATCH /events/{id}`, sobrepostos ao evento padrão. */
     overrides: null as null | {
       title: string;
@@ -1743,6 +1749,40 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     } as T;
   }
 
+  // `GET /search/events` — o cenário sai do `q`: `vazio`, `erro`, `erro-pagina`,
+  // `tag-inexistente` (404 com `tagId`) ou qualquer outro termo para a lista cheia.
+  if (partes.join('/') === 'search/events' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const limit = Number(params.get('limit') ?? 20);
+    const q = (params.get('q') ?? '').trim();
+    const cursor = params.get('cursor');
+    const offset = cursor ? Number(cursor) : 0;
+    if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(offset) || offset < 0) {
+      throw new MockApiError(400, 'Invalid pagination parameters');
+    }
+    // Nunca responde: deixa a tela parada no "Carregando" para conferir o skeleton.
+    if (q === 'carregando') return new Promise<T>(() => {});
+    if (params.get('tag_ids') && q === 'tag-inexistente') throw new MockApiError(404, 'Tag not found');
+    if (q === 'erro' || (q === 'erro-pagina' && cursor)) throw new MockApiError(500, 'Internal server error');
+    const nomes = ['Futebol na PUC', 'Futebol na Orla', 'Fut 7 no Planet', 'Pelada de domingo', 'Futebol de areia', 'Copa dos Amigos', 'Futsal na quadra'];
+    const privacidades = ['PUBLIC', 'INVITE_ONLY', 'PRIVATE'] as const;
+    const todos = q === 'vazio' ? [] : Array.from({ length: 45 }, (_, index) => ({
+      event_id: `mock-search-${index + 1}`,
+      title: `${nomes[index % nomes.length]}${index >= nomes.length ? ` ${Math.floor(index / nomes.length) + 1}` : ''}`,
+      event_date: new Date(Date.now() + (index + 1) * 24 * 60 * 60 * 1000).toISOString(),
+      location_name: index % 4 === 3 ? 'Ginásio Municipal Menino Deus, bairro Centro Histórico' : 'Parque Esportivo',
+      cover_photo_url: null,
+      privacy: privacidades[index % privacidades.length],
+    }));
+    const pagina = todos.slice(offset, offset + limit);
+    const proximo = offset + limit;
+    return {
+      items: pagina,
+      total: todos.length,
+      next_cursor: proximo < todos.length ? String(proximo) : null,
+    } as T;
+  }
+
   if (partes.join('/') === 'businesses/me/followers' && method === 'GET') {
     const params = new URLSearchParams(path.split('?')[1] ?? '');
     const limit = Number(params.get('limit') ?? 20);
@@ -1779,6 +1819,9 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if (userId === 'unblock-gone' || !estavaBloqueado) throw new MockApiError(404, 'User not found');
     return undefined as T;
   }
+
+  const respostaDeDenuncia = resolverDenuncia(path, partes, method, init);
+  if (respostaDeDenuncia) return respostaDeDenuncia.resposta as T;
 
   const respostaDePerfil = resolverPerfil(partes, method, init);
   // Por cima da resposta do PR #62 (TID072), que vem zerada: os contadores
@@ -2161,6 +2204,101 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
 }
 
 /** Prefixo das URLs que a API grava. Aproximação do `owns(url)` do backend. */
+/** Motivos de `GET /reports/reasons`, na ordem dos frames de denúncia do Figma. */
+const MOTIVOS_DE_DENUNCIA: Record<ReportTarget, { code: ReportReasonCode; label: string; scope: 'CONTENT' | 'EXPERIENCE' }[]> = {
+  USER: [
+    { code: 'FAKE_PROFILE', label: 'Perfil fake', scope: 'CONTENT' },
+    { code: 'HARASSMENT', label: 'Abuso', scope: 'CONTENT' },
+    { code: 'INAPPROPRIATE_CONTENT', label: 'Conteúdo inapropriado', scope: 'CONTENT' },
+    { code: 'HATE_SPEECH', label: 'Discurso de ódio', scope: 'CONTENT' },
+    { code: 'SPAM', label: 'Propaganda enganosa', scope: 'CONTENT' },
+    { code: 'SAFETY_CONCERN', label: 'Violação de segurança', scope: 'CONTENT' },
+    { code: 'OTHER', label: 'Outro', scope: 'CONTENT' },
+  ],
+  EVENT: [
+    { code: 'INAPPROPRIATE_CONTENT', label: 'Conteúdo inapropriado', scope: 'CONTENT' },
+    { code: 'MISLEADING_EVENT', label: 'Evento enganoso', scope: 'EXPERIENCE' },
+    { code: 'HATE_SPEECH', label: 'Discurso de ódio', scope: 'CONTENT' },
+    { code: 'HARASSMENT', label: 'Assédio', scope: 'EXPERIENCE' },
+    { code: 'SPAM', label: 'Spam ou propaganda', scope: 'CONTENT' },
+    { code: 'SAFETY_CONCERN', label: 'Risco à segurança', scope: 'EXPERIENCE' },
+    { code: 'OTHER', label: 'Outro', scope: 'CONTENT' },
+  ],
+};
+
+/**
+ * `GET /reports/reasons` e `POST /reports` (tasks 089, 239 e 296). Alvos de
+ * cenário: `report-boom` responde 500, `report-gone` 404, `report-busy` 409 no
+ * envio; o perfil `reported` tem Abuso em análise. Nos eventos, quem não é
+ * participante aprovado (`guest`) só tem os motivos de conteúdo.
+ */
+function resolverDenuncia(
+  path: string,
+  partes: string[],
+  method: string,
+  init: RequestInit,
+): { resposta: unknown } | undefined {
+  if (partes[0] !== 'reports') return undefined;
+
+  const participa = (eventId: string) => detalhe(eventId).viewer.participation_status === 'CONFIRMED';
+  const aberta = (alvo: ReportTarget, id: string, motivo: string) =>
+    db.denunciasAbertas.includes(`${alvo}:${id}:${motivo}`);
+
+  if (partes[1] === 'reasons' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const alvo = params.get('target');
+    const id = params.get('target_id') ?? '';
+    if (alvo !== 'USER' && alvo !== 'EVENT') throw new MockApiError(422, 'Invalid target');
+    if (id === 'report-boom') throw new MockApiError(500, 'Internal server error');
+    if (id === 'report-gone') throw new MockApiError(404, 'Target not found');
+    return {
+      resposta: MOTIVOS_DE_DENUNCIA[alvo].map((motivo) => {
+        const soParticipantes = alvo === 'EVENT' && motivo.scope === 'EXPERIENCE' && !participa(id);
+        const emAnalise = aberta(alvo, id, motivo.code);
+        return {
+          ...motivo,
+          available: !soParticipantes && !emAnalise,
+          unavailable_reason: emAnalise ? 'ALREADY_REPORTED' : soParticipantes ? 'PARTICIPANTS_ONLY' : null,
+        };
+      }),
+    };
+  }
+
+  if (partes.length === 1 && method === 'POST') {
+    const body = JSON.parse(String(init.body ?? '{}')) as Partial<ReportCreateInput> & {
+      reported_user_id?: string;
+      reported_event_id?: string;
+    };
+    const alvo: ReportTarget | null = body.reported_user_id ? 'USER' : body.reported_event_id ? 'EVENT' : null;
+    const id = body.reported_user_id ?? body.reported_event_id ?? '';
+    if (!alvo || (body.reported_user_id && body.reported_event_id)) {
+      throw new MockApiError(400, 'Exactly one target is required');
+    }
+    const motivo = MOTIVOS_DE_DENUNCIA[alvo].find((item) => item.code === body.report_type);
+    if (!motivo) throw new MockApiError(400, 'Invalid report reason');
+    if (alvo === 'USER' && id === ID_DA_CONTA) throw new MockApiError(400, 'Cannot report yourself');
+    if (id === 'report-gone') throw new MockApiError(404, 'Target not found');
+    if (alvo === 'EVENT' && motivo.scope === 'EXPERIENCE' && !participa(id)) {
+      throw new MockApiError(403, 'Reason requires participation');
+    }
+    if (id === 'report-busy' || aberta(alvo, id, motivo.code)) {
+      db.denunciasAbertas.push(`${alvo}:${id}:${motivo.code}`);
+      throw new MockApiError(409, 'Report already under review');
+    }
+    db.denunciasAbertas.push(`${alvo}:${id}:${motivo.code}`);
+    return {
+      resposta: {
+        report_id: `r-${db.denunciasAbertas.length}`,
+        report_type: motivo.code,
+        status: 'PENDING',
+        created_at: new Date().toISOString(),
+      },
+    };
+  }
+
+  return undefined;
+}
+
 const BUCKET_DE_MIDIA = 'https://hangy-media.s3.us-east-1.amazonaws.com/';
 
 const CENARIOS_DE_ENVIO = ['ok', 'slow', 'nototal', '413', '415', '503', 'offline', 'foreign'] as const;

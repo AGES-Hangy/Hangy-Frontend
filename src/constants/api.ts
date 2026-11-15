@@ -1,3 +1,4 @@
+import type { ReportTarget } from '@/types/report';
 import type { UserEventsTab } from '@/types/user';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -183,6 +184,13 @@ export const endpoints = {
   profilePhoto: () => '/users/me/photo',
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
+  /** Motivos de denúncia do alvo, com o que está disponível para quem pede (tasks 089 e 296 [BE]). */
+  reportReasons: (target: ReportTarget, targetId: string) => {
+    const params = new URLSearchParams({ target, target_id: targetId });
+    return `/reports/reasons?${params.toString()}`;
+  },
+  /** `POST` registra uma denúncia de perfil ou de evento (task 239 [BE]). */
+  reports: () => '/reports',
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
   connections: (options?: { cursor?: string | null; search?: string }) => {
     const params = new URLSearchParams();
@@ -228,6 +236,29 @@ export const endpoints = {
     if (options?.cursor) params.set('cursor', options.cursor);
     const query = params.toString();
     return `/search/businesses${query ? `?${query}` : ''}`;
+  },
+  /**
+   * "Ver todos" do bloco de eventos da busca (task 127 [BE]), paginado por
+   * cursor. Mantém o termo, as tags e as datas do bloco de origem.
+   */
+  searchEvents: (options?: {
+    q?: string;
+    tagIds?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    cursor?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    // O backend espera os UUIDs numa string só, separados por vírgula (OR).
+    if (options?.tagIds?.length) params.set('tag_ids', options.tagIds.join(','));
+    if (options?.dateFrom) params.set('date_from', options.dateFrom);
+    if (options?.dateTo) params.set('date_to', options.dateTo);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/search/events${query ? `?${query}` : ''}`;
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
