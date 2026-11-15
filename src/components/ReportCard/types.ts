@@ -19,6 +19,7 @@ export type ReportCardProps = {
   reason: string;
   /** Trecho do relato; trunca em 2 linhas. */
   descriptionExcerpt: string;
-  reportNumber: number;
+  /** Número sequencial da denúncia. Sem ele, o rodapé mostra só o chevron e o rótulo acessível o omite. */
+  reportNumber?: number;
   onPress?: () => void;
 };

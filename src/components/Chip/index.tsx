@@ -9,7 +9,7 @@ import {
   Insets,
 } from 'react-native';
 import { colors } from '@/constants/colors';
-import { typography, fontFamily } from '@/constants/typography';
+import { typography } from '@/constants/typography';
 import { ChipProps, ChipSize } from './types';
 import { radius } from '@/constants/layout';
 import { Icon } from '../Icon';
@@ -169,12 +169,10 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.labelS,
-    fontFamily: fontFamily.base,
     textAlign: 'center',
   },
   badgeText: {
     ...typography.labelS,
-    fontFamily: fontFamily.base,
     textAlign: 'center',
   },
 });

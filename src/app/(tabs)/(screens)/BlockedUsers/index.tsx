@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
@@ -13,7 +14,8 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useUnblockUser } from '@/hooks/useUnblockUser';
 import type { BlockedUser } from '@/types/profile';
@@ -107,9 +109,10 @@ export default function BlockedUsers() {
 
   const insets = useSafeAreaInsets();
   const { addToast } = useToast();
-  const { isOffline } = useNetworkStatus();
   const { users, isLoading, isLoadingMore, error, hasMore, loadMore, refresh, removeUser, restoreUser } =
     useBlockedUsers();
+  // Reconectou: refaz a primeira carga que falhou (com lista na tela, o erro é só da paginação).
+  const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry) && users.length === 0, refresh);
   const { unblockUser, isLoading: isUnblocking } = useUnblockUser();
 
   /** Quem está no diálogo de confirmação; `null` com o diálogo fechado. */
@@ -177,15 +180,12 @@ export default function BlockedUsers() {
 
     if (error && users.length === 0) {
       return (
-        <EmptyState
-          context="Search"
-          icon="circle-alert"
-          title={error.title}
-          text={error.message}
-          cta
-          ctaLabel="Tentar de novo"
-          onCtaPress={() => { void refresh(); }}
-          fill
+        <ErrorScreen
+          withBottomInset
+          {...loadErrorScreenProps(error, {
+            onRetry: () => { void refresh(); },
+            retryAccessibilityLabel: 'Tentar carregar os usuários bloqueados novamente',
+          })}
         />
       );
     }

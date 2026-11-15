@@ -75,7 +75,7 @@ export function ReportCard({
 }: ReportCardProps) {
   const statusLabel = resolveModerationVariant(moderationStatus).label;
   const accessibilityLabel = [
-    `Denúncia #${reportNumber}`,
+    reportNumber !== undefined ? `Denúncia #${reportNumber}` : undefined,
     `${target === 'Pessoa' ? 'Pessoa' : 'Evento'}: ${targetName}`,
     subtitle,
     statusLabel,
@@ -120,8 +120,10 @@ export function ReportCard({
         {`“${descriptionExcerpt}”`}
       </Text>
 
-      <View style={styles.footer}>
-        <Text style={[typography.bodyS, styles.reportNumber]}>Denúncia #{reportNumber}</Text>
+      <View style={[styles.footer, reportNumber === undefined && styles.footerChevronOnly]}>
+        {reportNumber !== undefined ? (
+          <Text style={[typography.bodyS, styles.reportNumber]}>Denúncia #{reportNumber}</Text>
+        ) : null}
         <Icon name="chevron-right" size={metrics.chevronSize} color={colors.text.tertiary} />
       </View>
     </Pressable>
@@ -178,6 +180,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  // Com um filho só, o space-between deixaria o chevron à esquerda.
+  footerChevronOnly: {
+    justifyContent: 'flex-end',
   },
   reportNumber: {
     color: colors.text.tertiary,

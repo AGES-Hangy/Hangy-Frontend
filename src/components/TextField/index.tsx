@@ -247,6 +247,7 @@ export function TextField({
   hint,
   value = '',
   onChangeText,
+  onSubmitEditing,
   onFocus,
   onBlur,
   placeholder,
@@ -272,6 +273,7 @@ export function TextField({
   trailingIcon: trailingIconOverride,
   onTrailingIconPress,
   onTrailingIconPressAccessibilityLabel = 'Mais opções',
+  trailingIconBadgeCount,
   style,
 }: TextFieldProps) {
   const config = TYPES[type];
@@ -416,7 +418,10 @@ export function TextField({
           multiline={config.multiline}
           secureTextEntry={config.secure && isSecureHidden}
           keyboardType={isDateField && Platform.OS === 'web' ? 'numbers-and-punctuation' : keyboardType ?? config.keyboardType}
-          autoCapitalize={autoCapitalize}
+          returnKeyType={type === 'Search' ? 'search' : undefined}
+          onSubmitEditing={onSubmitEditing}
+          autoCapitalize={autoCapitalize ?? (type === 'Search' ? 'none' : undefined)}
+          autoCorrect={type === 'Search' ? false : undefined}
           maxLength={isDateField && Platform.OS === 'web' ? (dateMode === 'time' ? 5 : 10) : maxLength}
           onFocus={(event) => {
             setFocused(true);
@@ -479,6 +484,18 @@ export function TextField({
                 size={ICON_SIZE}
                 color={resolveIconColor(state, 'trailing')}
               />
+              {trailingIconBadgeCount ? (
+                <View
+                  style={styles.trailingBadge}
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={styles.trailingBadgeText}>
+                    {trailingIconBadgeCount > 9 ? '9+' : trailingIconBadgeCount}
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
           ) : (
             <Icon
@@ -619,6 +636,24 @@ export function TextField({
 }
 
 const styles = StyleSheet.create({
+  // Mesmo contador do botão de filtros do mapa (`Live`): pílula primária sobre o canto do ícone.
+  trailingBadge: {
+    position: 'absolute',
+    top: -spacing[8],
+    right: -spacing[8],
+    minWidth: spacing[16],
+    height: spacing[16],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.full,
+    backgroundColor: colors.action.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trailingBadgeText: {
+    ...typography.caption,
+    lineHeight: spacing[16],
+    color: colors.text.inverse,
+  },
   container: {
     minWidth: MIN_WIDTH,
     gap: spacing[4],

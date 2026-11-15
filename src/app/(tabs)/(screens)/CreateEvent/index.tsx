@@ -14,10 +14,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { useCreateEventStep2 } from '@/hooks/useCreateEventStep2';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { INVALID_COVER_MESSAGE, useEventCoverUpload } from '@/hooks/useEventCoverUpload';
 import { announce } from '@/utils/accessibility';
 import { endDateFrom } from '@/utils/eventDuration';
@@ -111,6 +113,8 @@ export default function CreateEvent() {
   } = useCreateEventStep2();
   // Publicar e gerar o link de convite são uma operação só para o usuário.
   const isPublishing = isPublishingEvent || isGeneratingLink;
+  // Sem rede, o formulário continua editável; só publicar fica desabilitado.
+  const { isOffline } = useNetworkStatus();
 
   const setTitle = (title: string) => setForm((f) => ({ ...f, title }));
   const setDescription = (description: string) => setForm((f) => ({ ...f, description }));
@@ -216,7 +220,7 @@ export default function CreateEvent() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, isOffline && styles.contentBelowBanner]}
           keyboardShouldPersistTaps="handled"
           pointerEvents={isPublishing ? 'none' : 'auto'}
         >
@@ -271,6 +275,8 @@ export default function CreateEvent() {
         </ScrollView>
 
         {isPublishing && <View style={styles.overlay} pointerEvents="none" />}
+        {/* Dentro do KeyboardAvoidingView para a faixa ficar abaixo do Stepper. */}
+        {isOffline && <OfflineBanner />}
 
         <View style={[styles.footer, { paddingBottom: spacing[16] + insets.bottom }]}>
           {step === 2 && (
@@ -293,7 +299,7 @@ export default function CreateEvent() {
             size="LG"
             style={styles.primaryButton}
             onPress={step === 1 ? handleContinue : handlePublish}
-            disabled={isCoverUploading}
+            disabled={isCoverUploading || (step === 2 && isOffline)}
             isLoading={step === 2 && isPublishing}
           />
         </View>
@@ -320,6 +326,10 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing[16],
     paddingBottom: spacing[24],
+  },
+  // O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o formulário desce o mesmo respiro das outras telas.
+  contentBelowBanner: {
+    paddingTop: spacing[64],
   },
   overlay: {
     ...StyleSheet.absoluteFill,

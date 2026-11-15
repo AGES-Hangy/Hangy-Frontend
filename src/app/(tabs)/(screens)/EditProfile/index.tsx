@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
-import { Button } from '@/components/Button';
 import { EditProfileForm } from '@/components/EditProfile/EditProfileForm';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { FloatingSaveButton } from '@/components/FloatingSaveButton';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { colors } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
-import { typography } from '@/constants/typography';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTags } from '@/hooks/useTags';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import { fetchProfileForEdit } from '@/hooks/useUpdateProfile';
 import { fetchUserTags } from '@/hooks/useUserTags';
 import type { BusinessProfile, PersonalProfile, UserTag } from '@/types/profile';
 import { describeLoadError, type LoadError } from '@/utils/apiErrors';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 type Loaded = {
   /** Visita em que os dados foram lidos — vira a `key` do formulário. */
@@ -92,27 +94,26 @@ export default function EditProfile() {
 
   const error = userError ?? loadError;
 
+  // Refaz só a leitura que falhou: a do usuário ou a do perfil + tags.
+  const retryLoad = useCallback(() => {
+    if (userError) void refetchUser();
+    else setAttempt((current) => current + 1);
+  }, [userError, refetchUser]);
+  // Reconectou: refaz a carga que falhou sem o usuário tocar em nada.
+  const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry), retryLoad);
+
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle} accessibilityRole="header">
-          {error.kind === 'offline' ? 'Sem conexão com a internet' : 'Não foi possível carregar'}
-        </Text>
-        <Text style={styles.errorMessage}>
-          {error.kind === 'offline'
-            ? 'Verifique o Wi-Fi ou os dados móveis e tente de novo.'
-            : error.kind === 'timeout'
-              ? 'A conexão demorou demais.'
-              : 'Não foi possível carregar. Tente de novo.'}
-        </Text>
-        <Button
-          label="Tentar de novo"
-          variant="Secondary"
-          onPress={() => {
-            if (userError) void refetchUser();
-            else setAttempt((current) => current + 1);
-          }}
+      <View style={styles.screen}>
+        <ErrorScreen
+          withBottomInset
+          {...loadErrorScreenProps(error, {
+            onRetry: retryLoad,
+            onBack: leaveScreen,
+            retryAccessibilityLabel: 'Tentar carregar o perfil novamente',
+          })}
         />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
@@ -132,6 +133,7 @@ export default function EditProfile() {
           ))}
         </View>
         <FloatingSaveButton onPress={() => {}} disabled />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
@@ -152,24 +154,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg.base,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[12],
-    padding: spacing[24],
-    backgroundColor: colors.bg.base,
-  },
-  errorTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  errorMessage: {
-    ...typography.bodyM,
-    color: colors.text.secondary,
-    textAlign: 'center',
   },
   skeleton: {
     alignItems: 'center',

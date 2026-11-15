@@ -73,6 +73,44 @@ const VARIANTS = {
     confirmLabel: 'Desbloquear',
     destructive: false,
   },
+  // "Admin — Denúncia — banir usuário" (Sprint 4). O título leva o nome da
+  // conta e vem por `title`. Suspender e arquivar não têm frame próprio:
+  // seguem a mesma estrutura, só o texto muda.
+  BanUser: {
+    title: 'Banir usuário?',
+    description:
+      'O perfil sai do ar, as participações são canceladas e o acesso fica bloqueado. Você pode reverter em Usuários.',
+    confirmLabel: 'Banir usuário',
+    destructive: true,
+  },
+  SuspendUser: {
+    title: 'Suspender usuário?',
+    description:
+      'A conta fica sem acesso por 7 dias e volta sozinha depois disso. Você pode reverter em Usuários.',
+    confirmLabel: 'Suspender 7 dias',
+    destructive: false,
+  },
+  // Admin — reverter banimento ou suspensão.
+  RevertModeration: {
+    title: 'Reverter moderação?',
+    description: 'O usuário voltará a ter acesso ao app.',
+    confirmLabel: 'Reverter',
+    destructive: false,
+  },
+  ArchiveReport: {
+    title: 'Arquivar denúncia?',
+    description: 'A denúncia sai da fila e a conta denunciada não sofre nenhuma ação.',
+    confirmLabel: 'Arquivar denúncia',
+    destructive: false,
+  },
+  // Denúncia de evento. Sem frame próprio: mesma estrutura do banir.
+  RemoveEvent: {
+    title: 'Remover evento?',
+    description:
+      'O evento sai do ar, as participações são canceladas e todos são avisados. A conta do organizador não muda.',
+    confirmLabel: 'Remover evento',
+    destructive: true,
+  },
 } as const satisfies Record<DialogVariant, unknown>;
 
 export function Dialog({

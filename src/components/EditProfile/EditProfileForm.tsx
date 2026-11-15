@@ -32,6 +32,7 @@ import {
   type TagSelection,
 } from '@/components/EditProfile/types';
 import { FieldHint } from '@/components/FieldHint';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { FLOATING_SAVE_BUTTON_HEIGHT, FloatingSaveButton } from '@/components/FloatingSaveButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TextField } from '@/components/TextField';
@@ -44,6 +45,7 @@ import type { CurrentUser } from '@/hooks/useCurrentUser';
 import { useDeleteAccount } from '@/hooks/useDeleteAccount';
 import { invalidateFeed } from '@/hooks/useFeed';
 import { useLogout } from '@/hooks/useLogout';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useProfilePhotoUpload } from '@/hooks/useProfilePhotoUpload';
 import type { TagNode } from '@/hooks/useTags';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
@@ -164,7 +166,10 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
   const isDirty = isProfileChanged || isTagsChanged;
   const isSaving = isUpdating || isSavingTags;
   const isBlocked = isSaving || isDeleting || isLoggingOut;
-  const canSave = isDirty && Object.keys(validation).length === 0 && selectionError === null && !isBlocked;
+  // Sem rede, salvar e excluir a conta ficam desabilitados (task 141); o formulário continua editável.
+  const { isOffline } = useNetworkStatus();
+  const canSave =
+    isDirty && Object.keys(validation).length === 0 && selectionError === null && !isBlocked && !isOffline;
 
   function update(changes: Partial<EditProfileFormState>, ...fields: EditProfileField[]) {
     setForm((current) => ({ ...current, ...changes }));
@@ -322,6 +327,7 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.content,
+            isOffline && styles.contentBelowBanner,
             { paddingBottom: FLOATING_SAVE_BUTTON_HEIGHT + insets.bottom + spacing[16] },
           ]}
         >
@@ -572,13 +578,14 @@ export function EditProfileForm({ user, profile, userTags, tagsTree, onRegisterC
             label="Excluir conta"
             variant="DangerText"
             onPress={openDeleteDialog}
-            disabled={isBlocked}
+            disabled={isBlocked || isOffline}
             style={styles.accountAction}
           />
         </ScrollView>
       </KeyboardAvoidingView>
 
       <FloatingSaveButton onPress={() => void handleSave()} disabled={!canSave} isLoading={isSaving} />
+      {isOffline && <OfflineBanner />}
 
       <Dialog
         visible={isDiscardOpen}
@@ -630,6 +637,10 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing[16],
     gap: spacing[24],
+  },
+  // O `OfflineBanner` é absoluto (top 8 + altura mínima 48): o formulário desce o mesmo respiro das outras telas.
+  contentBelowBanner: {
+    paddingTop: spacing[64],
   },
   photo: {
     alignItems: 'center',

@@ -89,3 +89,46 @@ test('late nearby responses cannot undo successful join or cancellation; next se
     assert.equal(state[0][0].title, 'Fresh');
   }
 });
+
+test('a nearby retry expires after another search, a pending pan, or unmount', async () => {
+  const region = { latitude: -30, longitude: -51, latitudeDelta: .05, longitudeDelta: .05 };
+  const requests = [];
+  let cleanup;
+  let retry;
+  const context = evaluate(
+    'const SEARCH_DEBOUNCE_MS=500, MAX_RADIUS_M=50000, EARTH_RADIUS_M=6371000, TAG_NOT_FOUND="Tag not found";\n' +
+    functions('src/hooks/useNearbyEvents.ts', ['distanceInMeters', 'radiusFor', 'useNearbyEvents']), {
+      exports: {},
+      useRef: current => ({ current }),
+      useState: initial => [initial, () => {}],
+      useEffect: effect => { cleanup = effect(); },
+      useCallback: callback => callback,
+      useToast: () => ({ addToast: toast => { retry = toast.onAction; } }),
+      endpoints: { eventsNearby: params => params },
+      isApiErrorLike: () => true,
+      apiFetch: async params => {
+        requests.push(params.tagIds);
+        throw { kind: 'timeout', status: null };
+      },
+      setTimeout, clearTimeout,
+    });
+  const hook = context.useNearbyEvents();
+  await hook.searchNow(region, { tagIds: ['football'] });
+  const retryFootball = retry;
+  retryFootball();
+  assert.equal(requests.length, 2, 'the current timeout can be retried');
+
+  await hook.searchNow(region, { tagIds: [] });
+  retryFootball();
+  assert.equal(requests.length, 3, 'the old filter cannot replace the new one');
+
+  const retryWithoutFilters = retry;
+  hook.search({ ...region, latitude: -31 });
+  retryWithoutFilters();
+  assert.equal(requests.length, 3, 'a pending pan already owns the next search');
+
+  await hook.searchNow(region);
+  cleanup();
+  retry();
+  assert.equal(requests.length, 4, 'actions from an unmounted screen cannot fetch');
+});
