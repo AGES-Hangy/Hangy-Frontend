@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
@@ -12,7 +13,8 @@ import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useFollowers } from '@/hooks/useFollowers';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { Follower } from '@/types/profile';
 
@@ -83,7 +85,6 @@ function FollowersSkeleton() {
 
 export default function Followers() {
   const insets = useSafeAreaInsets();
-  const { isOffline } = useNetworkStatus();
   const {
     followers,
     total,
@@ -99,6 +100,8 @@ export default function Followers() {
     refresh,
     search,
   } = useFollowers();
+  // Reconectou: refaz a primeira carga que falhou (com lista na tela, o erro é só da paginação).
+  const { isOffline } = useRetryOnReconnect(Boolean(error?.canRetry) && followers.length === 0, refresh);
 
   useTopAppBar({
     variant: 'Detail',
@@ -121,15 +124,12 @@ export default function Followers() {
 
     if (error && followers.length === 0) {
       return (
-        <EmptyState
-          context="Search"
-          icon="circle-alert"
-          title={error.title}
-          text={error.message}
-          cta
-          ctaLabel="Tentar de novo"
-          onCtaPress={() => { void refresh(); }}
-          fill
+        <ErrorScreen
+          withBottomInset
+          {...loadErrorScreenProps(error, {
+            onRetry: () => { void refresh(); },
+            retryAccessibilityLabel: 'Tentar carregar os seguidores novamente',
+          })}
         />
       );
     }

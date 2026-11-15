@@ -42,6 +42,8 @@ export type TextFieldProps = {
   hint?: string;
   value?: string;
   onChangeText?: (text: string) => void;
+  /** Chamado ao confirmar pelo botão de ação do teclado (ex.: "Buscar"). */
+  onSubmitEditing?: () => void;
   /**
    * Foco e blur do campo. Rodam depois dos handlers internos, que controlam o
    * estado visual `Focused` e a abertura do dropdown — passar estes não
@@ -121,6 +123,12 @@ export type TextFieldProps = {
   onTrailingIconPress?: () => void;
   /** Rótulo de acessibilidade do toque acima. Padrão: `"Mais opções"`. */
   onTrailingIconPressAccessibilityLabel?: string;
+  /**
+   * Contador sobre o ícone à direita (ex.: filtros em uso na Busca). Some com
+   * `0`/ausente. É só visual: inclua o número em
+   * `onTrailingIconPressAccessibilityLabel`.
+   */
+  trailingIconBadgeCount?: number;
 
   /** Padrão: o próprio `label`. */
   accessibilityLabel?: string;

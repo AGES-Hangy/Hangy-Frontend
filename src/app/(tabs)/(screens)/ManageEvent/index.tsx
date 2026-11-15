@@ -7,7 +7,9 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { Icon } from '@/components/Icon';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { IconButton } from '@/components/IconButton';
 import { EventCard } from '@/components/EventCard';
 import { NotificationItem } from '@/components/NotificationItem';
@@ -20,9 +22,11 @@ import { useCancelEvent } from '@/hooks/useCancelEvent';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventParticipants } from '@/hooks/useEventParticipants';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { EventParticipantItem } from '@/types/event';
 import { formatRelativeTime } from '@/utils/datetime';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 /** Confirmação aberta no momento — no máximo uma por vez. */
 type Confirmation =
@@ -56,6 +60,15 @@ export default function ManageEvent() {
     Boolean(event?.viewer.is_organizer),
   );
   const { cancelEvent, isLoading: isCancelling, isReadOnly: cancelReadOnly } = useCancelEvent(id);
+
+  const failure = eventError ?? participants.error;
+  // Refaz as duas cargas: qualquer uma das duas pode ter sido a que falhou.
+  function retryLoad() {
+    reloadEvent();
+    participants.reload();
+  }
+  // Reconectou: refaz a carga que falhou. Offline, toda ação de escrita fica desabilitada.
+  const { isOffline } = useRetryOnReconnect(Boolean(failure?.canRetry), retryLoad);
   const { share } = useEventShare(id);
 
   /**
@@ -105,25 +118,18 @@ export default function ManageEvent() {
 
   if (isLoadingEvent || participants.isLoading) return <ManageEventSkeleton />;
 
-  const failure = eventError ?? participants.error;
   if (failure) {
     return (
-      <View style={styles.errorScreen}>
-        <EmptyState
-          context="MyEvents"
-          title={failure.title}
-          text={failure.message}
-          cta
-          ctaLabel={failure.canRetry ? 'Tentar de novo' : 'Voltar'}
-          onCtaPress={
-            failure.canRetry
-              ? () => {
-                  reloadEvent();
-                  participants.reload();
-                }
-              : router.back
-          }
+      <View style={styles.screen}>
+        <ErrorScreen
+          withBottomInset
+          {...loadErrorScreenProps(failure, {
+            onRetry: retryLoad,
+            onBack: router.back,
+            retryAccessibilityLabel: 'Tentar carregar o evento novamente',
+          })}
         />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
@@ -153,7 +159,7 @@ export default function ManageEvent() {
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, isOffline && styles.contentBelowBanner]}
         showsVerticalScrollIndicator={false}
       >
         {event && (
@@ -208,6 +214,7 @@ export default function ManageEvent() {
                   avatarUri={null}
                   isProcessing={participants.isProcessing(person.participant_id)}
                   acceptDisabled={participants.isFull}
+                  actionsDisabled={isOffline}
                   onAccept={isLocked ? undefined : () => participants.approve(person)}
                   onReject={isLocked ? undefined : () => participants.reject(person)}
                 />
@@ -242,7 +249,7 @@ export default function ManageEvent() {
                       ? undefined
                       : () => setConfirmation({ kind: 'removeParticipant', participant: person })
                   }
-                  removeDisabled={participants.isProcessing(person.participant_id)}
+                  removeDisabled={isOffline || participants.isProcessing(person.participant_id)}
                 />
               ))}
             </View>
@@ -262,12 +269,14 @@ export default function ManageEvent() {
           <Button
             label="Cancelar evento"
             variant="Danger"
-            disabled={isLocked}
+            disabled={isLocked || isOffline}
             onPress={() => setConfirmation({ kind: 'cancelEvent' })}
             style={styles.actionButton}
           />
         </View>
       )}
+
+      {isOffline && <OfflineBanner />}
 
       <Dialog
         visible={confirmation !== null}
@@ -278,7 +287,7 @@ export default function ManageEvent() {
         // Só o cancelamento espera a rede; remover é otimista e fecha na hora.
         isLoading={confirmation?.kind === 'cancelEvent' && isCancelling}
         // O backend exige um motivo (1-1000 caracteres) para cancelar.
-        confirmDisabled={confirmation?.kind === 'cancelEvent' && cancelReason.trim().length === 0}
+        confirmDisabled={isOffline || (confirmation?.kind === 'cancelEvent' && cancelReason.trim().length === 0)}
         onConfirm={onConfirm}
         onCancel={closeConfirmation}
       >
@@ -406,6 +415,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     backgroundColor: colors.bg.base,
+  },
+  // O `OfflineBanner` é absoluto (top 8 + altura mínima 48): a lista desce o
+  // mesmo respiro das outras telas.
+  contentBelowBanner: {
+    paddingTop: spacing[64],
   },
   content: {
     paddingTop: spacing[12],

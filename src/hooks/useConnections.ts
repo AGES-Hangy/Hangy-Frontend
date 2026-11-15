@@ -3,7 +3,8 @@ import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import { endpoints } from '@/constants/api';
-import { ApiError, apiFetch } from '@/utils/http';
+import { describeListLoadError, type LoadError } from '@/utils/apiErrors';
+import { apiFetch } from '@/utils/http';
 
 export interface ConnectionItem {
   user_id: string;
@@ -29,15 +30,6 @@ interface PendingPage {
   next_cursor: string | null;
 }
 
-function mapError(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.kind === 'network') return 'Sem conexão com a internet.';
-    if (err.kind === 'timeout') return 'A requisição demorou demais. Tente novamente.';
-    return 'Não foi possível carregar as conexões.';
-  }
-  return 'Ocorreu um erro inesperado.';
-}
-
 const DEBOUNCE_MS = 400;
 
 export function useConnections() {
@@ -45,7 +37,7 @@ export function useConnections() {
   const [pendingConnections, setPendingConnections] = useState<PendingConnectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -86,7 +78,7 @@ export function useConnections() {
       });
     } catch (err) {
       if (request !== connectionsRequest.current) return;
-      setError(mapError(err));
+      setError(describeListLoadError(err));
     } finally {
       if (request !== connectionsRequest.current) return;
       loadingRef.current = false;

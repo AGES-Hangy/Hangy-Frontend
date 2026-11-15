@@ -160,3 +160,99 @@ export function toNearbyEventFilters(value: FilterValue, tags: TagNode[], now: D
   }
   return filters;
 }
+
+export interface AppliedFiltersLike {
+  tag_ids: string[];
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export const EMPTY_APPLIED_FILTERS: AppliedFiltersLike = {
+  tag_ids: [],
+  date_from: null,
+  date_to: null,
+};
+
+export function hasActiveAppliedFilters(applied: AppliedFiltersLike | null | undefined): boolean {
+  if (!applied) return false;
+  return applied.tag_ids.length > 0 || Boolean(applied.date_from) || Boolean(applied.date_to);
+}
+
+/**
+ * Deduz o atalho de data a partir do intervalo retornado em `applied_filters`,
+ * para a tela não precisar manter estado paralelo ao do backend.
+ */
+export function resolveAppliedDatePreset(
+  dateFrom: string | null | undefined,
+  dateTo: string | null | undefined,
+  now: Date = new Date(),
+): DatePreset | undefined {
+  if (!dateFrom && !dateTo) return undefined;
+  const todayRange = resolveDatePreset('today', now);
+  if (dateFrom === todayRange.dateFrom && dateTo === todayRange.dateTo) return 'today';
+  const tomorrowRange = resolveDatePreset('tomorrow', now);
+  if (dateFrom === tomorrowRange.dateFrom && dateTo === tomorrowRange.dateTo) return 'tomorrow';
+  const weekendRange = resolveDatePreset('weekend', now);
+  if (dateFrom === weekendRange.dateFrom && dateTo === weekendRange.dateTo) return 'weekend';
+  return 'custom';
+}
+
+/**
+ * Reconstrói o `FilterValue` do `FilterPanel` diretamente do `applied_filters`
+ * da resposta de `GET /search`.
+ */
+export function fromAppliedFilters(
+  applied: AppliedFiltersLike | null | undefined,
+  now: Date = new Date(),
+): FilterValue {
+  if (!applied) return EMPTY_FILTER_VALUE;
+  const datePreset = resolveAppliedDatePreset(applied.date_from, applied.date_to, now);
+  const value: FilterValue = {
+    tagIds: [...new Set(applied.tag_ids)],
+  };
+  if (datePreset) value.datePreset = datePreset;
+  if (applied.date_from) value.dateFrom = applied.date_from;
+  if (applied.date_to) value.dateTo = applied.date_to;
+  return value;
+}
+
+function formatShortDateKey(key: string): string {
+  const date = fromDateKey(key);
+  if (!date) return key;
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}`;
+}
+
+/**
+ * Rótulo do Chip de data na barra de filtros ativos (`Hoje`, `Amanhã`,
+ * `Este fim de semana` ou `DD/MM – DD/MM`).
+ */
+export function formatAppliedDateLabel(
+  applied: Pick<AppliedFiltersLike, 'date_from' | 'date_to'> | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (!applied || (!applied.date_from && !applied.date_to)) return null;
+  const preset = resolveAppliedDatePreset(applied.date_from, applied.date_to, now);
+  if (preset === 'today') return 'Hoje';
+  if (preset === 'tomorrow') return 'Amanhã';
+  if (preset === 'weekend') return 'Este fim de semana';
+
+  const fromLabel = applied.date_from ? formatShortDateKey(applied.date_from) : null;
+  const toLabel = applied.date_to ? formatShortDateKey(applied.date_to) : null;
+  if (fromLabel && toLabel) {
+    return applied.date_from === applied.date_to ? fromLabel : `${fromLabel} – ${toLabel}`;
+  }
+  if (fromLabel) return `A partir de ${fromLabel}`;
+  if (toLabel) return `Até ${toLabel}`;
+  return null;
+}
+
+export function buildTagNameMap(tags: TagNode[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const macro of tags) {
+    map.set(macro.id, macro.name);
+    for (const micro of macro.children) {
+      map.set(micro.id, micro.name);
+    }
+  }
+  return map;
+}

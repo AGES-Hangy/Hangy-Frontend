@@ -19,6 +19,7 @@ import type {
   UserProfile,
 } from '@/types/user';
 import { API_TIMEOUT_MS } from '@/constants/api';
+import { resolveAdminMock } from '@/mocks/adminApi';
 
 /**
  * Respostas de mentira dos endpoints de evento, ligadas por `USE_API_MOCKS`
@@ -1506,6 +1507,13 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
   const partes = segmentos(path);
   const eventId = partes[1] ?? '';
 
+  const admin = resolveAdminMock(partes, method, init);
+  if (admin) {
+    if ('semRede' in admin) throw new MockNetworkError();
+    if ('erro' in admin) throw new MockApiError(admin.erro.status, admin.erro.detail);
+    return admin.resposta as T;
+  }
+
   if (partes.join('/') === 'users/me/blocked' && method === 'GET') {
     const params = new URLSearchParams(path.split('?')[1] ?? '');
     const limit = Number(params.get('limit') ?? 20);
@@ -1527,6 +1535,211 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return {
       items: pagina,
       next_cursor: temMais ? pagina[pagina.length - 1].user_id : null,
+    } as T;
+  }
+
+  // `GET /search` (task 121 [BE]): busca categorizada em eventos, estabelecimentos
+  // e pessoas. Cenários pelo `q`: `carregando` (skeleton infinito), `erro` (500),
+  // `tag-inexistente` com `tag_ids` (404 Tag not found), `poker` / `vazio` (sem resultados).
+  if (partes.join('/') === 'search' && method === 'GET') {
+    const params = new URLSearchParams(path.split('?')[1] ?? '');
+    const rawQ = params.get('q');
+    const q = rawQ !== null ? rawQ.trim() : null;
+    const preview = Number(params.get('preview') ?? 5);
+    const rawTags = params.get('tag_ids') ?? '';
+    const tagIds = rawTags
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const dateFrom = params.get('date_from') || null;
+    const dateTo = params.get('date_to') || null;
+
+    if (q !== null && q.length < 2) {
+      throw new MockApiError(400, 'Query is too short');
+    }
+    if (q === null && tagIds.length === 0 && !dateFrom && !dateTo) {
+      throw new MockApiError(400, 'Query is too short');
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      throw new MockApiError(400, 'date_from must be before date_to');
+    }
+    if (q === 'carregando') return new Promise<T>(() => {});
+    if (tagIds.length > 0 && q === 'tag-inexistente') {
+      throw new MockApiError(404, 'Tag not found');
+    }
+    if (q === 'erro') throw new MockApiError(500, 'Internal server error');
+
+    const hoje = new Date();
+    const isoNoDia = (diasFrente: number, hora: number) =>
+      new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + diasFrente, hora, 0, 0).toISOString();
+    const chaveData = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const todosEventos = [
+      {
+        event_id: 'guest',
+        title: 'Futebol na PUC',
+        event_date: isoNoDia(0, 16),
+        location_name: 'Parque Esportivo',
+        location_precision: 'EXACT' as const,
+        privacy: 'PUBLIC' as const,
+        is_preview: false,
+        description: 'Pelada aberta na quadra principal.',
+        participants_count: 12,
+        cover_photo_url: null,
+        tagIds: ['macro-0', 'micro-0-0'],
+      },
+      {
+        event_id: 'invite-1',
+        title: 'Futebol na Orla',
+        event_date: isoNoDia(1, 10),
+        location_name: 'Orla do Guaíba',
+        location_precision: 'EXACT' as const,
+        privacy: 'INVITE_ONLY' as const,
+        is_preview: false,
+        description: 'Jogo confirmado para quem recebeu convite.',
+        participants_count: 8,
+        cover_photo_url: null,
+        tagIds: ['macro-0', 'micro-0-0'],
+      },
+      {
+        event_id: 'private',
+        title: 'Pelada Privada no Bom Fim',
+        event_date: isoNoDia(2, 20),
+        location_name: 'Bom Fim',
+        location_precision: 'APPROXIMATE' as const,
+        privacy: 'PRIVATE' as const,
+        is_preview: true,
+        description: null,
+        participants_count: null,
+        cover_photo_url: null,
+        tagIds: ['macro-0', 'micro-0-0'],
+      },
+      {
+        event_id: 'brunch-1',
+        title: 'Brunch & Café na Cidade Baixa',
+        event_date: isoNoDia(3, 11),
+        location_name: 'Cidade Baixa',
+        location_precision: 'EXACT' as const,
+        privacy: 'PUBLIC' as const,
+        is_preview: false,
+        description: 'Encontro gastronômico de domingo.',
+        participants_count: 15,
+        cover_photo_url: null,
+        tagIds: ['macro-1', 'micro-1-0', 'micro-1-1'],
+      },
+    ];
+
+    const todosEstabelecimentos = [
+      {
+        user_id: 'business',
+        business_name: 'Planet Futebol Society',
+        name: 'Planet Futebol Society',
+        description: 'Quadras esportivas · Partenon · 3,4 km',
+        address: 'Partenon',
+        photo_url: null,
+      },
+      {
+        user_id: 'business-2',
+        business_name: 'Futebol Clube Bar',
+        name: 'Futebol Clube Bar',
+        description: 'Bar esportivo · Cidade Baixa · 1,1 km',
+        address: 'Cidade Baixa',
+        photo_url: null,
+      },
+    ];
+
+    const todasPessoas = [
+      {
+        user_id: 'person',
+        name: 'Lucas Vieira',
+        description: 'Futebol e churrasco · 4 conexões em comum',
+        city: 'Porto Alegre',
+        state: 'RS',
+        photo_url: null,
+      },
+      {
+        user_id: 'person-connected',
+        name: 'Viktor Gyokeres',
+        description: 'Esportes, futebol e vida noturna · conectado',
+        city: 'Porto Alegre',
+        state: 'RS',
+        photo_url: null,
+      },
+    ];
+
+    const termoNorm = q ? semAcento(q) : null;
+    const semResultadoForcado = termoNorm === 'poker' || termoNorm === 'vazio';
+
+    // Expande macros selecionadas para suas micros, igual ao backend.
+    const tagsExpandidas = new Set<string>(tagIds);
+    for (const macro of ARVORE_DE_TAGS) {
+      if (tagsExpandidas.has(macro.id)) {
+        for (const micro of macro.children) tagsExpandidas.add(micro.id);
+      }
+    }
+
+    const eventosFiltrados = semResultadoForcado
+      ? []
+      : todosEventos.filter((ev) => {
+          if (termoNorm && !semAcento(ev.title).includes(termoNorm) && !semAcento(ev.location_name).includes(termoNorm)) {
+            return false;
+          }
+          if (tagsExpandidas.size > 0 && !ev.tagIds.some((id) => tagsExpandidas.has(id))) {
+            return false;
+          }
+          const diaEvento = chaveData(ev.event_date);
+          if (dateFrom && diaEvento < dateFrom) return false;
+          if (dateTo && diaEvento > dateTo) return false;
+          return true;
+        });
+
+    const estabelecimentosFiltrados =
+      semResultadoForcado || !termoNorm
+        ? []
+        : todosEstabelecimentos.filter(
+            (b) =>
+              semAcento(b.business_name).includes(termoNorm) ||
+              semAcento(b.description).includes(termoNorm),
+          );
+
+    const pessoasFiltradas =
+      semResultadoForcado || !termoNorm
+        ? []
+        : todasPessoas.filter(
+            (u) =>
+              semAcento(u.name).includes(termoNorm) ||
+              semAcento(u.description).includes(termoNorm),
+          );
+
+    const itensEventos = eventosFiltrados.slice(0, preview).map(({ tagIds: _tags, ...rest }) => rest);
+    const itensEstabelecimentos = estabelecimentosFiltrados.slice(0, preview);
+    const itensPessoas = pessoasFiltradas.slice(0, preview);
+
+    return {
+      query: q,
+      applied_filters: {
+        tag_ids: tagIds,
+        date_from: dateFrom,
+        date_to: dateTo,
+      },
+      events: {
+        items: itensEventos,
+        total: eventosFiltrados.length > 0 ? Math.max(eventosFiltrados.length, 12) : 0,
+        has_more: eventosFiltrados.length > 0,
+      },
+      businesses: {
+        items: itensEstabelecimentos,
+        total: estabelecimentosFiltrados.length > 0 ? Math.max(estabelecimentosFiltrados.length, 3) : 0,
+        has_more: estabelecimentosFiltrados.length > 0,
+      },
+      users: {
+        items: itensPessoas,
+        total: pessoasFiltradas.length > 0 ? Math.max(pessoasFiltradas.length, 8) : 0,
+        has_more: pessoasFiltradas.length > 0,
+      },
     } as T;
   }
 

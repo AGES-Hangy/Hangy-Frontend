@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/Button';
-import { EmptyState } from '@/components/EmptyState';
+import { ErrorScreen } from '@/components/ErrorScreen';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import type { PhotoViewerItem } from '@/components/PhotoViewer';
@@ -20,6 +20,7 @@ import { useMyPhotos } from '@/hooks/useMyPhotos';
 import { updateExperienceDescription } from '@/hooks/useExperiencePhotos';
 import { useMyProfile } from '@/hooks/useMyProfile';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useProfileEventsLoadMore } from '@/hooks/useProfileEventsLoadMore';
 import { useProfilePhotosLoadMore } from '@/hooks/useProfilePhotosLoadMore';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
@@ -31,6 +32,7 @@ import { spacing } from '@/constants/layout';
 import type { UserEventsTab } from '@/types/user';
 import { removeToken } from '@/utils/auth';
 import type { LoadError } from '@/utils/apiErrors';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 import { endpoints } from '@/constants/api';
 import { ApiError, apiFetch } from '@/utils/http';
 import { toPhotoViewerItems } from '@/utils/photoViewer';
@@ -288,7 +290,7 @@ export default function Profile() {
 
   if (!user) {
     return userError ? (
-      <LoadErrorState error={userError} onRetry={refetchUser} logoutButton={logoutButton} offline={isOffline} />
+      <LoadErrorState error={userError} onRetry={refetchUser} logoutButton={logoutButton} />
     ) : (
       <ProfileSkeleton offline={isOffline} />
     );
@@ -297,7 +299,7 @@ export default function Profile() {
   if (user.userType === 'PERSONAL') {
     if (!profile || !counts) {
       return profileError ? (
-        <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} offline={isOffline} />
+        <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} />
       ) : (
         <ProfileSkeleton offline={isOffline} />
       );
@@ -503,7 +505,7 @@ function BusinessOwnProfile({
 
   if (!profile) {
     return profileError ? (
-      <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} offline={isOffline} />
+      <LoadErrorState error={profileError} onRetry={retryProfile} logoutButton={logoutButton} />
     ) : (
       <ProfileSkeleton offline={isOffline} />
     );
@@ -578,19 +580,26 @@ function LoadErrorState({
   error,
   onRetry,
   logoutButton,
-  offline,
 }: {
   error: LoadError;
   onRetry: () => void;
   logoutButton: ReactNode;
-  offline: boolean;
 }) {
+  // Montado só enquanto o erro está na tela: reconectou, refaz a carga que falhou.
+  const { isOffline } = useRetryOnReconnect(error.canRetry, onRetry);
+
   return (
     <View style={styles.stateScreen}>
-      <EmptyState context="Search" title={error.title} text={error.message} cta ctaLabel="Tentar de novo" onCtaPress={onRetry} />
-      {/* Sem o perfil, esta é a única saída da conta. */}
-      <View style={styles.logoutRow}>{logoutButton}</View>
-      {offline && <OfflineBanner />}
+      <ErrorScreen
+        {...loadErrorScreenProps(error, {
+          onRetry,
+          retryAccessibilityLabel: 'Tentar carregar o perfil novamente',
+          unavailableIcon: 'user',
+        })}
+        // Sem o perfil, esta é a única saída da conta.
+        footer={logoutButton}
+      />
+      {isOffline && <OfflineBanner />}
     </View>
   );
 }
@@ -620,10 +629,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[16],
   },
   sectionTitle: {
-    paddingHorizontal: spacing[16],
-  },
-  logoutRow: {
-    paddingTop: spacing[16],
     paddingHorizontal: spacing[16],
   },
   fullWidth: {

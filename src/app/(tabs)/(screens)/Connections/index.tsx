@@ -9,6 +9,9 @@ import {
 import { router } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
+import { ErrorScreen } from '@/components/ErrorScreen';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
 import { colors, palette } from '@/constants/colors';
 import { radius, spacing } from '@/constants/layout';
@@ -16,13 +19,19 @@ import { typography } from '@/constants/typography';
 import { useConnections } from '@/hooks/useConnections';
 import type { ConnectionItem, PendingConnectionItem } from '@/hooks/useConnections';
 import { useMyProfile } from '@/hooks/useMyProfile';
+import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
+import { loadErrorScreenProps } from '@/utils/errorScreen';
 
 /** Avatar de 40 do item "Item/Conexão" no frame; a escala nomeada do `Avatar` começa em 48. */
 const ROW_AVATAR_DIAMETER = 40;
 const MIN_TOUCH = 44;
 const PILL_HEIGHT = 36;
 const PILL_BORDER_WIDTH = 1.5;
+/** Largura aproximada da pill "Conectados" no skeleton (label S + padding 16 dos dois lados). */
+const PILL_SKELETON_WIDTH = 104;
+/** Altura do `TextField` (`FIELD_HEIGHT`, interno ao componente). */
+const SEARCH_FIELD_HEIGHT = 56;
 
 type ListEntry =
   | { kind: 'connected'; data: ConnectionItem }
@@ -115,6 +124,11 @@ export default function Connections() {
     ...connections.map(d => ({ kind: 'connected' as const, data: d })),
   ].sort((a, b) => entryName(a).localeCompare(entryName(b), 'pt-BR', { sensitivity: 'base' }));
 
+  // Com lista na tela, o erro é só da página seguinte: não vira tela de erro.
+  const loadFailure = error && listData.length === 0 ? error : null;
+  // Reconectou: refaz a carga que falhou.
+  const { isOffline } = useRetryOnReconnect(Boolean(loadFailure?.canRetry), reload);
+
   const ListHeader = (
     <View style={styles.header}>
       <TextField
@@ -128,9 +142,7 @@ export default function Connections() {
 
   const ListEmpty = !isLoading ? (
     <View style={styles.emptyContainer}>
-      {error ? (
-        <Text style={styles.emptyText}>{error}</Text>
-      ) : isSearching ? (
+      {isSearching ? (
         <Text style={styles.emptyText}>Nenhum resultado para "{search}".</Text>
       ) : (
         <Text style={styles.emptyText}>Você ainda não tem conexões.</Text>
@@ -146,8 +158,23 @@ export default function Connections() {
 
   if (isLoading && listData.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.action.primary} />
+      <View style={styles.container}>
+        <ConnectionsSkeleton offline={isOffline} />
+        {isOffline && <OfflineBanner />}
+      </View>
+    );
+  }
+
+  if (loadFailure) {
+    return (
+      <View style={styles.container}>
+        <ErrorScreen
+          {...loadErrorScreenProps(loadFailure, {
+            onRetry: () => { void reload(); },
+            retryAccessibilityLabel: 'Tentar carregar as conexões novamente',
+          })}
+        />
+        {isOffline && <OfflineBanner />}
       </View>
     );
   }
@@ -167,8 +194,38 @@ export default function Connections() {
         onRefresh={() => { void reload(); }}
         refreshing={isLoading}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isOffline && styles.contentBelowBanner]}
       />
+      {isOffline && <OfflineBanner />}
+    </View>
+  );
+}
+
+/** Mesma métrica da `Row` (avatar 40, nome e cidade, pill 36) para a lista não saltar ao carregar. */
+function ConnectionsSkeleton({ offline }: { offline: boolean }) {
+  return (
+    <View
+      style={offline && styles.contentBelowBanner}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel="Carregando conexões"
+    >
+      <View style={styles.header}>
+        <Skeleton height={SEARCH_FIELD_HEIGHT} radius="md" />
+      </View>
+      {[0, 1, 2, 3, 4, 5].map((index) => (
+        <View key={index}>
+          {index > 0 && <RowSeparator />}
+          <View style={styles.row}>
+            <Skeleton width={ROW_AVATAR_DIAMETER} height={ROW_AVATAR_DIAMETER} radius="full" />
+            <View style={styles.rowInfo}>
+              <Skeleton width="60%" height={typography.labelM.lineHeight} />
+              <Skeleton width="35%" height={typography.bodyS.lineHeight} />
+            </View>
+            <Skeleton width={PILL_SKELETON_WIDTH} height={PILL_HEIGHT} radius="full" />
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
@@ -182,11 +239,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.bg.base,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // O `OfflineBanner` é absoluto (top 8 + altura mínima 48): a lista desce o mesmo respiro das outras telas.
+  contentBelowBanner: {
+    paddingTop: spacing[64],
   },
   listContent: {
     flexGrow: 1,

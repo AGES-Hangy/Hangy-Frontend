@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 
 import { useToast } from '@/components/Toast';
-import { API_BASE_URL } from '@/constants/api';
-import { getToken, removeToken } from '@/utils/auth';
+import { describeListLoadError, isApiErrorLike, type LoadError } from '@/utils/apiErrors';
+import { apiFetch } from '@/utils/http';
 
 import type { Event, EventPrivacy } from '@/components/EventCard/types';
 
@@ -36,8 +36,6 @@ interface ApiFeedSection {
 interface ApiFeedResponse {
   sections?: ApiFeedSection[];
 }
-
-const REQUEST_TIMEOUT_MS = 10000;
 
 function toEvent(item: ApiFeedItem): Event {
   return {
@@ -84,11 +82,10 @@ export function invalidateFeed({ discardCache = false }: { discardCache?: boolea
 }
 
 export function useFeed() {
-  const { showInfoToast } = useToast();
+  const { addToast, showInfoToast } = useToast();
   const [sections, setSections] = useState<FeedSection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isOffline, setIsOffline] = useState(false);
+  const [error, setError] = useState<LoadError | null>(null);
 
   const latestRequestIdRef = useRef(0);
 
@@ -101,68 +98,43 @@ export function useFeed() {
       if (!silent) {
         setIsLoading(true);
         setError(null);
-        setIsOffline(false);
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
       try {
-        const token = await getToken();
-        const response = await fetch(`${API_BASE_URL}/feed`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          signal: controller.signal,
-        });
-
-        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            await removeToken();
-            showInfoToast('Sua sessão expirou. Entre de novo.');
-            router.replace('/Login');
-            return;
-          }
-
-          if (silent) {
-            showInfoToast('Não foi possível atualizar agora.');
-          } else {
-            setError(
-              'Não foi possível carregar agora. Já estamos sabendo do problema - tente de novo em alguns instantes',
-            );
-          }
-          return;
-        }
-
-        const data = (await response.json()) as ApiFeedResponse;
+        // `apiFetch` cuida do token, do timeout e do 401 global (toast + Login).
+        const data = await apiFetch<ApiFeedResponse>('/feed');
         if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         setSections(normalizeFeed(data));
         setError(null);
-        setIsOffline(false);
-      } catch (requestError) {
+      } catch (caught) {
         if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
+        if (isApiErrorLike(caught) && caught.status === 401) return;
 
-        const offline = requestError instanceof TypeError;
-
+        const failure = describeListLoadError(caught);
         if (silent) {
-          showInfoToast(
-            offline ? 'Sem conexão para atualizar agora.' : 'A atualização demorou demais.',
-          );
+          // Com o feed na tela, a falha da atualização não engole o conteúdo.
+          if (failure.kind === 'timeout') {
+            // Contrato global: timeout é `Toast/Error` com "Tentar de novo".
+            addToast({
+              type: 'error',
+              message: 'A conexão demorou demais',
+              actionLabel: 'Tentar de novo',
+              onAction: () => void loadFeed({ silent: true }),
+            });
+          } else {
+            showInfoToast(
+              failure.kind === 'offline' ? 'Sem conexão para atualizar agora.' : 'Não foi possível atualizar agora.',
+            );
+          }
         } else {
-          setIsOffline(offline);
-          setError(
-            offline
-              ? 'o Hangy precisa de conexão para carregar eventos e o mapa Ao vivo. Verifique o Wi-Fi ou os dados móveis.'
-              : 'A conexão demorou demais',
-          );
+          setError(failure);
         }
       } finally {
-        clearTimeout(timeout);
         if (!silent && requestId === latestRequestIdRef.current) setIsLoading(false);
       }
     },
-    [showInfoToast],
+    [addToast, showInfoToast],
   );
 
   useEffect(() => {
@@ -185,5 +157,5 @@ export function useFeed() {
     }, [loadFeed]),
   );
 
-  return { sections, isLoading, error, isOffline, reload: loadFeed, refresh };
+  return { sections, isLoading, error, reload: loadFeed, refresh };
 }
