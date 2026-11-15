@@ -27,7 +27,7 @@ export default function AdminLayout() {
   // Telas internas de uma seção (fichas como `Denuncias/[id]` e
   // `Usuarios/[id]`) não têm a `AdminNav`: o rodapé é das ações da própria
   // tela, que soma a safe area de baixo.
-  const hidesNav = segments.length > 2;
+  const hidesNav = segments.length > 2 || section === 'Auditoria';
 
   return (
     <AdminGuard>
