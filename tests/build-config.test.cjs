@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const configure = require('../app.config.js');
 const base = require('../app.json').expo;
-const names = ['EAS_PROJECT_OWNER', 'EAS_PROJECT_ID', 'EAS_BUILD_PROFILE', 'EXPO_PUBLIC_API_BASE_URL', 'GOOGLE_MAPS_ANDROID_API_KEY', 'ANDROID_ALLOW_HTTP_API'];
+const names = ['EAS_PROJECT_OWNER', 'EAS_PROJECT_ID', 'EAS_BUILD_PROFILE', 'EXPO_PUBLIC_API_BASE_URL', 'GOOGLE_MAPS_ANDROID_API_KEY', 'ANDROID_ALLOW_HTTP_API', 'GOOGLE_SERVICES_JSON', 'EAS_BUILD_PLATFORM'];
 function withEnv(values, run) {
   const original = Object.fromEntries(names.map(name => [name, process.env[name]]));
   try {
@@ -36,7 +36,8 @@ test('distributed builds reject missing, malformed, insecure and loopback API UR
     for (const url of [undefined, '', 'invalid', 'http://api.example.com', 'https://localhost', 'https://127.0.0.1', 'https://[::1]']) {
       withEnv({ EAS_BUILD_PROFILE: profile, EXPO_PUBLIC_API_BASE_URL: url }, () => assert.throws(() => configure({ config: base })));
     }
-    withEnv({ EAS_BUILD_PROFILE: profile, EXPO_PUBLIC_API_BASE_URL: 'https://api.example.com' }, () => assert.doesNotThrow(() => configure({ config: base })));
+    const credentials = { GOOGLE_SERVICES_JSON: '/tmp/eas/google-services.json', GOOGLE_MAPS_ANDROID_API_KEY: 'test-key' };
+    withEnv({ ...credentials, EAS_BUILD_PROFILE: profile, EXPO_PUBLIC_API_BASE_URL: 'https://api.example.com' }, () => assert.doesNotThrow(() => configure({ config: base })));
   }
 });
 
@@ -64,4 +65,33 @@ test('HTTP network policy denies cleartext by default and excludes subdomains', 
   const xml = networkSecurityXml('18.223.183.80');
   assert.match(xml, /base-config cleartextTrafficPermitted="false"/);
   assert.match(xml, /domain includeSubdomains="false">18\.223\.183\.80<\/domain>/);
+});
+
+test('google-services.json path from the EAS file variable is set without dropping Android config', () => {
+  withEnv({ GOOGLE_SERVICES_JSON: '/tmp/eas/google-services.json' }, () => {
+    const result = configure({ config: base });
+    assert.equal(result.android.googleServicesFile, '/tmp/eas/google-services.json');
+    assert.equal(result.android.package, base.android.package);
+    assert.deepEqual(result.plugins, base.plugins);
+  });
+  withEnv({}, () => assert.equal(configure({ config: base }).android.googleServicesFile, undefined));
+});
+
+test('production Android builds require FCM and Maps credentials; iOS and other profiles do not', () => {
+  const api = { EXPO_PUBLIC_API_BASE_URL: 'https://api.example.com' };
+  const full = { ...api, GOOGLE_SERVICES_JSON: '/tmp/eas/google-services.json', GOOGLE_MAPS_ANDROID_API_KEY: 'test-key' };
+  withEnv({ ...api, EAS_BUILD_PROFILE: 'production' }, () => assert.throws(() => configure({ config: base }), /GOOGLE_SERVICES_JSON e GOOGLE_MAPS_ANDROID_API_KEY/));
+  withEnv({ ...api, EAS_BUILD_PROFILE: 'production', GOOGLE_MAPS_ANDROID_API_KEY: 'k' }, () => assert.throws(() => configure({ config: base }), /sem GOOGLE_SERVICES_JSON:/));
+  withEnv({ ...full, EAS_BUILD_PROFILE: 'production' }, () => assert.doesNotThrow(() => configure({ config: base })));
+  withEnv({ ...api, EAS_BUILD_PROFILE: 'production', EAS_BUILD_PLATFORM: 'ios' }, () => assert.doesNotThrow(() => configure({ config: base })));
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (message) => warnings.push(message);
+  try {
+    withEnv({ ...api, EAS_BUILD_PROFILE: 'preview' }, () => assert.doesNotThrow(() => configure({ config: base })));
+    withEnv({ EAS_BUILD_PROFILE: 'development' }, () => assert.doesNotThrow(() => configure({ config: base })));
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(warnings.length, 2);
 });

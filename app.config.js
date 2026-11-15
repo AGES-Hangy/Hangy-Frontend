@@ -28,9 +28,25 @@ module.exports = ({ config }) => {
     ? [['./plugins/withAndroidApiHttp', { hostname: apiUrl.hostname }]] : [];
 
   const mapsApiKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
+  // Caminho do google-services.json (FCM). No EAS vem da variável de arquivo
+  // GOOGLE_SERVICES_JSON; o arquivo em si nunca é versionado.
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
+
+  // Sem essas credenciais o build Android instala, mas o push não chega e o mapa
+  // fica em branco. Produção falha cedo; os demais perfis só avisam.
+  const missingAndroid = [
+    !googleServicesFile && 'GOOGLE_SERVICES_JSON',
+    !mapsApiKey && 'GOOGLE_MAPS_ANDROID_API_KEY',
+  ].filter(Boolean);
+  if (profile && process.env.EAS_BUILD_PLATFORM !== 'ios' && missingAndroid.length) {
+    const message = `Build Android sem ${missingAndroid.join(' e ')}: push e/ou mapa não funcionarão. Veja "Credenciais nativas" no README.`;
+    if (profile === 'production') throw new Error(message);
+    console.warn(`[app.config] ${message}`);
+  }
 
   return {
     ...config,
+    ...(googleServicesFile ? { android: { ...config.android, googleServicesFile } } : {}),
     ...((mapsApiKey || httpPlugin.length) ? { plugins: [
       ...(config.plugins || []),
       ...httpPlugin,
