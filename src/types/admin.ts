@@ -129,3 +129,19 @@ export interface ModerationResult {
   /** ISO 8601 — data de cadastro. */
   created_at: string;
 }
+
+/** Item de `GET /admin/users`, espelhando `app/presentation/dtos/admin_users.py`. */
+export interface AdminUser {
+  user_id: string;
+  name: string | null;
+  moderation_status: UserModerationStatus;
+  /** ISO 8601. Só vem preenchido com `SUSPENDED`. */
+  suspended_until: string | null;
+  event_count: number;
+  report_count: number;
+}
+
+export interface AdminUsersResponse {
+  items: AdminUser[];
+  next_cursor: string | null;
+}

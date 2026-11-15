@@ -146,6 +146,11 @@ export const layout = {
     avatarSize: 40,
     textGap: 2,
   },
+  /** Barra de 56 do TopAppBar, sem o `paddingTop` 12 do frame (o `Admin/_layout` já aplica a safe area) · borda inferior 1.5. */
+  adminHeader: {
+    height: 56,
+    borderWidth: 1.5,
+  },
   listItem: {
     minHeight: 72,
     avatarSize: 56,
