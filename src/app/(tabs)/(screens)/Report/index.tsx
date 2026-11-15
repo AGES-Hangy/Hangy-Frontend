@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,6 +88,8 @@ export default function Report() {
   const [selected, setSelected] = useState<ReportReasonCode | null>(null);
   const [description, setDescription] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const visitId = useRef(0);
+  const retrySubmit = useRef<(() => Promise<void>) | null>(null);
 
   const close = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -103,6 +105,9 @@ export default function Report() {
       setSelected(null);
       setDescription('');
       setInlineError(null);
+      return () => {
+        visitId.current += 1;
+      };
     }, [target, targetId]),
   );
 
@@ -126,8 +131,8 @@ export default function Report() {
   }, [loadError]);
 
   const allUnavailable = reasons !== null && reasons.length > 0 && reasons.every((reason) => !isAvailable(reason));
-  const isLocked = isSubmitting || allUnavailable;
-  const canSubmit = selected !== null && !isLocked && !isOffline && !!target && !!targetId;
+  const selectedAvailable = reasons?.some((reason) => reason.code === selected && isAvailable(reason));
+  const canSubmit = !!selectedAvailable && !isLoading && !isSubmitting && !isOffline && !!target && !!targetId;
 
   async function handleSubmit() {
     if (!target || !targetId) return;
@@ -137,6 +142,7 @@ export default function Report() {
     }
     setInlineError(null);
 
+    const submittedVisit = visitId.current;
     const trimmed = description.trim();
     try {
       const created = await submit({
@@ -144,11 +150,12 @@ export default function Report() {
         ...(trimmed ? { description: trimmed } : null),
         ...(target === 'USER' ? { reported_user_id: targetId } : { reported_event_id: targetId }),
       });
-      if (!created) return;
+      if (!created || visitId.current !== submittedVisit) return;
       // Sem protocolo nem prazo: a confirmação não expõe a moderação.
       addToast({ type: 'success', message: 'Denúncia enviada.' });
       close();
     } catch (caught) {
+      if (visitId.current !== submittedVisit) return;
       const failure = describeReportError(caught, 'submit');
       if (failure.kind === 'inline') {
         setInlineError(failure.message);
@@ -156,13 +163,23 @@ export default function Report() {
         addToast({
           type: failure.tone,
           message: failure.message,
-          ...(failure.retry ? { actionLabel: 'Tentar de novo', onAction: () => void handleSubmit() } : null),
+          ...(failure.retry ? {
+            actionLabel: 'Tentar de novo',
+            onAction: () => {
+              if (visitId.current === submittedVisit) void retrySubmit.current?.();
+            },
+          } : null),
         });
         if (failure.then === 'close') close();
         if (failure.then === 'reload') void reload();
       }
     }
   }
+
+  // O toast pode continuar visível enquanto a pessoa edita o motivo e a descrição.
+  useLayoutEffect(() => {
+    retrySubmit.current = canSubmit ? handleSubmit : null;
+  });
 
   const offlineBanner = isOffline ? <OfflineBanner /> : null;
 
