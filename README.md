@@ -85,6 +85,106 @@ e Android:
 A saída web é explicitamente `single`: hospedagem estática deve encaminhar rotas
 para `index.html`. As pastas nativas continuam geradas e ignoradas pelo Git.
 
+## Credenciais nativas: push e Google Maps
+
+Num app instalado (build `development`, `preview` ou `production`), o push no
+Android e o mapa da aba Ao Vivo dependem de credenciais que **não ficam no Git**.
+No Expo Go nada disso é usado: desde o SDK 53 ele não recebe push remoto no
+Android, então teste sempre com uma build do EAS.
+
+`app.config.js` lê duas variáveis no momento do build:
+
+| Variável | Tipo no EAS | Para quê |
+| --- | --- | --- |
+| `GOOGLE_SERVICES_JSON` | arquivo (*secret*) | vira `android.googleServicesFile` (FCM) |
+| `GOOGLE_MAPS_ANDROID_API_KEY` | texto (*sensitive*) | vira o `com.google.android.geo.API_KEY` do AndroidManifest (equivale a `android.config.googleMaps.apiKey`), pelo plugin do `react-native-maps` |
+
+Cada perfil de `eas.json` aponta para o ambiente EAS de mesmo nome
+(`development`, `preview`, `production`). Build Android de `production` sem
+uma das duas variáveis falha logo no início; nos outros perfis o build só avisa
+no log.
+
+### 1. Push no Android (Firebase / FCM v1)
+
+1. No [console do Firebase](https://console.firebase.google.com), crie o projeto
+   e registre um app Android com o pacote `br.pucrs.ages.hangy`.
+2. Baixe o `google-services.json` e envie ao EAS, sem commitar:
+   ```bash
+   eas env:create --name GOOGLE_SERVICES_JSON --type file --visibility secret \
+     --value ./google-services.json --environment development --environment preview --environment production
+   ```
+   Depois apague a cópia local ou guarde-a fora da pasta do projeto
+   (`google-services*.json` está no `.gitignore` por segurança).
+3. Em *Configurações do projeto → Contas de serviço*, gere uma chave privada
+   (JSON) da conta de serviço. É ela que o serviço de push do Expo usa para
+   entregar no Android. Envie com `eas credentials` → Android → `production` →
+   *Google Service Account* → *Push Notifications (FCM V1)*.
+
+### 2. Push no iOS (APNs)
+
+Exige conta paga do **Apple Developer Program**. Com ela, rode
+`eas credentials` → iOS e deixe o EAS gerar e guardar a chave de APNs. Sem a
+conta, o iOS fica sem push remoto (o resto do app funciona).
+
+### 3. Mapa no Android (Maps SDK for Android)
+
+1. No Google Cloud do mesmo projeto do Firebase, ative o *Maps SDK for Android*
+   e crie uma chave de API.
+2. Restrinja a chave a *Apps Android* com o pacote `br.pucrs.ages.hangy` e o
+   SHA-1 de **cada** certificado que assina builds. Os perfis podem usar
+   certificados diferentes: liste-os com `eas credentials` → Android e inclua
+   todos. Não use o SHA-1 do computador de quem desenvolve.
+3. Envie ao EAS:
+   ```bash
+   eas env:create --name GOOGLE_MAPS_ANDROID_API_KEY --type string --visibility sensitive \
+     --value SUA_CHAVE --environment development --environment preview --environment production
+   ```
+
+O iOS usa o mapa nativo da Apple e não precisa de chave.
+
+### 4. Token de acesso do Expo (recomendado)
+
+No painel do Expo, em *Project settings → Push notifications*, ative a
+segurança avançada e gere um *access token*. Ele vai no segredo de deploy do
+backend como `EXPO_ACCESS_TOKEN` (o backend já lê essa variável). Sem ele,
+qualquer pessoa com um token de push do app consegue enviar notificações.
+
+### Build local
+
+O EAS CLI não lê `.env.local` para montar a config. Exporte no shell:
+
+```bash
+export GOOGLE_SERVICES_JSON=/caminho/fora/do/repo/google-services.json
+export GOOGLE_MAPS_ANDROID_API_KEY=SUA_CHAVE
+```
+
+### Rotação
+
+- **Chave FCM (conta de serviço) e APNs:** ficam no EAS. Gere a nova,
+  substitua em `eas credentials` e revogue a antiga. Não precisa de novo build.
+- **`google-services.json`:** só muda se o app Firebase for recriado. Atualize
+  com `eas env:update` e gere novo build.
+- **Chave do Maps:** vai dentro do APK. Crie a nova, atualize a variável no EAS,
+  gere e distribua novo build e só então apague a antiga no Google Cloud.
+
+### Dono das contas
+
+A conta do Firebase/Google Cloud e a do Apple Developer são ponto único de
+falha. Registre aqui quem é o dono e qual e-mail de equipe tem acesso de
+administrador, e adicione pelo menos uma segunda pessoa como administradora:
+
+- Firebase / Google Cloud: _a definir_
+- Apple Developer Program: _a definir_
+- Expo (`gbn0s-team`): _a definir_
+
+### Como conferir
+
+- Build Android instalado, app fechado, backend envia notificação: ela aparece.
+- Tocar na notificação abre a tela certa (deep link de `NotificationResponseBridge`).
+- Aba Ao Vivo renderiza o mapa.
+- `git ls-files | grep -i google-services` não retorna nada e a chave do Maps
+  não aparece no código (`git grep AIza -- ':!README.md'` vazio).
+
 ## Organização do repositório
 
 Todo o código-fonte (exceto assets estáticos) fica dentro de `src/`. Essa
