@@ -8,22 +8,15 @@ import { colors } from '@/constants/colors';
 import { AdminGuard } from '@/utils/AdminGuard';
 
 /**
- * Rota de cada seção da `AdminNav`. Só o Painel tem tela por enquanto:
- * Denúncias (task 260) e Usuários (task 262) entram aqui quando existirem, e
- * Conteúdo está fora do escopo do épico E11 — tocar nelas não navega.
+ * Rota de cada seção da `AdminNav`. Denúncias (task 260) entra aqui quando
+ * existir, e Conteúdo está fora do escopo do épico E11: tocar nelas não navega.
  */
-const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel'>> = {
+const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Usuarios'>> = {
   Painel: '/Admin/Painel',
+  Usuarios: '/Admin/Usuarios',
 };
 
 const DESTINATIONS: AdminNavDestination[] = ['Painel', 'Denuncias', 'Usuarios', 'Conteudo'];
-
-/**
- * Telas internas do painel que não são destino da `AdminNav`: têm o
- * `TopAppBar` com voltar no lugar da barra inferior, como no Figma. O
- * `TopAppBar` já soma a safe area de cima, então o layout não aplica a dele.
- */
-const SCREENS_WITHOUT_NAV = ['Auditoria'];
 
 /** Área administrativa: fora de `(tabs)`, com a `AdminNav` no lugar da `BottomNav`. */
 export default function AdminLayout() {
@@ -31,15 +24,18 @@ export default function AdminLayout() {
   // `segments` é `['Admin', '<Secao>', ...]`; telas internas mantêm a seção.
   const section = segments[1];
   const active = DESTINATIONS.find((dest) => dest === section) ?? 'Painel';
-  const showsNav = !SCREENS_WITHOUT_NAV.includes(section);
+  // Telas internas de uma seção (fichas como `Denuncias/[id]` e
+  // `Usuarios/[id]`) não têm a `AdminNav`: o rodapé é das ações da própria
+  // tela, que soma a safe area de baixo.
+  const hidesNav = segments.length > 2 || section === 'Auditoria';
 
   return (
     <AdminGuard>
-      <SafeAreaView style={styles.screen} edges={showsNav ? ['top'] : []}>
+      <SafeAreaView style={styles.screen} edges={['top']}>
         <View style={styles.content}>
           <Stack screenOptions={{ headerShown: false }} />
         </View>
-        {showsNav && (
+        {!hidesNav && (
           <AdminNav
             active={active}
             onNavigate={(dest) => {

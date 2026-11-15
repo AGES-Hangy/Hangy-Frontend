@@ -180,7 +180,7 @@ export default function AdminAuditoria() {
 
   return (
     <View style={styles.screen}>
-      <TopAppBar variant="Detail" title="Auditoria" onBack={goBack} />
+      <TopAppBar variant="Detail" title="Auditoria" applyTopInset={false} onBack={goBack} />
       {/* O banner é absoluto: dentro deste container ele fica abaixo do header, e não sobre ele. */}
       <View style={styles.body}>
         <View style={[styles.body, isOffline && styles.bodyBelowBanner]}>{content}</View>

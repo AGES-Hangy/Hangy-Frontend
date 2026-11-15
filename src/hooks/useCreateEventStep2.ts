@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react';
-import { router } from 'expo-router';
 
-import { API_BASE_URL } from '@/constants/api';
-import { INVALID_COVER_PHOTO_URL } from '@/utils/apiErrors';
-import { getToken, removeToken } from '@/utils/auth';
+import { INVALID_COVER_PHOTO_URL, isApiErrorLike } from '@/utils/apiErrors';
+import { apiFetch } from '@/utils/http';
 
 type EventId = string;
 
@@ -55,27 +53,16 @@ type SendInvitesResponse = {
   skipped: string[];
 };
 
-async function authorizedFetch(
-  url: string,
-  init: RequestInit,
-): Promise<Response> {
-  const token = await getToken();
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-
-  if (response.status === 401) {
-    await removeToken();
-    router.replace('/Login');
-    throw new Error('401');
-  }
-
-  return response;
+/**
+ * Texto da falha de escrita. O 401 devolve `null`: o `apiFetch` já mostrou o
+ * "sessão expirou" e voltou para o Login, então não há o que dizer aqui.
+ */
+function failureMessage(error: unknown, fallback: string): string | null {
+  if (!isApiErrorLike(error)) return fallback;
+  if (error.status === 401) return null;
+  if (error.kind === 'network') return 'Sem conexão com a internet';
+  if (error.kind === 'timeout') return 'A conexão demorou demais';
+  return error.detail || fallback;
 }
 
 export function useCreateEventStep2() {
@@ -93,31 +80,26 @@ export function useCreateEventStep2() {
     setPublishError(null);
 
     try {
-      const response = await authorizedFetch(`${API_BASE_URL}/events`, {
+      const event = await apiFetch<PublishEventResponse>('/events', {
         method: 'POST',
         body: JSON.stringify(body),
       });
-
-      if (response.status === 400) {
-        const json = (await response.json()) as { detail?: string };
-        if (json.detail === INVALID_COVER_PHOTO_URL) return { kind: 'invalid-cover' };
+      return { kind: 'published', event };
+    } catch (error) {
+      if (isApiErrorLike(error) && error.status === 400) {
+        if (error.detail === INVALID_COVER_PHOTO_URL) return { kind: 'invalid-cover' };
         setPublishError(
-          json.detail === 'Event date must be in the future'
+          error.detail === 'Event date must be in the future'
             ? 'Essa data já passou. Escolha o dia de hoje ou uma data futura.'
-            : json.detail || 'Não foi possível criar o evento',
+            : error.detail || 'Não foi possível criar o evento',
         );
         return { kind: 'failed' };
       }
-
-      if (!response.ok) {
-        setPublishError('Não foi possível criar o evento');
-        return { kind: 'failed' };
+      // Só o 400 traz um `detail` pensado para o usuário; o resto é genérico.
+      const message = failureMessage(error, 'Não foi possível criar o evento');
+      if (message !== null) {
+        setPublishError(isApiErrorLike(error) && error.kind === 'http' ? 'Não foi possível criar o evento' : message);
       }
-
-      return { kind: 'published', event: (await response.json()) as PublishEventResponse };
-    } catch (error) {
-      if (error instanceof Error && error.message === '401') return { kind: 'failed' };
-      setPublishError('Não foi possível criar o evento');
       return { kind: 'failed' };
     } finally {
       setIsPublishing(false);
@@ -130,20 +112,13 @@ export function useCreateEventStep2() {
     privacy: 'PUBLIC' | 'PRIVATE' | 'INVITE_ONLY',
   ): Promise<UpdatePrivacyResponse | null> {
     try {
-      const response = await authorizedFetch(`${API_BASE_URL}/events/${eventId}/privacy`, {
+      return await apiFetch<UpdatePrivacyResponse>(`/events/${eventId}/privacy`, {
         method: 'PATCH',
         body: JSON.stringify({ privacy }),
       });
-
-      if (!response.ok) {
-        const json = (await response.json()) as { detail: string };
-        setPublishError(json.detail);
-        return null;
-      }
-
-      return (await response.json()) as UpdatePrivacyResponse;
     } catch (error) {
-      if (error instanceof Error && error.message === '401') return null;
+      const message = failureMessage(error, 'Não foi possível alterar a privacidade');
+      if (message !== null) setPublishError(message);
       return null;
     }
   }
@@ -153,23 +128,15 @@ export function useCreateEventStep2() {
     setInviteLinkError(null);
 
     try {
-      const response = await authorizedFetch(`${API_BASE_URL}/events/${eventId}/invite-link`, {
+      const json = await apiFetch<InviteLinkResponse>(`/events/${eventId}/invite-link`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
-
-      if (!response.ok) {
-        const json = (await response.json()) as { detail: string };
-        setInviteLinkError(json.detail);
-        return null;
-      }
-
-      const json = (await response.json()) as InviteLinkResponse;
       setInviteUrl(json.url);
       return json.url;
     } catch (error) {
-      if (error instanceof Error && error.message === '401') return null;
-      setInviteLinkError('Não foi possível gerar o link');
+      const message = failureMessage(error, 'Não foi possível gerar o link');
+      if (message !== null) setInviteLinkError(message);
       return null;
     } finally {
       setIsGeneratingLink(false);
@@ -181,20 +148,13 @@ export function useCreateEventStep2() {
     userIds: string[],
   ): Promise<SendInvitesResponse | null> {
     try {
-      const response = await authorizedFetch(`${API_BASE_URL}/events/${eventId}/invites`, {
+      return await apiFetch<SendInvitesResponse>(`/events/${eventId}/invites`, {
         method: 'POST',
         body: JSON.stringify({ user_ids: userIds }),
       });
-
-      if (!response.ok) {
-        const json = (await response.json()) as { detail: string };
-        setPublishError(json.detail);
-        return null;
-      }
-
-      return (await response.json()) as SendInvitesResponse;
     } catch (error) {
-      if (error instanceof Error && error.message === '401') return null;
+      const message = failureMessage(error, 'Não foi possível enviar os convites');
+      if (message !== null) setPublishError(message);
       return null;
     }
   }

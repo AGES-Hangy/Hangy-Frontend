@@ -48,4 +48,11 @@ export interface TopAppBarProps {
    */
   action?: TopAppBarAction;
   secondaryAction?: TopAppBarAction;
+
+  /**
+   * Soma `insets.top` à altura da barra. Padrão: `true`. Desligue quando um
+   * pai já respeita a safe area de cima — o layout da área Admin, por
+   * exemplo —, senão o recuo aparece duas vezes.
+   */
+  applyTopInset?: boolean;
  }

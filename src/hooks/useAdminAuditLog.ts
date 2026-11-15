@@ -4,7 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import { useToast } from '@/components/Toast';
 import { endpoints } from '@/constants/api';
 import type { AuditLogItem, AuditLogPage } from '@/types/admin';
-import { describeAdminLoadError, endsAdminSession } from '@/utils/adminLoadErrors';
+import { describeListLoadError, endsSession } from '@/utils/apiErrors';
 import type { LoadError } from '@/utils/apiErrors';
 import { apiFetch } from '@/utils/http';
 
@@ -41,12 +41,12 @@ export function useAdminAuditLog() {
       setData(items);
     } catch (caught) {
       if (requestId !== latestRequest.current) return;
-      if (endsAdminSession(caught)) {
+      if (endsSession(caught)) {
         sessionEnded = true;
         return;
       }
 
-      const loadError = describeAdminLoadError(caught);
+      const loadError = describeListLoadError(caught);
       if (!dataRef.current) {
         setError(loadError);
         return;

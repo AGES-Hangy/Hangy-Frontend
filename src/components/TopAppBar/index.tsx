@@ -97,8 +97,10 @@ export function TopAppBar({
   onNotificationsPress,
   action,
   secondaryAction,
+  applyTopInset = true,
 }: TopAppBarProps) {
   const insets = useSafeAreaInsets();
+  const topInset = applyTopInset ? insets.top : 0;
 
   const isBrand = BRAND_VARIANTS.includes(variant);
   const isBordered = variant !== 'Home';
@@ -123,8 +125,8 @@ export function TopAppBar({
         isBrand ? styles.barBrand : styles.barSurface,
         isBordered && styles.barBordered,
         {
-          height: BAR_HEIGHT + insets.top + (isBordered ? BORDER_WIDTH : 0),
-          paddingTop: insets.top,
+          height: BAR_HEIGHT + topInset + (isBordered ? BORDER_WIDTH : 0),
+          paddingTop: topInset,
         },
       ]}
       accessibilityRole="header"

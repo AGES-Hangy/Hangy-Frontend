@@ -659,6 +659,8 @@ export default function Live() {
       }
     } catch (error) {
       const failure = error as ParticipationError;
+      // O 401 já virou "sessão expirou" e Login no `apiFetch`.
+      if (failure.status === 401) return;
       if (failure.status === 409 && failure.detail === 'Request already pending') {
         setPendingEventIds((current) => new Set(current).add(eventId));
         addToast({ type: 'info', message: 'Sua solicitação já está aguardando aprovação.' });
