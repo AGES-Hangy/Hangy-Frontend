@@ -33,9 +33,10 @@ const SKELETON_CHIPS = 5;
 
 type DialogState =
   | { kind: 'remove-tag'; tag: TagLeaf }
-  /** Passo 2 da remoção: o 409 `Tag is in use` já veio, falta a confirmação do `force=true`. */
   | { kind: 'tag-in-use'; tag: TagLeaf; usageCount: number | null }
   | { kind: 'remove-category' }
+  /** Categoria vazia, mas ainda associada a eventos/usuários (409 `Tag is in use`). */
+  | { kind: 'category-in-use'; usageCount: number | null }
   | { kind: 'category-blocked' }
   | null;
 
@@ -52,6 +53,16 @@ function inUseDescription(usageCount: number | null) {
     return 'Esta tag é usada por 1 evento ou usuário. Removê-la agora desassocia esse vínculo.';
   }
   return `Esta tag é usada por ${usageCount} eventos e usuários. Removê-la agora desassocia todos eles.`;
+}
+
+function categoryInUseDescription(usageCount: number | null) {
+  if (usageCount === null) {
+    return 'Esta categoria está em uso por eventos e usuários. Removê-la agora desassocia todos eles.';
+  }
+  if (usageCount === 1) {
+    return 'Esta categoria é usada por 1 evento ou usuário. Removê-la agora desassocia esse vínculo.';
+  }
+  return `Esta categoria é usada por ${usageCount} eventos e usuários. Removê-la agora desassocia todos eles.`;
 }
 
 function blockedDescription(tagCount: number) {
@@ -189,12 +200,12 @@ export default function EditarCategoria() {
     if (!category) return;
     setDialog(category.children.length > 0 ? { kind: 'category-blocked' } : { kind: 'remove-category' });
   }
-
-  async function removeCategory() {
+  
+  async function removeCategory(force = false) {
     if (!category) return;
 
     setPending('delete');
-    const result = await deleteTag(category.id);
+    const result = await deleteTag(category.id, force ? { force: true } : undefined);
     if (!isMounted.current) return;
     setPending(null);
 
@@ -203,6 +214,15 @@ export default function EditarCategoria() {
         addToast({ type: 'success', message: `Categoria ${category.name} removida.` });
         // `replace`, e não `back()`: não deixa no histórico uma categoria que não existe mais.
         router.replace('/Admin/Tags');
+        return;
+      case 'in-use':
+        // Passo 1 → confirmação extra. Se o 409 vier já com `force`, não insiste: avisa.
+        if (!force) {
+          setDialog({ kind: 'category-in-use', usageCount: result.usageCount });
+          return;
+        }
+        setDialog(null);
+        addToast({ type: 'error', message: 'Não foi possível remover a categoria. Tente de novo.' });
         return;
       case 'has-tags':
         // O backend discordou da lista local (tag criada por fora): mostra o bloqueio.
@@ -353,6 +373,21 @@ export default function EditarCategoria() {
             confirmDisabled={isOffline}
             isLoading={pending === 'delete'}
             onConfirm={() => void removeCategory()}
+            onCancel={closeDialog}
+          />
+        )}
+
+        {dialog?.kind === 'category-in-use' && (
+          <Dialog
+            visible
+            variant="RemoveTagArea"
+            title={`Remover ${category.name}?`}
+            description={categoryInUseDescription(dialog.usageCount)}
+            confirmLabel="Remover categoria"
+            cancelLabel="Cancelar"
+            confirmDisabled={isOffline}
+            isLoading={pending === 'delete'}
+            onConfirm={() => void removeCategory(true)}
             onCancel={closeDialog}
           />
         )}

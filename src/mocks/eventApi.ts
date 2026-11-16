@@ -1361,7 +1361,7 @@ function resolverTagsAdmin(
   if (partes[0] !== 'admin' || partes[1] !== 'tags') return undefined;
 
   const body = init.body ? JSON.parse(String(init.body)) : {};
-  const igual = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const igual = (a: string, b: string) => a.trim() === b.trim();
   const nomeInvalido = (nome: string) => nome.length === 0 || nome.length > 50;
   const erro422 = () =>
     new MockApiError(422, 'Validation error', {
@@ -1410,6 +1410,7 @@ function resolverTagsAdmin(
       if (ARVORE_DE_TAGS[indiceMacro].children.length > 0) {
         throw new MockApiError(409, 'Category has tags');
       }
+      if (!force && ARVORE_DE_TAGS[indiceMacro].id === 'macro-7') throw new MockApiError(409, 'Tag is in use', { detail: 'Tag is in use', usage_count: 3 });
       ARVORE_DE_TAGS.splice(indiceMacro, 1);
       return { resposta: undefined };
     }
