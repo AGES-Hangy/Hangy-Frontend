@@ -8,11 +8,14 @@ import { colors } from '@/constants/colors';
 import { AdminGuard } from '@/utils/AdminGuard';
 
 /**
- * Rota de cada seção da `AdminNav`. Painel e Conteúdo (gestão de tags, task 264) têm
- * tela; Denúncias (task 260) e Usuários (task 262) entram aqui quando existirem.
+ * Rota de cada seção da `AdminNav`. Denúncias (task 260) entra aqui quando
+ * existir. Conteúdo é a gestão de tags (task 264).
  */
-const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Tags'>> = {
+const ROUTE_BY_DESTINATION: Partial<
+  Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Usuarios' | '/Admin/Tags'>
+> = {
   Painel: '/Admin/Painel',
+  Usuarios: '/Admin/Usuarios',
   Conteudo: '/Admin/Tags',
 };
 

@@ -1,4 +1,4 @@
-import { isApiErrorLike } from '@/utils/apiErrors';
+import { endsSession, isApiErrorLike } from '@/utils/apiErrors';
 
 /** Limite de `TAG.tag_name`. */
 export const TAG_NAME_MAX_LENGTH = 50;
@@ -11,7 +11,6 @@ const PARENT_NOT_FOUND = 'Parent tag not found';
 const NAME_ALREADY_EXISTS = 'Tag name already exists at this level';
 const TAG_IN_USE = 'Tag is in use';
 const CATEGORY_HAS_TAGS = 'Category has tags';
-const ADMIN_ACCESS_REQUIRED = 'Admin access required';
 
 export function validateTagName(raw: string): { value: string; isValid: boolean } {
   const value = raw.trim();
@@ -82,9 +81,8 @@ export function classifyTagMutationError(error: unknown): TagMutationFailure {
   if (kind === 'timeout') {
     return { kind: 'failed', message: 'A conexão demorou demais', canRetry: true };
   }
-
-  if (status === 401) return { kind: 'session-ended' };
-  if (status === 403 && detail === ADMIN_ACCESS_REQUIRED) return { kind: 'session-ended' };
+  
+  if (endsSession(error)) return { kind: 'session-ended' };
 
   if (status === 404) {
     return detail === PARENT_NOT_FOUND ? { kind: 'parent-not-found' } : { kind: 'not-found' };
