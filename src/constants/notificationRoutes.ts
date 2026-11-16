@@ -14,7 +14,7 @@ type NotificationRouteConfig = {
  * (`ManageEvent`); quem é o alvo do aviso cai no detalhe; pedidos e aceites de
  * conexão abrem o perfil de quem enviou.
  */
-export const NOTIFICATION_ROUTE_BY_TYPE: Record<NotificationType, NotificationRouteConfig> = {
+export const NOTIFICATION_ROUTE_BY_TYPE: Record<NotificationType, NotificationRouteConfig | null> = {
   CONNECTION_REQUEST: { pathname: '/UserProfile', idSource: 'sender' },
   CONNECTION_ACCEPTED: { pathname: '/UserProfile', idSource: 'sender' },
   EVENT_PARTICIPATION_REQUEST: { pathname: '/ManageEvent', idSource: 'event' },
@@ -26,6 +26,9 @@ export const NOTIFICATION_ROUTE_BY_TYPE: Record<NotificationType, NotificationRo
   EVENT_UPDATED: { pathname: '/EventDetail', idSource: 'event' },
   EVENT_CANCELLED: { pathname: '/EventDetail', idSource: 'event' },
   EVENT_STARTING_SOON: { pathname: '/EventDetail', idSource: 'event' },
+  // A moderação removeu o evento: o detalhe responderia 404, então o toque
+  // só marca como lida e fica na central.
+  EVENT_REMOVED: null,
 };
 
 export function getNotificationDestination(notification: Notification): Href | null {

@@ -17,13 +17,14 @@ npm run android
 npm run ios
 npm run web
 npm run typecheck     # tsc --noEmit
+npm test              # node --test "tests/*.test.cjs"
 ```
 
-There is no lint or test script configured yet.
+There is no lint script yet. `.github/workflows/ci.yml` runs the typecheck and the tests on every PR; every `tests/*.test.cjs` file runs automatically, so a new test needs no registration.
 
 ## Architecture
 
-React Native app built with Expo (SDK 54) and Expo Router (file-based routing), TypeScript throughout.
+React Native app built with Expo (SDK 58) and Expo Router (file-based routing), TypeScript throughout.
 
 All source code except static assets lives under `src/`; `assets/` stays at the repo root. Expo Router auto-detects `src/app` as the router root (no extra config needed) because it exists alongside a root-level `app/` absence — do not add a root-level `app/` directory, or routing will silently switch roots.
 
@@ -46,6 +47,10 @@ The folder structure under `src/app/` *is* the navigation — this mirrors the s
 - New screens reached from within a tab that aren't themselves a tab (e.g. event details, edit profile, and `CreateEvent` — opened by the bottom bar's centre button) belong in the `src/app/(tabs)/(screens)/NomeDaTela/index.tsx` group. These stay nested in `(tabs)` (so the bottom tab bar is still visible), and don't need any per-screen registration in `(tabs)/_layout.tsx`: the custom `tabBar` only ever renders the four known tabs, so every current and future folder under `(screens)/` is reachable-but-not-listed for free — it just renders the bar's `Limpo` variant, with no tab highlighted.
   - If a `(screens)` screen should also hide the bottom tab bar itself (rather than just lack a button), add its folder name to `src/constants/noNavbarScreens.ts`. `(tabs)/_layout.tsx` reads that list and renders no bar at all for matching routes.
 - `(tabs)/_layout.tsx` renders `src/components/TopAppBar` as every screen's header, applying `variant="Home"` (Hangy logo + notifications bell linking to `(screens)/Notifications`) as the default for every route. A screen that needs a different bar — a `Modal` flow that closes instead of going back, a `Profile` with a report button, a Portuguese title — declares it itself by calling `useTopAppBar({ variant, title })` from `@/hooks/useTopAppBar` in the screen body, so the layout never has to learn about individual screens. The `Tabs` navigator has `backBehavior="history"` so `router.canGoBack()`/`router.back()` reflect the actual screens visited (not just a fixed first tab) — don't remove that prop, the back button silently breaks without it. The bottom bar itself is `src/components/BottomNav`: four icon-only tabs plus a centre "create event" button that is **not** a tab — it pushes `(screens)/CreateEvent`.
+
+### Session
+
+`src/utils/auth.ts` keeps the access and refresh tokens (`expo-secure-store` on native, AsyncStorage on web, via `src/utils/sessionStorage*.ts`). On a 401, `apiFetch`/`apiUpload` call `POST /auth/refresh` once (shared by concurrent requests) and retry; only when the refresh is refused does the session end and the app return to `/Login`. Logout also calls `POST /auth/logout`.
 
 ### Other `src/` folders
 

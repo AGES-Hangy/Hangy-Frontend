@@ -46,6 +46,8 @@ const ADMIN_AUDIT_LOG_PAGE_LIMIT = 100;
 /** Rotas da API de eventos. */
 export const endpoints = {
   login: () => '/auth/login',
+  logout: () => '/auth/logout',
+  refresh: () => '/auth/refresh',
   passwordResetRequest: () => '/auth/password-reset/request',
   passwordResetVerify: () => '/auth/password-reset/verify',
   passwordResetConfirm: () => '/auth/password-reset/confirm',

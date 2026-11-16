@@ -287,6 +287,13 @@ export default function UserProfile() {
       addToast({ type: 'success', message: 'Solicitação de conexão enviada.' });
       return;
     }
+    if (result.kind === 'connected') {
+      // Ela já tinha pedido para se conectar: o contador e a relação mudam,
+      // então o perfil é recarregado do servidor.
+      addToast({ type: 'success', message: 'Vocês agora estão conectados.' });
+      void reload();
+      return;
+    }
 
     // No 409 o servidor já tem um vínculo: o recarregamento traz o estado real,
     // sem passar de volta por "Conectar".
@@ -527,7 +534,12 @@ export default function UserProfile() {
   }
 
   const isBusiness = visibleProfile.user_type === 'BUSINESS';
-  const { connection_status: connectionStatus, connection_id: connectionId } = visibleProfile;
+  // Uma recusa não trava mais o par (o backend libera um novo pedido), então
+  // na tela ela volta a ser "sem vínculo".
+  const connectionStatus = visibleProfile.connection_status === 'REJECTED' ? null : visibleProfile.connection_status;
+  const { connection_id: connectionId } = visibleProfile;
+  // Conexões são entre contas pessoais: conta comercial só segue estabelecimentos.
+  const viewerCanConnect = user?.userType !== 'BUSINESS';
   // Sem `connection_id` (backend de antes da task 281 [BE]), "Solicitação
   // enviada" e "Conectados" continuam sem ação.
   const personAction =
@@ -589,12 +601,11 @@ export default function UserProfile() {
           description={description}
           tags={visibleProfile.tags}
           actions={
-            // Sem ação na recusa: o vínculo recusado continua ativo no backend e um novo pedido daria 409.
-            visibleProfile.connection_status !== 'REJECTED' ? (
+            isBusiness || viewerCanConnect ? (
               <RelationshipButton
                 ref={relationshipButtonRef}
                 userType={visibleProfile.user_type}
-                connectionStatus={visibleProfile.connection_status}
+                connectionStatus={connectionStatus}
                 connectionDirection={visibleProfile.connection_direction}
                 isFollowing={visibleProfile.is_following}
                 onPress={relationshipAction}

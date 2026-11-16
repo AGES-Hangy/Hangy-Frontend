@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { API_BASE_URL, API_TIMEOUT_MS, endpoints } from '@/constants/api';
-import { removeToken, saveToken } from '@/utils/auth';
+import { removeToken, saveSession } from '@/utils/auth';
 import type { UserType } from '@/types/event';
 import type { UserRole } from '@/types/profile';
 
@@ -56,7 +56,8 @@ export function useLogin() {
       const response = await fetch(`${API_BASE_URL}${endpoints.login()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        // O backend guarda e compara e-mails em minúsculas.
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
         signal: controller.signal,
       });
 
@@ -82,6 +83,14 @@ export function useLogin() {
         } else if (response.status === 403 && data?.detail === 'Account has been deleted') {
           await removeToken();
           if (activeRequest.current === controller) setError('Esta conta foi excluída');
+        } else if (response.status === 403 && data?.detail === 'Account is banned or suspended') {
+          setError('Sua conta está suspensa ou banida.');
+        } else if (response.status === 429) {
+          const seconds = Number(response.headers.get('Retry-After'));
+          const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : null;
+          setError(minutes
+            ? `Muitas tentativas. Tente de novo em ${minutes} min.`
+            : 'Muitas tentativas. Tente de novo mais tarde.');
         } else if (response.status >= 500) {
           setError('Não foi possível carregar. Tente de novo.');
         } else {
@@ -92,6 +101,7 @@ export function useLogin() {
 
       const data = await response.json() as {
         access_token: string;
+        refresh_token?: string;
         token_type: string;
         user: AuthUser;
       };
@@ -110,7 +120,7 @@ export function useLogin() {
       };
       clearTimeout(timeoutId);
       savingSession = true;
-      await saveToken(result.accessToken);
+      await saveSession({ accessToken: result.accessToken, refreshToken: data.refresh_token ?? null });
       return activeRequest.current === controller ? result : null;
     } catch {
       if (activeRequest.current !== controller) return null;

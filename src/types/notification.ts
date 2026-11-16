@@ -9,6 +9,7 @@ export const notificationTypes = [
   'EVENT_PARTICIPANT_JOINED',
   'EVENT_UPDATED',
   'EVENT_CANCELLED',
+  'EVENT_REMOVED',
   'EVENT_STARTING_SOON',
 ] as const;
 

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {test}=require('node:test');
 const ts=require('typescript');
 const tick=()=>new Promise(r=>setImmediate(r));
-function client({getToken=async()=> 'token',removeToken=async()=>{}}={}) {
+function client({getToken=async()=> 'token',removeToken=async()=>{},getRefreshToken=async()=>null,saveSession=async()=>{}}={}) {
   let xhr, redirects=[];
   class XHR {
     constructor(){xhr=this;this.upload={};this.headers={};}
@@ -16,7 +16,7 @@ function client({getToken=async()=> 'token',removeToken=async()=>{}}={}) {
   vm.runInNewContext(ts.transpile(fs.readFileSync(path.join(__dirname,'../src/utils/http.ts'),'utf8'),{module:ts.ModuleKind.CommonJS}),{
     exports,XMLHttpRequest:XHR,setTimeout,clearTimeout,AbortController,FormData,
     fetch:async()=>{throw Error('Retry must use the stored Blob');},
-    require:name=> name==='react-native'?{Platform:{OS:'web'}}:name==='expo-router'?{router:{replace:path=>redirects.push(path)}}:name==='@/constants/api'?{API_BASE_URL:'http://test',API_TIMEOUT_MS:15000,UPLOAD_RESPONSE_TIMEOUT_MS:120000,UPLOAD_STALL_TIMEOUT_MS:30000,USE_API_MOCKS:false}:name==='@/utils/auth'?{getToken,removeToken}: {},
+    require:name=> name==='react-native'?{Platform:{OS:'web'}}:name==='expo-router'?{router:{replace:path=>redirects.push(path)}}:name==='@/constants/api'?{API_BASE_URL:'http://test',API_TIMEOUT_MS:15000,UPLOAD_RESPONSE_TIMEOUT_MS:120000,UPLOAD_STALL_TIMEOUT_MS:30000,USE_API_MOCKS:false,endpoints:{refresh:()=>'/auth/refresh'}}:name==='@/utils/auth'?{getToken,removeToken,getRefreshToken,saveSession}: {},
   });
   return {exports,get xhr(){return xhr;},redirects};
 }

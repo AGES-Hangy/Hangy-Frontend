@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/app/(tabs)/(screens)
 const ast = ts.createSourceFile('EventDetail.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const functions = [];
 (function visit(node) {
-  if (ts.isFunctionDeclaration(node) && ['handleUploadError', 'handleRemoveConfirm'].includes(node.name?.text)) functions.push(node.getText(ast));
+  if (ts.isFunctionDeclaration(node) && ['handleUploadError', 'handleRemoveConfirm', 'deletePhoto'].includes(node.name?.text)) functions.push(node.getText(ast));
   ts.forEachChild(node, visit);
 })(ast);
 function screen(removePhoto) {

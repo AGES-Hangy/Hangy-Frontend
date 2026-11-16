@@ -70,7 +70,8 @@ export default function SearchAllPeople() {
             : item.connection_status === 'PENDING' ? 'solicitação pendente' : undefined;
           const subtitle = [description, relationship].filter(Boolean).join(' · ');
           const isSelf = user?.userId === item.user_id;
-          const canConnect = user?.userType === 'PERSONAL' && !isSelf && item.connection_status === null;
+          const canConnect = user?.userType === 'PERSONAL' && !isSelf
+            && (item.connection_status === null || item.connection_status === 'REJECTED');
           const isConnecting = connectingId === item.user_id;
 
           return (

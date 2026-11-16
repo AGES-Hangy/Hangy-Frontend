@@ -11,6 +11,7 @@ type NotificationType =
   | 'EVENT_PARTICIPANT_JOINED'
   | 'EVENT_UPDATED'
   | 'EVENT_CANCELLED'
+  | 'EVENT_REMOVED'
   | 'EVENT_STARTING_SOON';
 
 type NotificationData = Record<string, unknown>;
@@ -44,6 +45,8 @@ const ROUTE_BY_TYPE: Record<NotificationType, RouteBuilder> = {
   EVENT_PARTICIPANT_REMOVED: toEventDetail,
   CONNECTION_REQUEST: toProfile,
   CONNECTION_ACCEPTED: toProfile,
+  // Evento removido pela moderação não tem detalhe para abrir.
+  EVENT_REMOVED: () => NOTIFICATIONS,
 };
 
 function isNotificationType(value: unknown): value is NotificationType {

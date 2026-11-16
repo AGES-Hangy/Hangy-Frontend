@@ -172,12 +172,15 @@ export function usePasswordReset() {
 
   async function requestCode(email: string) {
     clearPasswordResetToken();
-    return post<void>(endpoints.passwordResetRequest(), { email });
+    return post<void>(endpoints.passwordResetRequest(), { email: email.trim().toLowerCase() });
   }
 
   async function verifyCode(email: string, code: string) {
     clearPasswordResetToken();
-    const result = await post<VerifyResponse>(endpoints.passwordResetVerify(), { email, code });
+    const result = await post<VerifyResponse>(endpoints.passwordResetVerify(), {
+      email: email.trim().toLowerCase(),
+      code,
+    });
     if (result.ok) {
       resetToken = result.data.reset_token;
       resetTokenExpiresAt = Date.now() + result.data.expires_in * 1000;

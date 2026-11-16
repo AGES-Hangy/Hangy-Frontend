@@ -109,6 +109,8 @@ function activityCopy(notification: Notification) {
       return { title: `${event} foi cancelado`, subtitle: since };
     case 'EVENT_STARTING_SOON':
       return { title: `${event} começa em breve`, subtitle: since };
+    case 'EVENT_REMOVED':
+      return { title: `${event} foi removido pela moderação`, subtitle: since };
     default:
       return { title: 'Você tem uma nova notificação', subtitle: since };
   }

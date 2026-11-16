@@ -41,6 +41,8 @@ export function PersonalStepOne({ form, onChange, onSwitchToBusiness, onNext }: 
 
       <TextField
         label="Email"
+        keyboardType="email-address"
+        autoCapitalize="none"
         placeholder="seuemail@exemplo.com"
         value={form.email}
         onChangeText={(text) => onChange({ email: text, errors: { ...form.errors, email: undefined } })}

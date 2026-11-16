@@ -26,7 +26,7 @@ function mount({ apiFetch, uploadImage, pickImage=async()=>null }) {
       if (name==='expo-router') return {useFocusEffect(fn) { if(fn!==effect) { scheduled=fn; effect=fn; } }};
       if (name==='@/utils/http') return {apiFetch,ApiError};
       if (name==='@/hooks/useImageUpload') return {useImageUpload:()=>({pickImage,uploadImage,cancelUploads,releaseImage:uri=>released.push(uri),isPicking:false,error:null})};
-      if (name==='@/constants/api') return {endpoints:{eventExperiences:id=>`/events/${id}/experiences`,experienceImages:id=>`/experiences/${id}/images`,experienceImage:id=>`/experiences/images/${id}`}};
+      if (name==='@/constants/api') return {endpoints:{eventExperiences:id=>`/events/${id}/experiences`,myEventExperience:id=>`/events/${id}/experiences/me`,experienceImages:id=>`/experiences/${id}/images`,experienceImage:id=>`/experiences/images/${id}`}};
       throw Error(name);
     },
   });
@@ -52,7 +52,12 @@ test('A → B → A does not accept a response from the first visit', async()=>{
 });
 test('two different photos share one experience request; double retry sends once', async()=>{
   let creates=0,uploads=0; const upload=deferred();
-  const m=mount({apiFetch:async()=>{creates++;return {experience_id:'exp'};},uploadImage:()=>{uploads++;return {promise:upload.promise};}});
+  // A visita já busca `GET .../experiences/me` ao montar; só contam os pedidos
+  // feitos pelos envios.
+  // A visita busca `GET .../experiences/me` ao montar; essa leitura fica
+  // pendente e só contam os pedidos feitos pelos envios.
+  let loads=0;
+  const m=mount({apiFetch:()=>{ if (loads++===0) return new Promise(()=>{}); creates++; return Promise.resolve({experience_id:'exp'}); },uploadImage:()=>{uploads++;return {promise:upload.promise};}});
   const a=m.hook.uploadPhoto(image), duplicate=m.hook.uploadPhoto(image), b=m.hook.uploadPhoto({...image,uri:'second'});
   await tick(); assert.equal(creates,1);assert.equal(uploads,2);
   upload.resolve({photo_id:'photo',photo_url:'https://server/photo'});await Promise.all([a,duplicate,b]);
