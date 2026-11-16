@@ -1,3 +1,4 @@
+import type { ReportTarget } from '@/types/report';
 import type { UserEventsTab } from '@/types/user';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -37,6 +38,9 @@ export const UPLOAD_RESPONSE_TIMEOUT_MS = 120000;
 
 /** Maior `limit` aceito por `GET /participants` — a tela não pagina, então pede a página cheia. */
 const PARTICIPANTS_PAGE_LIMIT = 100;
+
+/** Maior `limit` aceito por `GET /admin/audit-log`. */
+const ADMIN_AUDIT_LOG_PAGE_LIMIT = 100;
 
 /** Rotas da API de eventos. */
 export const endpoints = {
@@ -183,6 +187,13 @@ export const endpoints = {
   profilePhoto: () => '/users/me/photo',
   devices: () => '/users/me/devices',
   device: (deviceToken: string) => `/users/me/devices/${encodeURIComponent(deviceToken)}`,
+  /** Motivos de denúncia do alvo, com o que está disponível para quem pede (tasks 089 e 296 [BE]). */
+  reportReasons: (target: ReportTarget, targetId: string) => {
+    const params = new URLSearchParams({ target, target_id: targetId });
+    return `/reports/reasons?${params.toString()}`;
+  },
+  /** `POST` registra uma denúncia de perfil ou de evento (task 239 [BE]). */
+  reports: () => '/reports',
   /** Lista de conexões ativas paginada por cursor, com busca opcional por nome. */
   connections: (options?: { cursor?: string | null; search?: string }) => {
     const params = new URLSearchParams();
@@ -229,6 +240,29 @@ export const endpoints = {
     const query = params.toString();
     return `/search/businesses${query ? `?${query}` : ''}`;
   },
+  /**
+   * "Ver todos" do bloco de eventos da busca (task 127 [BE]), paginado por
+   * cursor. Mantém o termo, as tags e as datas do bloco de origem.
+   */
+  searchEvents: (options?: {
+    q?: string;
+    tagIds?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+    cursor?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.set('q', options.q);
+    // O backend espera os UUIDs numa string só, separados por vírgula (OR).
+    if (options?.tagIds?.length) params.set('tag_ids', options.tagIds.join(','));
+    if (options?.dateFrom) params.set('date_from', options.dateFrom);
+    if (options?.dateTo) params.set('date_to', options.dateTo);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/search/events${query ? `?${query}` : ''}`;
+  },
   /** Pessoas da busca, paginadas por cursor (task 238 [BE]). */
   searchUsers: ({ q, limit, cursor }: { q: string; limit: number; cursor: string | null }) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
@@ -237,6 +271,11 @@ export const endpoints = {
   },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
+  /**
+   * Registro das ações administrativas (task 253 [BE]). Só `ADMIN`. A tela não
+   * pagina ainda: pede a maior página aceita (1–100) e ignora o `next_cursor`.
+   */
+  adminAuditLog: () => `/admin/audit-log?limit=${ADMIN_AUDIT_LOG_PAGE_LIMIT}`,
   /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). Só `ADMIN`. */
   adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
   /**
@@ -244,6 +283,8 @@ export const endpoints = {
    * sem corpo; devolve o detalhe atualizado, com `status: REJECTED`.
    */
   adminReportArchive: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/archive`,
+  /** Lista de moderação de contas, paginada por cursor. Só `ADMIN`. A query vem de `adminUsersQuery`. */
+  adminUsers: (query: string) => `/admin/users${query ? `?${query}` : ''}`,
   /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
   adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
   /**

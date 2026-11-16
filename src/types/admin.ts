@@ -129,3 +129,65 @@ export interface ModerationResult {
   /** ISO 8601 — data de cadastro. */
   created_at: string;
 }
+
+/** Item de `GET /admin/users`, espelhando `app/presentation/dtos/admin_users.py`. */
+export interface AdminUser {
+  user_id: string;
+  name: string | null;
+  moderation_status: UserModerationStatus;
+  /** ISO 8601. Só vem preenchido com `SUSPENDED`. */
+  suspended_until: string | null;
+  event_count: number;
+  report_count: number;
+}
+
+export interface AdminUsersResponse {
+  items: AdminUser[];
+  next_cursor: string | null;
+}
+
+/**
+ * Contrato de `GET /admin/audit-log` (task 253 [BE]), espelhando
+ * `app/presentation/dtos/audit_log.py`.
+ */
+
+/** `AuditActionEnum` do backend. */
+export type AuditAction =
+  | 'USER_BANNED'
+  | 'USER_SUSPENDED'
+  | 'USER_REVERTED'
+  | 'REPORT_ARCHIVED'
+  | 'EVENT_REMOVED'
+  | 'TAG_CREATED'
+  | 'TAG_UPDATED'
+  | 'TAG_DELETED';
+
+/** `AuditTargetTypeEnum` do backend. */
+export type AuditTargetType = 'USER' | 'REPORT' | 'TAG' | 'EVENT';
+
+export interface AuditLogActor {
+  /** `null` quando a conta do administrador foi removida. */
+  id: string | null;
+  /** "Você" quando foi o próprio admin logado; já vem pronto do backend. */
+  name: string;
+}
+
+export interface AuditLogItem {
+  audit_log_id: string;
+  actor: AuditLogActor;
+  /** Aceita qualquer string para uma ação nova do backend não quebrar a tela. */
+  action: AuditAction | (string & {});
+  target_type: AuditTargetType | (string & {});
+  target_id: string;
+  /** Frase pronta, ex.: "Você baniu Lucas Ferreira". A tela só exibe. */
+  summary: string;
+  /** ISO 8601. */
+  created_at: string;
+}
+
+export interface AuditLogPage {
+  /** Da mais recente para a mais antiga. */
+  items: AuditLogItem[];
+  /** Próxima página; a tela ainda não pagina. */
+  next_cursor: string | null;
+}
