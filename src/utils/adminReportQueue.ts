@@ -34,8 +34,9 @@ export function reportQueueCard(item: AdminReportQueueItem) {
 }
 
 /**
- * Nome do alvo filtrado, para o chip: a rota só traz o id. Na fila de uma conta
- * podem vir denúncias dos eventos dela, cujo `target_name` é o título do evento.
+ * Nome do alvo filtrado, para o chip: a rota só traz o id. O backend devolve só
+ * denúncias contra o próprio alvo (as dos eventos de uma conta ficam de fora);
+ * o tipo é conferido para o chip nunca mostrar o nome de outro alvo.
  */
 export function reportQueueTargetName(items: AdminReportQueueItem[], isEventTarget: boolean): string | null {
   const match = items.find((item) =>

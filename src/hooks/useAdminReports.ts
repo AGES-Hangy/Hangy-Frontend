@@ -31,10 +31,18 @@ type QueueFilters = {
   targetEventId: string | null;
 };
 
-/** Uma denúncia nova desloca as páginas seguintes e repetiria itens já na tela. */
+/**
+ * A paginação é por cursor e não desloca as páginas, mas o `keyExtractor` da
+ * lista exige ids únicos: uma linha repetida entre páginas é descartada.
+ */
 function mergeById(current: AdminReportQueueItem[], received: AdminReportQueueItem[]) {
   const seen = new Set(current.map((item) => item.report_id));
   return [...current, ...received.filter((item) => !seen.has(item.report_id))];
+}
+
+/** Identifica a lista de uma aba e alvo, sem o termo da busca. */
+export function reportQueueListKey(filters: Omit<QueueFilters, 'search'>) {
+  return [filters.status, filters.targetUserId ?? '', filters.targetEventId ?? ''].join('|');
 }
 
 /**
@@ -60,6 +68,11 @@ export function useAdminReports({
   const { addToast } = useToast();
   const [items, setItems] = useState<AdminReportQueueItem[]>([]);
   const [activeSearch, setActiveSearch] = useState('');
+  /**
+   * Aba e alvo da lista na tela (`reportQueueListKey`): logo depois de trocar de
+   * aba, `items` ainda é da anterior até o pedido novo começar.
+   */
+  const [listKey, setListKey] = useState<string | null>(null);
   const [targetName, setTargetName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
@@ -135,6 +148,7 @@ export function useAdminReports({
         setItems(next);
         setHasMore(page.next_cursor !== null);
         setActiveSearch(filters.search);
+        setListKey(reportQueueListKey(filters));
         if (filters.targetUserId || filters.targetEventId) {
           // Sem linha nesta aba, mantém o nome que outra aba já trouxe.
           const name = reportQueueTargetName(next, filters.targetEventId !== null);
@@ -154,7 +168,7 @@ export function useAdminReports({
           return;
         }
         // A lista anterior continua na tela: o cursor e os filtros seguem sendo dela.
-        if (mode === 'search') filtersRef.current = previousFilters;
+        if (mode === 'search' || mode === 'refresh') filtersRef.current = previousFilters;
         if (mode === 'more') loadMorePaused.current = true;
 
         const retryGeneration = generation.current;
@@ -181,6 +195,12 @@ export function useAdminReports({
   );
 
   const appliedSearch = searchText.trim();
+  /**
+   * Termo digitado, para o refresh: se uma busca falhou, a lista na tela é a do
+   * termo anterior, e puxar para atualizar tenta de novo o que está no campo.
+   */
+  const searchRef = useRef(appliedSearch);
+  searchRef.current = appliedSearch;
 
   // Aba ou alvo novo é outra lista: busca na hora, já com o termo digitado.
   useEffect(() => {
@@ -194,6 +214,8 @@ export function useAdminReports({
     if (appliedSearch === filtersRef.current.search) return;
     const timer = setTimeout(
       () => {
+        // Uma troca de aba durante a espera já buscou com este termo.
+        if (appliedSearch === filtersRef.current.search) return;
         void fetchPage({ ...filtersRef.current, search: appliedSearch }, 'search');
       },
       appliedSearch ? SEARCH_DEBOUNCE_MS : 0,
@@ -208,7 +230,7 @@ export function useAdminReports({
         hasFocused.current = true;
         return;
       }
-      void fetchPage(filtersRef.current, 'refresh');
+      void fetchPage({ ...filtersRef.current, search: searchRef.current }, 'refresh');
     }, [fetchPage]),
   );
 
@@ -220,12 +242,18 @@ export function useAdminReports({
     [],
   );
 
-  const reload = useCallback(() => fetchPage(filtersRef.current, 'initial'), [fetchPage]);
-  const refresh = useCallback(() => fetchPage(filtersRef.current, 'refresh'), [fetchPage]);
+  const reload = useCallback(
+    () => fetchPage({ ...filtersRef.current, search: searchRef.current }, 'initial'),
+    [fetchPage],
+  );
+  const refresh = useCallback(
+    () => fetchPage({ ...filtersRef.current, search: searchRef.current }, 'refresh'),
+    [fetchPage],
+  );
   const loadMore = useCallback(() => {
     if (!hasMore || inFlight.current || loadMorePaused.current) return Promise.resolve();
     return fetchPage(filtersRef.current, 'more');
   }, [hasMore, fetchPage]);
 
-  return { items, activeSearch, targetName, isLoading, isSearching, isLoadingMore, error, hasMore, reload, refresh, loadMore };
+  return { items, activeSearch, listKey, targetName, isLoading, isSearching, isLoadingMore, error, hasMore, reload, refresh, loadMore };
 }

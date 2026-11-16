@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { AdminHeader } from '@/components/AdminHeader';
@@ -12,7 +12,7 @@ import { ReportCardSkeleton } from '@/components/ReportCardSkeleton';
 import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
-import { useAdminReports } from '@/hooks/useAdminReports';
+import { reportQueueListKey, useAdminReports } from '@/hooks/useAdminReports';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useRefreshable } from '@/hooks/useRefreshable';
 import {
@@ -68,6 +68,51 @@ export default function AdminDenuncias() {
   const queue = useAdminReports({ status: tab, searchText, targetUserId, targetEventId });
   const { isRefreshing, onRefresh } = useRefreshable(queue.refresh);
 
+  /**
+   * Alvo cuja fila ainda procura a primeira aba com denúncias. Quem chega da
+   * ficha não sabe em que status elas estão: abrir numa aba vazia esconderia
+   * as "N denúncias" prometidas. Tocar numa aba ou buscar encerra a procura.
+   */
+  const targetKey = targetUserId ?? targetEventId;
+  const [probingTarget, setProbingTarget] = useState<string | null>(targetKey);
+  const [probedTarget, setProbedTarget] = useState<string | null>(targetKey);
+  if (targetKey !== probedTarget) {
+    setProbedTarget(targetKey);
+    setProbingTarget(targetKey);
+    // Limpar o filtro mantém a aba; um alvo novo recomeça a procura.
+    if (targetKey) setTab('PENDING');
+  }
+
+  const isProbing = probingTarget !== null && probingTarget === targetKey;
+  const isCurrentList = queue.listKey === reportQueueListKey({ status: tab, targetUserId, targetEventId });
+  const tabLoadedEmpty =
+    isCurrentList && !queue.isLoading && !queue.error && queue.items.length === 0 && !queue.activeSearch;
+  useEffect(() => {
+    if (!isProbing || !isCurrentList || queue.isLoading || queue.error) return;
+    if (!tabLoadedEmpty) {
+      setProbingTarget(null);
+      return;
+    }
+    const index = REPORT_QUEUE_TABS.findIndex((item) => item.value === tab);
+    const next = REPORT_QUEUE_TABS[index + 1];
+    if (next) {
+      setTab(next.value);
+    } else {
+      // Nenhuma aba tem denúncias deste alvo: volta para Pendentes, como sem filtro.
+      setProbingTarget(null);
+      setTab('PENDING');
+    }
+  }, [isProbing, isCurrentList, tabLoadedEmpty, queue.isLoading, queue.error, tab]);
+
+  const selectTab = (value: ReportQueueTab) => {
+    setProbingTarget(null);
+    setTab(value);
+  };
+  const changeSearch = (value: string) => {
+    setProbingTarget(null);
+    setSearchText(value);
+  };
+
   const clearTargetFilter = () => router.setParams({ target_user_id: undefined, target_event_id: undefined });
   const targetLabel = reportQueueTargetLabel({ targetName: queue.targetName, targetUserId, targetEventId });
   const emptyCopy = reportQueueEmptyCopy({ tab, search: queue.activeSearch, isTargeted: targetLabel !== null });
@@ -90,7 +135,8 @@ export default function AdminDenuncias() {
       );
     }
 
-    if (queue.isLoading) return <QueueSkeleton />;
+    // Durante a procura, a aba vazia passa direto: o skeleton fica até a aba certa.
+    if (queue.isLoading || (isProbing && (!isCurrentList || tabLoadedEmpty))) return <QueueSkeleton />;
 
     return (
       <FlatList
@@ -146,14 +192,14 @@ export default function AdminDenuncias() {
               label="Buscar denúncia"
               placeholder="Nome, evento ou nº da denúncia"
               value={searchText}
-              onChangeText={setSearchText}
+              onChangeText={changeSearch}
               maxLength={REPORT_QUEUE_SEARCH_MAX_LENGTH}
               autoCapitalize="none"
             />
             <ProfileTabs
               items={REPORT_QUEUE_TABS}
               value={tab}
-              onChange={setTab}
+              onChange={selectTab}
               variant="listHeader"
               accessibilityLabel="Status das denúncias"
             />
