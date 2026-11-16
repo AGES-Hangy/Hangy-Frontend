@@ -9,21 +9,30 @@ import { AdminGuard } from '@/utils/AdminGuard';
 
 /**
  * Rota de cada seção da `AdminNav`. Denúncias (task 260) entra aqui quando
- * existir, e Conteúdo está fora do escopo do épico E11: tocar nelas não navega.
+ * existir. Conteúdo é a gestão de tags (task 264).
  */
-const ROUTE_BY_DESTINATION: Partial<Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Usuarios'>> = {
+const ROUTE_BY_DESTINATION: Partial<
+  Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Usuarios' | '/Admin/Tags'>
+> = {
   Painel: '/Admin/Painel',
   Usuarios: '/Admin/Usuarios',
+  Conteudo: '/Admin/Tags',
 };
 
 const DESTINATIONS: AdminNavDestination[] = ['Painel', 'Denuncias', 'Usuarios', 'Conteudo'];
+
+/** Pasta da rota → seção da `AdminNav`, quando os nomes não coincidem. */
+const DESTINATION_BY_SECTION: Record<string, AdminNavDestination> = {
+  Tags: 'Conteudo',
+};
 
 /** Área administrativa: fora de `(tabs)`, com a `AdminNav` no lugar da `BottomNav`. */
 export default function AdminLayout() {
   const segments: string[] = useSegments();
   // `segments` é `['Admin', '<Secao>', ...]`; telas internas mantêm a seção.
-  const section = segments[1];
-  const active = DESTINATIONS.find((dest) => dest === section) ?? 'Painel';
+  const section = segments[1] ?? '';
+  const active =
+    DESTINATIONS.find((dest) => dest === section) ?? DESTINATION_BY_SECTION[section] ?? 'Painel';
   // Telas internas de uma seção (fichas como `Denuncias/[id]` e
   // `Usuarios/[id]`) não têm a `AdminNav`: o rodapé é das ações da própria
   // tela, que soma a safe area de baixo.

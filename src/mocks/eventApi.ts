@@ -385,12 +385,14 @@ class MockApiError extends Error {
   readonly kind = 'http' as const;
   readonly status: number;
   readonly detail: string;
+  readonly body: unknown;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, body: unknown = { detail }) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.body = body;
   }
 
   is(status: number, detail?: string) {
@@ -1342,6 +1344,95 @@ const ARVORE_DE_TAGS = [
   })),
 }));
 
+const USO_DA_TAG_NO_MOCK = 34;
+let proximoIdDeTag = 1;
+
+/**
+ * `POST/PATCH/DELETE /admin/tags` (task 264). Cenários: "Futebol" (`micro-0-0`) vem
+ * "em uso" (409 sem `force`); categoria com tags devolve 409 `Category has tags`;
+ * nomes repetidos no mesmo nível devolvem 409.
+ */
+function resolverTagsAdmin(
+  partes: string[],
+  method: string,
+  path: string,
+  init: RequestInit,
+): { resposta: unknown } | undefined {
+  if (partes[0] !== 'admin' || partes[1] !== 'tags') return undefined;
+
+  const body = init.body ? JSON.parse(String(init.body)) : {};
+  const igual = (a: string, b: string) => a.trim() === b.trim();
+  const nomeInvalido = (nome: string) => nome.length === 0 || nome.length > 50;
+  const erro422 = () =>
+    new MockApiError(422, 'Validation error', {
+      detail: [{ loc: ['body', 'name'], msg: 'String should have at most 50 characters' }],
+    });
+
+  if (partes.length === 2 && method === 'POST') {
+    const nome = String(body.name ?? '').trim();
+    if (nomeInvalido(nome)) throw erro422();
+    const id = `tag-nova-${proximoIdDeTag++}`;
+
+    if (body.parent_id === null) {
+      if (ARVORE_DE_TAGS.some((macro) => igual(macro.name, nome))) {
+        throw new MockApiError(409, 'Tag name already exists at this level');
+      }
+      ARVORE_DE_TAGS.push({ id, name: nome, type: 'MACRO', children: [] });
+      return { resposta: { tag_id: id, name: nome, parent_id: null, type: 'MACRO' } };
+    }
+
+    const pai = ARVORE_DE_TAGS.find((macro) => macro.id === body.parent_id);
+    if (!pai) throw new MockApiError(404, 'Parent tag not found');
+    if (pai.children.some((micro) => igual(micro.name, nome))) {
+      throw new MockApiError(409, 'Tag name already exists at this level');
+    }
+    pai.children.push({ id, name: nome, type: 'MICRO' });
+    return { resposta: { tag_id: id, name: nome, parent_id: pai.id, type: 'MICRO' } };
+  }
+
+  if (partes.length === 3 && method === 'PATCH') {
+    const nome = String(body.name ?? '').trim();
+    if (nomeInvalido(nome)) throw erro422();
+    const macro = ARVORE_DE_TAGS.find((item) => item.id === partes[2]);
+    if (!macro) throw new MockApiError(404, 'Tag not found');
+    if (ARVORE_DE_TAGS.some((outra) => outra.id !== macro.id && igual(outra.name, nome))) {
+      throw new MockApiError(409, 'Tag name already exists at this level');
+    }
+    macro.name = nome;
+    return { resposta: { tag_id: macro.id, name: nome, parent_id: null, type: 'MACRO' } };
+  }
+
+  if (partes.length === 3 && method === 'DELETE') {
+    const force = new URLSearchParams(path.split('?')[1] ?? '').get('force') === 'true';
+    const indiceMacro = ARVORE_DE_TAGS.findIndex((item) => item.id === partes[2]);
+
+    if (indiceMacro >= 0) {
+      if (ARVORE_DE_TAGS[indiceMacro].children.length > 0) {
+        throw new MockApiError(409, 'Category has tags');
+      }
+      if (!force && ARVORE_DE_TAGS[indiceMacro].id === 'macro-7') throw new MockApiError(409, 'Tag is in use', { detail: 'Tag is in use', usage_count: 3 });
+      ARVORE_DE_TAGS.splice(indiceMacro, 1);
+      return { resposta: undefined };
+    }
+
+    for (const macro of ARVORE_DE_TAGS) {
+      const indiceMicro = macro.children.findIndex((micro) => micro.id === partes[2]);
+      if (indiceMicro < 0) continue;
+      if (!force && macro.children[indiceMicro].id === 'micro-0-0') {
+        throw new MockApiError(409, 'Tag is in use', {
+          detail: 'Tag is in use',
+          usage_count: USO_DA_TAG_NO_MOCK,
+        });
+      }
+      macro.children.splice(indiceMicro, 1);
+      return { resposta: undefined };
+    }
+    throw new MockApiError(404, 'Tag not found');
+  }
+
+  return undefined;
+}
+
 const perfil = {
   email: MOCK_USER_TYPE === 'BUSINESS' ? 'contato@quierocafe.com' : 'rafaela.souza@email.com',
   pessoa: {
@@ -1552,6 +1643,9 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     if ('erro' in admin) throw new MockApiError(admin.erro.status, admin.erro.detail);
     return admin.resposta as T;
   }
+
+  const tagsAdmin = resolverTagsAdmin(partes, method, path, init);
+  if (tagsAdmin) return tagsAdmin.resposta as T;
 
   if (partes.join('/') === 'users/me/blocked' && method === 'GET') {
     const params = new URLSearchParams(path.split('?')[1] ?? '');
