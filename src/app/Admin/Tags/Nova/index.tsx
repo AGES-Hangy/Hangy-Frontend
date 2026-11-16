@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { OfflineBanner } from '@/components/OfflineBanner';
-import { SectionHeader } from '@/components/SectionHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
 import { useToast } from '@/components/Toast';
@@ -171,7 +170,7 @@ export default function NovaTag() {
             <Button
               label="Criar tag"
               size="LG"
-              disabled={!isValid || selected === null || isOffline}
+              disabled={!canSubmit}
               isLoading={isLoading}
               onPress={() => void submit()}
             />

@@ -8,7 +8,6 @@ import { Chip } from '@/components/Chip';
 import { Dialog } from '@/components/Dialog';
 import { ErrorScreen } from '@/components/ErrorScreen';
 import { OfflineBanner } from '@/components/OfflineBanner';
-import { SectionHeader } from '@/components/SectionHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
 import { useToast } from '@/components/Toast';
@@ -402,7 +401,7 @@ export default function EditarCategoria() {
             title={`Remover ${category.name}?`}
             description={blockedDescription(category.children.length)}
             confirmLabel="Entendi"
-            cancelLabel="Ver tags da categoria"
+            cancelLabel="Cancelar"
             onConfirm={closeDialog}
             onCancel={closeDialog}
           />
