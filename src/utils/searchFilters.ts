@@ -256,3 +256,11 @@ export function buildTagNameMap(tags: TagNode[]): Map<string, string> {
   }
   return map;
 }
+
+/** Texto do estado vazio da busca por termo, compartilhado com a lista de pessoas. */
+export function searchEmptyCopy(query: string) {
+  return {
+    title: `Nada encontrado para "${query}"`,
+    text: 'A busca cobre eventos, estabelecimentos e pessoas. Tente outra palavra ou revise os filtros.',
+  };
+}

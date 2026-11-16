@@ -99,6 +99,7 @@ export default function TabsLayout() {
             <Tabs.Screen name="(screens)/Notifications/index" />
             <Tabs.Screen name="(screens)/Report/index" />
             <Tabs.Screen name="(screens)/SearchAll/Businesses/index" />
+            <Tabs.Screen name="(screens)/SearchAll/People/index" />
             <Tabs.Screen name="(screens)/UserProfile/index" />
           </Tabs>
         </TopAppBarProvider>

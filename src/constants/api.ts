@@ -263,6 +263,12 @@ export const endpoints = {
     const query = params.toString();
     return `/search/events${query ? `?${query}` : ''}`;
   },
+  /** Pessoas da busca, paginadas por cursor (task 238 [BE]). */
+  searchUsers: ({ q, limit, cursor }: { q: string; limit: number; cursor: string | null }) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    if (cursor !== null) params.set('cursor', cursor);
+    return `/search/users?${params.toString()}`;
+  },
   /** Métricas e denúncias recentes do painel administrativo (task 243 [BE]). Só `ADMIN`. */
   adminDashboard: () => '/admin/dashboard',
   /**

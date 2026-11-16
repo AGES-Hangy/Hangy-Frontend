@@ -23,6 +23,7 @@ import {
   buildTagNameMap,
   formatAppliedDateLabel,
   hasActiveAppliedFilters,
+  searchEmptyCopy,
 } from '@/utils/searchFilters';
 
 const SKELETON_SECTIONS = ['EVENTOS', 'ESTABELECIMENTOS', 'PESSOAS'] as const;
@@ -244,12 +245,10 @@ export default function Search() {
       ) : results !== null && !hasAnyResults ? (
         <EmptyState
           context="Search"
-          title={activeQuery ? `Nada encontrado para "${activeQuery}"` : 'Nenhum resultado com esses filtros'}
-          text={
-            activeQuery
-              ? 'A busca cobre eventos, estabelecimentos e pessoas. Tente outra palavra ou revise os filtros.'
-              : 'Tente outras datas ou tags, ou limpe os filtros.'
-          }
+          {...(activeQuery ? searchEmptyCopy(activeQuery) : {
+            title: 'Nenhum resultado com esses filtros',
+            text: 'Tente outras datas ou tags, ou limpe os filtros.',
+          })}
           cta={hasFilters}
           ctaLabel={hasFilters ? 'Limpar filtros' : undefined}
           onCtaPress={hasFilters ? clearFilters : undefined}

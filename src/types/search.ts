@@ -1,4 +1,5 @@
 import type { EventPrivacy, LocationPrecision } from '@/types/event';
+import type { ConnectionStatus } from '@/types/user';
 
 /**
  * Contratos de `GET /search` e `GET /search/*`.
@@ -83,6 +84,13 @@ export interface BusinessSearchItem {
 /** `GET /search/businesses`. `total` é o número geral de resultados. */
 export interface BusinessSearchResponse {
   items: BusinessSearchItem[];
+  next_cursor: string | null;
+  total: number;
+}
+
+/** Página de pessoas de `GET /search/users` (task 238 [BE]). */
+export interface SearchUsersPage {
+  items: (SearchUserItem & { connection_status: ConnectionStatus | null })[];
   next_cursor: string | null;
   total: number;
 }
