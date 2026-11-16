@@ -29,6 +29,8 @@ import { SUSPENSION_DAYS, useModerateUser } from '@/hooks/useModerateUser';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useRefreshable } from '@/hooks/useRefreshable';
 import type { AdminUserProfile, ModerationAction } from '@/types/admin';
+import { formatDayMonth } from '@/utils/datetime';
+import { adminUserName, countSupport, memberSinceLabel, moderationEntryText } from '@/utils/adminUserProfile';
 
 const HEADER_HEIGHT = 56;
 const HEADER_BORDER_WIDTH = 1.5;
@@ -71,22 +73,6 @@ const DIALOG_VARIANT = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatMonthYear(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
-  } catch {
-    return iso;
-  }
-}
-
-function formatDayMonth(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
 
 function revertLabel(profile: AdminUserProfile): string {
   return profile.moderation_status === 'BANNED' ? 'Reverter banimento' : 'Reverter suspensão';
@@ -187,13 +173,12 @@ type UsuarioContentProps = {
 function UsuarioContent({ profile, refresh }: UsuarioContentProps) {
   const { isRefreshing, onRefresh } = useRefreshable(refresh);
 
-  const reportsTone = profile.reports_received > 0 ? 'Alert' : 'Neutral';
-  const reportsSupport = profile.reports_upheld > 0
-    ? `${profile.reports_upheld} procedente${profile.reports_upheld > 1 ? 's' : ''}`
-    : undefined;
-  const eventsSupport = profile.events_cancelled > 0
-    ? `${profile.events_cancelled} cancelado${profile.events_cancelled > 1 ? 's' : ''}`
-    : undefined;
+  const { metrics } = profile;
+  const name = adminUserName(profile);
+  const since = memberSinceLabel(profile.member_since);
+  const reportsTone = metrics.report_count > 0 ? 'Alert' : 'Neutral';
+  const reportsSupport = countSupport(metrics.report_upheld_count, 'procedente', 'procedentes');
+  const eventsSupport = countSupport(metrics.event_cancelled_count, 'cancelado', 'cancelados');
 
   return (
     <ScrollView
@@ -212,12 +197,11 @@ function UsuarioContent({ profile, refresh }: UsuarioContentProps) {
         <Avatar
           variant="User"
           diameter={AVATAR_DIAMETER}
-          source={profile.avatar_url ? { uri: profile.avatar_url } : undefined}
-          accessibilityLabel={`Foto de ${profile.name}`}
+          accessibilityLabel={`Foto de ${name}`}
         />
-        <Text style={styles.profileName}>{profile.name}</Text>
+        <Text style={styles.profileName}>{name}</Text>
         <Text style={styles.profileMeta}>
-          {profile.email} · conta desde {formatMonthYear(profile.joined_at)}
+          {since ? `${profile.email} · conta desde ${since}` : profile.email}
         </Text>
         <View style={styles.badgeWrap}>
           <Badge family="Moderation" value={profile.moderation_status} />
@@ -228,14 +212,14 @@ function UsuarioContent({ profile, refresh }: UsuarioContentProps) {
       <View style={styles.statRow}>
         <StatCard
           label="EVENTOS"
-          value={profile.events_created}
+          value={metrics.event_count}
           support={eventsSupport}
           tone="Neutral"
           style={styles.statCard}
         />
         <StatCard
           label="DENÚNCIAS"
-          value={profile.reports_received}
+          value={metrics.report_count}
           support={reportsSupport}
           tone={reportsTone}
           style={styles.statCard}
@@ -251,7 +235,7 @@ function UsuarioContent({ profile, refresh }: UsuarioContentProps) {
           {profile.moderation_history.map((entry, i) => (
             <Text key={i} style={styles.historyEntry}>
               <Text style={styles.historyDate}>{formatDayMonth(entry.occurred_at)}</Text>
-              {' — '}{entry.description}
+              {' — '}{moderationEntryText(entry)}
             </Text>
           ))}
         </View>
@@ -277,7 +261,8 @@ type UsuarioFooterProps = {
  */
 function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: UsuarioFooterProps) {
   const isActive = profile.moderation_status === 'ACTIVE';
-  const reports = profile.reports_received;
+  const reports = profile.metrics.report_count;
+  const name = adminUserName(profile);
   // Sem a `AdminNav` embaixo (telas internas), o rodapé soma a safe area.
   const insets = useSafeAreaInsets();
 
@@ -291,7 +276,7 @@ function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: Usuar
             size="LG"
             onPress={() => onAction('BAN')}
             disabled={isModerating}
-            accessibilityLabel={`Banir ${profile.name}`}
+            accessibilityLabel={`Banir ${name}`}
             style={styles.mainAction}
           />
           <Button
@@ -300,7 +285,7 @@ function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: Usuar
             size="LG"
             onPress={() => onAction('SUSPEND')}
             disabled={isModerating}
-            accessibilityLabel={`Suspender ${profile.name} por ${SUSPENSION_DAYS} dias`}
+            accessibilityLabel={`Suspender ${name} por ${SUSPENSION_DAYS} dias`}
             style={styles.mainAction}
           />
         </View>
@@ -311,14 +296,14 @@ function UsuarioFooter({ profile, isModerating, onAction, onViewReports }: Usuar
           size="LG"
           onPress={() => onAction('REVERT')}
           disabled={isModerating}
-          accessibilityLabel={`${revertLabel(profile)} de ${profile.name}`}
+          accessibilityLabel={`${revertLabel(profile)} de ${name}`}
         />
       )}
       {reports > 0 && (
         <Pressable
           onPress={onViewReports}
           accessibilityRole="link"
-          accessibilityLabel={`${reportsLinkLabel(reports)} contra ${profile.name}`}
+          accessibilityLabel={`${reportsLinkLabel(reports)} contra ${name}`}
           hitSlop={spacing[8]}
           style={({ pressed }) => [styles.reportsLink, pressed && { opacity: pressedOpacity }]}
         >
@@ -387,7 +372,7 @@ export default function AdminUsuario() {
 
   return (
     <View style={styles.screen}>
-      <UsuarioHeader name={data?.name ?? 'Usuário'} onBack={() => router.back()} />
+      <UsuarioHeader name={data ? adminUserName(data) : 'Usuário'} onBack={() => router.back()} />
 
       <View style={styles.bodyWrap}>
         <View style={[styles.bodyWrap, isOffline && styles.bodyBelowBanner]}>
@@ -410,7 +395,7 @@ export default function AdminUsuario() {
         <Dialog
           visible
           variant={DIALOG_VARIANT[pendingAction]}
-          title={dialogTitle(pendingAction, data.name)}
+          title={dialogTitle(pendingAction, adminUserName(data))}
           onConfirm={() => { void handleConfirm(); }}
           onCancel={() => { if (!isModerating) setPendingAction(null); }}
           isLoading={isModerating}
