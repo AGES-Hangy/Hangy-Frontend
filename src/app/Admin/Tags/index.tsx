@@ -55,20 +55,22 @@ function TagsSkeleton() {
 function CategorySection({ category }: { category: TagNode }) {
   return (
     <View style={styles.section}>
-      <SectionHeader
-        title={`${category.name.toLocaleUpperCase('pt-BR')} (${category.children.length})`}
-        variant="overline"
-        action
-        actionLabel="Editar"
-        showActionIcon={false}
-        actionAccessibilityLabel={`Editar categoria ${category.name}`}
-        onActionPress={() =>
-          router.push({
-            pathname: '/Admin/Tags/[categoryId]/Editar',
-            params: { categoryId: category.id },
-          })
-        }
-      />
+      <View style={{ paddingRight: spacing[16] }}>
+        <SectionHeader
+            title={`${category.name.toLocaleUpperCase('pt-BR')} (${category.children.length})`}
+            variant="overline"
+            action
+            actionLabel="Editar"
+            showActionIcon={false}
+            actionAccessibilityLabel={`Editar categoria ${category.name}`}
+            onActionPress={() =>
+              router.push({
+                pathname: '/Admin/Tags/[categoryId]/Editar',
+                params: { categoryId: category.id },
+              })
+            }
+        />
+      </View>
       <View style={styles.chips}>
         {category.children.map((tag) => (
           // Só leitura: o `Chip` não tem modo não interativo, então tiro o papel de botão.

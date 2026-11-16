@@ -163,7 +163,7 @@ export default function NovaTag() {
               reserveMessageSpace
             />
             <View style={styles.categories}>
-              <SectionHeader title="CATEGORIA" variant="overline" />
+              <Text style={styles.categoryTitle}>CATEGORIA</Text>
               {renderCategories()}
             </View>
           </ScrollView>
@@ -187,8 +187,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg.base },
   body: { flex: 1 },
   bodyBelowBanner: { paddingTop: OFFLINE_BANNER_OFFSET },
-  content: { padding: spacing[16], gap: spacing[16] },
-  categories: { gap: spacing[8] },
+  content: { padding: spacing[16] },
+  categories: { gap: spacing[8], marginTop: -spacing[8] },
   categoriesMessage: { gap: spacing[8], alignItems: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[8] },
   messageText: { ...typography.bodyM, color: colors.text.secondary },
@@ -196,5 +196,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing[12],
     paddingHorizontal: spacing[16],
     backgroundColor: colors.bg.base,
+  },
+  categoryTitle: {
+    ...typography.overline,
+    color: colors.text.primary,
   },
 });

@@ -291,27 +291,30 @@ export default function EditarCategoria() {
               reserveMessageSpace
             />
 
-            <SectionHeader title={`TAGS (${category.children.length})`} variant="overline" />
-            {category.children.length === 0 ? (
-              <Text style={styles.messageText}>Esta categoria ainda não tem tags.</Text>
-            ) : (
-              <View style={styles.chips}>
-                {category.children.map((tag) => (
-                  // O Design System não tem `Level=Micro, Removable=True`: usa a variante macro
-                  // removível, como a task orienta (o fill tonal certo pede nova variante no `Chip`).
-                  <Chip
-                    key={tag.id}
-                    label={tag.name}
-                    categoryType="macro"
-                    size="md"
-                    isSelected
-                    showRemoveIcon
-                    accessibilityLabel={`Tag ${tag.name}`}
-                    onRemove={() => setDialog({ kind: 'remove-tag', tag })}
-                  />
-                ))}
-              </View>
-            )}
+            <View style={styles.tagsSection}>
+              <Text style={styles.sectionTitle}>
+                {`TAGS (${category.children.length})`}
+              </Text>
+
+              {category.children.length === 0 ? (
+                <Text style={styles.messageText}>Esta categoria ainda não tem tags.</Text>
+              ) : (
+                <View style={styles.chips}>
+                  {category.children.map((tag) => (
+                    <Chip
+                      key={tag.id}
+                      label={tag.name}
+                      categoryType="macro"
+                      size="md"
+                      isSelected
+                      showRemoveIcon
+                      accessibilityLabel={`Tag ${tag.name}`}
+                      onRemove={() => setDialog({ kind: 'remove-tag', tag })}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
           </ScrollView>
 
           <View style={[styles.footer, { paddingBottom: spacing[16] + insets.bottom }]}>
@@ -431,5 +434,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing[12],
     paddingHorizontal: spacing[16],
     backgroundColor: colors.bg.base,
+  },
+  tagsSection: {
+    gap: spacing[8],
+    marginTop: -spacing[16],
+  },
+  sectionTitle: {
+    ...typography.overline,
+    color: colors.text.primary,
   },
 });
