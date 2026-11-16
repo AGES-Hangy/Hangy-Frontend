@@ -1,3 +1,4 @@
+import type { ReportStatus } from '@/types/admin';
 import type { ReportTarget } from '@/types/report';
 import type { UserEventsTab } from '@/types/user';
 
@@ -276,6 +277,29 @@ export const endpoints = {
    * pagina ainda: pede a maior página aceita (1–100) e ignora o `next_cursor`.
    */
   adminAuditLog: () => `/admin/audit-log?limit=${ADMIN_AUDIT_LOG_PAGE_LIMIT}`,
+  /**
+   * Fila de denúncias, agrupada por alvo e paginada por cursor (task 244 [BE]).
+   * Sem `status`, devolve tudo menos as arquivadas (`REJECTED`). `target_user_id` e
+   * `target_event_id` (task 297 [BE]) não podem ir juntos.
+   */
+  adminReports: (options: {
+    status?: ReportStatus;
+    search?: string;
+    targetUserId?: string | null;
+    targetEventId?: string | null;
+    limit?: number;
+    cursor?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    if (options.status) params.set('status', options.status);
+    if (options.search) params.set('search', options.search);
+    if (options.targetUserId) params.set('target_user_id', options.targetUserId);
+    if (options.targetEventId) params.set('target_event_id', options.targetEventId);
+    if (options.limit !== undefined) params.set('limit', String(options.limit));
+    if (options.cursor) params.set('cursor', options.cursor);
+    const query = params.toString();
+    return `/admin/reports${query ? `?${query}` : ''}`;
+  },
   /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). Só `ADMIN`. */
   adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
   /**
@@ -287,6 +311,8 @@ export const endpoints = {
   adminUsers: (query: string) => `/admin/users${query ? `?${query}` : ''}`,
   /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
   adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
+  /** Ficha de moderação de um evento: local exato, status e métricas. Só `ADMIN`. */
+  adminEvent: (eventId: string) => `/admin/events/${encodeURIComponent(eventId)}`,
   /**
    * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
    * `PATCH` com união discriminada por `action`: `BAN`, `SUSPEND` (+ `duration_days`) ou `REVERT`.

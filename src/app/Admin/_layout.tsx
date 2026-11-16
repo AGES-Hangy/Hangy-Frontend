@@ -8,13 +8,13 @@ import { colors } from '@/constants/colors';
 import { AdminGuard } from '@/utils/AdminGuard';
 
 /**
- * Rota de cada seção da `AdminNav`. Denúncias (task 260) entra aqui quando
- * existir. Conteúdo é a gestão de tags (task 264).
+ * Rota de cada seção da `AdminNav`. Conteúdo é a gestão de tags (task 264).
  */
 const ROUTE_BY_DESTINATION: Partial<
-  Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Usuarios' | '/Admin/Tags'>
+  Record<AdminNavDestination, '/Admin/Painel' | '/Admin/Denuncias' | '/Admin/Usuarios' | '/Admin/Tags'>
 > = {
   Painel: '/Admin/Painel',
+  Denuncias: '/Admin/Denuncias',
   Usuarios: '/Admin/Usuarios',
   Conteudo: '/Admin/Tags',
 };

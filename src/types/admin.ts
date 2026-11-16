@@ -71,40 +71,52 @@ export interface RecentReportCardModel {
 /** Status de moderação de usuário — `UserModerationStatusEnum` do backend. */
 export type UserModerationStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 
-/** Uma entrada do histórico de ações de moderação sobre o usuário. */
+/** Ação registrada no histórico de moderação de um usuário. */
+export type ModerationHistoryAction = 'BANNED' | 'SUSPENDED' | 'REVERTED';
+
+/** Uma entrada do histórico de moderação (`AdminModerationEntryOutput` do backend). */
 export interface ModerationHistoryEntry {
+  action: ModerationHistoryAction | (string & {});
+  /** Admin que aplicou a ação; `null` quando a conta dele não existe mais. */
+  actor: { id: string; name: string | null } | null;
   /** ISO 8601. */
   occurred_at: string;
-  /** Descrição da ação, ex.: "Banido permanentemente · Denúncia #1042". */
-  description: string;
+  /** Denúncia que motivou a ação, quando houver. */
+  report_id: string | null;
+}
+
+/** Contagens da ficha (`AdminUserMetricsOutput` do backend). */
+export interface AdminUserMetrics {
+  /** Eventos criados pelo usuário. */
+  event_count: number;
+  /** Eventos que ele cancelou. */
+  event_cancelled_count: number;
+  /**
+   * Denúncias recebidas, fora as arquivadas. Hoje o backend soma as contra a
+   * conta e as contra os eventos dela.
+   */
+  report_count: number;
+  /** Denúncias procedentes (encerradas com ação). */
+  report_upheld_count: number;
 }
 
 /**
- * Contrato de `GET /admin/users/{user_id}` (task 249 [BE]).
- * Ficha completa do usuário para moderação.
+ * Contrato de `GET /admin/users/{user_id}` (`AdminUserDetailOutput`, task 249 [BE]).
+ * A API não manda foto: a ficha mostra o avatar padrão.
  */
 export interface AdminUserProfile {
   user_id: string;
-  name: string;
-  /** URI da foto de perfil, ou `null` quando não há foto. */
-  avatar_url: string | null;
+  name: string | null;
   email: string;
-  /** ISO 8601 — data de cadastro. */
-  joined_at: string;
+  /** Data de cadastro, `YYYY-MM-DD`. */
+  member_since: string;
   moderation_status: UserModerationStatus;
   /** Presente quando `moderation_status` é `SUSPENDED`. ISO 8601. */
   suspended_until: string | null;
   /** Presente quando `moderation_status` é `BANNED`. ISO 8601. */
   banned_at: string | null;
-  /** Total de eventos criados pelo usuário. */
-  events_created: number;
-  /** Eventos cancelados pelo usuário. */
-  events_cancelled: number;
-  /** Total de denúncias recebidas (em qualquer status). */
-  reports_received: number;
-  /** Denúncias procedentes (RESOLVED). */
-  reports_upheld: number;
-  /** Entradas do histórico de moderação, da mais recente para a mais antiga. */
+  metrics: AdminUserMetrics;
+  /** Da mais recente para a mais antiga. */
   moderation_history: ModerationHistoryEntry[];
 }
 

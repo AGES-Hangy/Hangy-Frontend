@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdminUserRow } from '@/components/AdminUserRow';
@@ -10,16 +10,18 @@ import { Button } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import type { DialogVariant } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
+import { EventCard } from '@/components/EventCard';
 import { Icon } from '@/components/Icon';
 import { SectionHeader } from '@/components/SectionHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { TopAppBar } from '@/components/TopAppBar';
 import { colors, palette } from '@/constants/colors';
-import { layout, radius, spacing } from '@/constants/layout';
+import { layout, pressedOpacity, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
 import { useAdminReport } from '@/hooks/useAdminReport';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useEvent } from '@/hooks/useEvent';
 import { SUSPENSION_DAYS, useReportModeration } from '@/hooks/useReportModeration';
 import type { ReportModerationAction } from '@/hooks/useReportModeration';
 import type { AdminReportDetail, ReportResolutionAction } from '@/types/adminReport';
@@ -36,6 +38,8 @@ import {
 } from '@/utils/adminReport';
 
 const metrics = layout.adminReport;
+/** A linha "Denunciado por" tem uma linha de Body S: o hitSlop completa os 44 de toque. */
+const REPORTER_HIT_SLOP = Math.max(0, (44 - typography.bodyS.lineHeight) / 2);
 
 const DIALOG_VARIANT: Record<ReportModerationAction, DialogVariant> = {
   BAN: 'BanUser',
@@ -60,6 +64,16 @@ function removableEvent(report: AdminReportDetail) {
   return report.target.type === 'EVENT' && report.event?.moderation_status === 'ACTIVE' ? report.event : null;
 }
 
+/** Ficha de moderação de uma conta: a denunciada, o organizador ou quem denunciou. */
+function openUserSheet(userId: string) {
+  router.push(`/Admin/Usuarios/${encodeURIComponent(userId)}`);
+}
+
+/** Ficha de moderação do evento: local exato, status e métricas, em vez da página do app. */
+function openEventSheet(eventId: string) {
+  router.push(`/Admin/Eventos/${encodeURIComponent(eventId)}`);
+}
+
 /** Sem histórico (link direto, refresh na Web), voltar cai no Painel, não na área comum. */
 function goBack() {
   if (router.canGoBack()) router.back();
@@ -72,13 +86,16 @@ function goBack() {
  * (a denúncia aberta conta como uma das denúncias da conta).
  */
 function targetRowProps(report: AdminReportDetail): AdminUserRowProps {
+  const isEvent = report.target.type === 'EVENT';
   const base = {
     name: targetName(report),
-    summary: targetSummary(report),
+    // O frame do organizador mostra só as contagens ("8 eventos · sem denúncias").
+    summary: isEvent ? undefined : targetSummary(report),
     avatarUri: report.organizer?.photo_url ?? undefined,
+    onPress: () => openUserSheet(report.target.id),
   };
   const { moderation_status: status, event_count: eventCount } = report.target;
-  const reportCount = report.previous_reports.total + 1;
+  const reportCount = report.organizer?.reports_count ?? report.previous_reports.total + 1;
   // O `summary` substitui o texto montado com `untilDate`; mesmo assim, a data
   // só vai quando tem o significado da prop: "banido em" é a data da resolução
   // que baniu. O detalhe não traz o fim da suspensão, então ela fica vazia.
@@ -87,7 +104,7 @@ function targetRowProps(report: AdminReportDetail): AdminUserRowProps {
     return { ...base, moderationStatus: 'BANNED', untilDate: bannedOn, reportCount };
   }
   if (status === 'SUSPENDED') return { ...base, moderationStatus: 'SUSPENDED', untilDate: '', reportCount };
-  return { ...base, moderationStatus: 'ACTIVE', eventCount };
+  return { ...base, moderationStatus: 'ACTIVE', eventCount, ...(isEvent ? { reportCount } : {}) };
 }
 
 function dialogTitle(action: ReportModerationAction, report: AdminReportDetail) {
@@ -133,6 +150,9 @@ export default function AdminReportDetailScreen() {
   const refreshFailed = report !== null && !isLoading && error !== null;
 
   const { ban, suspend, archive, removeEvent, pendingAction } = useReportModeration();
+  // O detalhe da denúncia só traz id e título do evento: capa, data, local e
+  // privacidade do card vêm do próprio evento.
+  const reportedEvent = useEvent(report?.target.type === 'EVENT' ? report.event?.id : undefined);
   const { user } = useCurrentUser();
   const { addToast } = useToast();
   const insets = useSafeAreaInsets();
@@ -219,24 +239,45 @@ export default function AdminReportDetailScreen() {
           {report.target.type === 'EVENT' && report.event ? (
             <>
               <SectionHeader title="EVENTO DENUNCIADO" variant="overline" />
-              <View
-                style={styles.event}
-                accessible
-                accessibilityLabel={`Evento ${report.event.title}${report.event.moderation_status === 'REMOVED' ? ', removido' : ''}`}
-              >
-                <Icon name="calendar" size={metrics.reasonIconSize} color={colors.text.secondary} />
-                <Text style={[typography.labelM, styles.eventTitle]} numberOfLines={2}>
-                  {report.event.title}
-                </Text>
-                {report.event.moderation_status === 'REMOVED' ? (
-                  <Text style={[typography.bodyS, styles.eventRemoved]}>Removido</Text>
-                ) : null}
-              </View>
+              {reportedEvent.event ? (
+                <EventCard
+                  variant="Compact"
+                  event={{
+                    id: reportedEvent.event.event_id,
+                    title: reportedEvent.event.title,
+                    date: reportedEvent.event.event_date,
+                    location: reportedEvent.event.location_name,
+                    imageUrl: reportedEvent.event.cover_photo_url ?? '',
+                    privacy: reportedEvent.event.privacy,
+                  }}
+                  onPress={() => openEventSheet(report.event?.id ?? '')}
+                />
+              ) : reportedEvent.isLoading ? (
+                <Skeleton height={layout.eventCard.compactHeight} radius="md" />
+              ) : (
+                // Sem o evento na API pública (removido), fica o título que a
+                // denúncia traz; a ficha do painel continua existindo.
+                <Pressable
+                  onPress={() => openEventSheet(report.event?.id ?? '')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver a ficha do evento ${report.event.title}`}
+                  style={({ pressed }) => [styles.event, pressed && { opacity: pressedOpacity }]}
+                >
+                  <Icon name="calendar" size={metrics.reasonIconSize} color={colors.text.secondary} />
+                  <Text style={[typography.labelM, styles.eventTitle]} numberOfLines={2}>
+                    {report.event.title}
+                  </Text>
+                  <Icon name="chevron-right" size={metrics.reasonIconSize} color={colors.text.tertiary} />
+                </Pressable>
+              )}
+              {report.event.moderation_status === 'REMOVED' ? (
+                <Text style={[typography.bodyS, styles.eventRemoved]}>Evento removido</Text>
+              ) : null}
             </>
           ) : null}
 
           <SectionHeader
-            title={report.target.type === 'EVENT' ? 'ORGANIZADOR DO EVENTO DENUNCIADO' : 'CONTA DENUNCIADA'}
+            title={report.target.type === 'EVENT' ? 'ORGANIZADOR' : 'CONTA DENUNCIADA'}
             variant="overline"
           />
           <AdminUserRow {...targetRowProps(report)} />
@@ -250,13 +291,28 @@ export default function AdminReportDetailScreen() {
           <SectionHeader title="RELATO DE QUEM DENUNCIOU" variant="overline" />
           <View style={styles.statement}>
             <Text style={[typography.bodyM, styles.statementText]}>{`“${report.description}”`}</Text>
-            <Text style={[typography.bodyS, styles.statementMeta]}>
-              {`Denunciado por ${shortName(report.reported_by.name)} · ${formatShortDateTime(report.reported_at)}`}
-            </Text>
+            <Pressable
+              onPress={() => openUserSheet(report.reported_by.id)}
+              accessibilityRole="link"
+              accessibilityLabel={`Ver a ficha de ${report.reported_by.name?.trim() || 'quem denunciou'}`}
+              hitSlop={REPORTER_HIT_SLOP}
+              style={({ pressed }) => pressed && { opacity: pressedOpacity }}
+            >
+              <Text style={[typography.bodyS, styles.statementMeta]}>
+                {'Denunciado por '}
+                <Text style={styles.reporterName}>{shortName(report.reported_by.name)}</Text>
+                {` · ${formatShortDateTime(report.reported_at)}`}
+              </Text>
+            </Pressable>
           </View>
 
-          <SectionHeader title="HISTÓRICO DA CONTA" variant="overline" />
-          <Text style={[typography.bodyM, styles.history]}>{previousReportsSummary(report)}</Text>
+          {/* O frame da denúncia de evento não tem histórico: a ficha do organizador tem. */}
+          {report.target.type === 'EVENT' ? null : (
+            <>
+              <SectionHeader title="HISTÓRICO DA CONTA" variant="overline" />
+              <Text style={[typography.bodyM, styles.history]}>{previousReportsSummary(report)}</Text>
+            </>
+          )}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: spacing[16] + insets.bottom }]}>
@@ -275,24 +331,46 @@ export default function AdminReportDetailScreen() {
                 style={styles.secondaryAction}
               />
             </View>
+          ) : open && report.target.type === 'EVENT' ? (
+            <>
+              {/* Frame "Denúncia de evento": remover ou arquivar; banir e suspender ficam na ficha. */}
+              <View style={styles.mainActions}>
+                {event ? (
+                  <Button
+                    label="Remover evento"
+                    variant="Danger"
+                    size="LG"
+                    onPress={() => setDialog('REMOVE_EVENT')}
+                    disabled={actionsLocked}
+                    accessibilityLabel={`Remover o evento ${event.title}`}
+                    style={[styles.mainAction, styles.eventAction]}
+                  />
+                ) : null}
+                <Button
+                  label="Arquivar denúncia"
+                  variant="Secondary"
+                  size="LG"
+                  onPress={() => setDialog('ARCHIVE')}
+                  disabled={actionsLocked}
+                  accessibilityLabel={`Arquivar a denúncia #${report.report_number} sem ação`}
+                  style={[styles.mainAction, styles.eventAction]}
+                />
+              </View>
+              <Button
+                label="Ver ficha do organizador"
+                variant="Tertiary"
+                size="SM"
+                onPress={() => openUserSheet(report.target.id)}
+                accessibilityLabel={`Ver a ficha de ${targetName(report)}`}
+                style={styles.secondaryAction}
+              />
+            </>
           ) : open ? (
             <>
-              {event ? (
-                <Button
-                  label="Remover evento"
-                  variant="Danger"
-                  size="LG"
-                  onPress={() => setDialog('REMOVE_EVENT')}
-                  disabled={actionsLocked}
-                  accessibilityLabel={`Remover o evento ${event.title}`}
-                />
-              ) : null}
               <View style={styles.mainActions}>
                 <Button
                   label="Banir usuário"
-                  // Em denúncia de evento, remover é a ação principal; banir o
-                  // organizador continua disponível, sem competir com ela.
-                  variant={event ? 'Secondary' : 'Danger'}
+                  variant="Danger"
                   size="LG"
                   onPress={() => setDialog('BAN')}
                   disabled={actionsLocked}
@@ -390,6 +468,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[8],
+    // A linha abre a ficha do evento: alvo de toque do DS.
+    minHeight: 44,
   },
   eventTitle: {
     flexShrink: 1,
@@ -421,6 +501,11 @@ const styles = StyleSheet.create({
   statementMeta: {
     color: colors.text.tertiary,
   },
+  // Quem denunciou abre a ficha dele: o nome ganha a cor de link.
+  reporterName: {
+    color: colors.text.brand,
+  },
+
   history: {
     color: colors.text.secondary,
   },
@@ -437,6 +522,11 @@ const styles = StyleSheet.create({
   mainAction: {
     flex: 1,
     minWidth: 0,
+  },
+  // "Arquivar denúncia" cabe no frame com a fonte do DS; com a do sistema, mais
+  // larga, o padding de 24 do LG cortaria o rótulo na largura de 176.
+  eventAction: {
+    paddingHorizontal: spacing[12],
   },
   secondaryAction: {
     alignSelf: 'center',
