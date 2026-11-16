@@ -1,7 +1,8 @@
 import type { ReportStatus } from '@/types/admin';
 import type { AdminReportQueueItem } from '@/types/adminReport';
 import { reportSubtitle, reportTargetName, reportTargetOf } from '@/utils/adminDashboard';
-import { reportReasonLabel } from '@/utils/adminReport';
+import { reportReasonLabel, shortName } from '@/utils/adminReport';
+import { formatRelativeTime } from '@/utils/datetime';
 
 /**
  * Abas do frame. Arquivadas (`REJECTED`) ficam fora: o frame tem só estas três
@@ -25,12 +26,24 @@ export function reportQueueCard(item: AdminReportQueueItem) {
     targetName: reportTargetName(item.target_type, item.target_name),
     // A API da fila não manda foto nem capa: o card mostra o ícone.
     targetImageUrl: null,
-    subtitle: reportSubtitle(item.report_count, item.opened_at),
+    subtitle: reportQueueSubtitle(item),
     moderationStatus: item.status,
     reason: reportReasonLabel(item.reason),
     descriptionExcerpt: item.description_excerpt,
     reportNumber: item.report_number,
   };
+}
+
+/**
+ * Linha de apoio do card. Evento mostra quem organiza, como no frame
+ * ("Organizado por Marina S. · há 5 h"); conta mostra quantas denúncias.
+ */
+export function reportQueueSubtitle(item: AdminReportQueueItem): string {
+  const organizer = item.target_type === 'EVENT' ? item.organizer_name?.trim() : null;
+  if (!organizer) return reportSubtitle(item.report_count, item.opened_at);
+  const when = formatRelativeTime(item.opened_at);
+  const who = `Organizado por ${shortName(organizer)}`;
+  return when ? `${who} · ${when}` : who;
 }
 
 /**

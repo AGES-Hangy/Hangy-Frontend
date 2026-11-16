@@ -91,6 +91,11 @@ export interface AdminReportDetail {
   organizer?: AdminReportOrganizer | null;
   /** Ausente fora de denúncias de evento (e no backend anterior ao #136). */
   event?: AdminReportEvent | null;
+  /**
+   * Denúncias abertas (pendentes ou em análise) contra o mesmo alvo, esta
+   * incluída: o "N relatos" do frame. Ausente no backend anterior.
+   */
+  open_report_count?: number;
 }
 
 /**
@@ -104,6 +109,8 @@ export interface AdminReportQueueItem {
   target_type: AdminReportTarget['type'] | null;
   /** Nome da conta ou título do evento. */
   target_name: string | null;
+  /** Só em linha de evento: quem organiza. Ausente no backend anterior à ficha de evento. */
+  organizer_name?: string | null;
   report_count: number;
   status: ReportStatus | (string & {});
   reason: ReportReason | (string & {});

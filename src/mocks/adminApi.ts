@@ -62,6 +62,7 @@ const FILA: LinhaDaFila[] = [
     report_number: 1043,
     target_type: 'EVENT',
     target_name: 'Churrasco na Redenção',
+    organizer_name: 'Marina Souza',
     report_count: 1,
     status: 'PENDING',
     reason: 'INAPPROPRIATE_CONTENT',

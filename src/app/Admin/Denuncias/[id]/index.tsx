@@ -69,6 +69,11 @@ function openUserSheet(userId: string) {
   router.push(`/Admin/Usuarios/${encodeURIComponent(userId)}`);
 }
 
+/** Ficha de moderação do evento: local exato, status e métricas, em vez da página do app. */
+function openEventSheet(eventId: string) {
+  router.push(`/Admin/Eventos/${encodeURIComponent(eventId)}`);
+}
+
 /** Sem histórico (link direto, refresh na Web), voltar cai no Painel, não na área comum. */
 function goBack() {
   if (router.canGoBack()) router.back();
@@ -245,18 +250,25 @@ export default function AdminReportDetailScreen() {
                     imageUrl: reportedEvent.event.cover_photo_url ?? '',
                     privacy: reportedEvent.event.privacy,
                   }}
-                  onPress={() => router.push(`/EventDetail?id=${encodeURIComponent(report.event?.id ?? '')}`)}
+                  onPress={() => openEventSheet(report.event?.id ?? '')}
                 />
               ) : reportedEvent.isLoading ? (
                 <Skeleton height={layout.eventCard.compactHeight} radius="md" />
               ) : (
-                // Sem o evento (removido ou indisponível), fica o título que a denúncia traz.
-                <View style={styles.event} accessible accessibilityLabel={`Evento ${report.event.title}`}>
+                // Sem o evento na API pública (removido), fica o título que a
+                // denúncia traz; a ficha do painel continua existindo.
+                <Pressable
+                  onPress={() => openEventSheet(report.event?.id ?? '')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver a ficha do evento ${report.event.title}`}
+                  style={({ pressed }) => [styles.event, pressed && { opacity: pressedOpacity }]}
+                >
                   <Icon name="calendar" size={metrics.reasonIconSize} color={colors.text.secondary} />
                   <Text style={[typography.labelM, styles.eventTitle]} numberOfLines={2}>
                     {report.event.title}
                   </Text>
-                </View>
+                  <Icon name="chevron-right" size={metrics.reasonIconSize} color={colors.text.tertiary} />
+                </Pressable>
               )}
               {report.event.moderation_status === 'REMOVED' ? (
                 <Text style={[typography.bodyS, styles.eventRemoved]}>Evento removido</Text>
@@ -456,6 +468,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[8],
+    // A linha abre a ficha do evento: alvo de toque do DS.
+    minHeight: 44,
   },
   eventTitle: {
     flexShrink: 1,

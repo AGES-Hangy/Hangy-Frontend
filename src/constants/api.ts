@@ -311,6 +311,8 @@ export const endpoints = {
   adminUsers: (query: string) => `/admin/users${query ? `?${query}` : ''}`,
   /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */
   adminUser: (userId: string) => `/admin/users/${encodeURIComponent(userId)}`,
+  /** Ficha de moderação de um evento: local exato, status e métricas. Só `ADMIN`. */
+  adminEvent: (eventId: string) => `/admin/events/${encodeURIComponent(eventId)}`,
   /**
    * Aplica uma ação de moderação sobre um usuário (task 249 [BE]). Só `ADMIN`.
    * `PATCH` com união discriminada por `action`: `BAN`, `SUSPEND` (+ `duration_days`) ou `REVERT`.

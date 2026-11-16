@@ -97,7 +97,9 @@ export function previousReportsSummary(report: AdminReportDetail): string {
 export function reportStateLine(report: AdminReportDetail): string {
   if (isReportOpen(report.status)) {
     const opened = formatRelativeTime(report.opened_at);
-    return opened ? `Aberta ${opened}` : '';
+    const count = report.open_report_count;
+    const reports = count ? `${count} ${count === 1 ? 'relato' : 'relatos'}` : '';
+    return [opened ? `Aberta ${opened}` : '', reports].filter(Boolean).join(' · ');
   }
   const closedAt = report.resolution?.resolved_at;
   const verb = report.status === 'REJECTED' ? 'Arquivada' : 'Encerrada';

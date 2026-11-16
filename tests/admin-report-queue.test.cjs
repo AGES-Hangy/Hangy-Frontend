@@ -32,9 +32,11 @@ function load(file, imports = {}) {
 }
 
 const datetime = load('src/utils/datetime.ts');
+const adminReport = load('src/utils/adminReport.ts', { '@/utils/datetime': datetime });
 const { reportQueueCard, reportQueueEmptyCopy, reportQueueTargetLabel, reportQueueTargetName, REPORT_QUEUE_TABS } = load('src/utils/adminReportQueue.ts', {
   '@/utils/adminDashboard': load('src/utils/adminDashboard.ts', { '@/utils/datetime': datetime }),
-  '@/utils/adminReport': load('src/utils/adminReport.ts', { '@/utils/datetime': datetime }),
+  '@/utils/adminReport': adminReport,
+  '@/utils/datetime': datetime,
 });
 
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -93,4 +95,20 @@ test('o estado vazio prioriza busca, depois alvo, depois a aba', () => {
   assert.equal(reportQueueEmptyCopy({ ...base, tab: 'RESOLVED' }).title, 'Nenhuma denúncia por aqui');
   assert.equal(reportQueueEmptyCopy({ ...base, isTargeted: true }).text, 'Não há denúncias deste alvo nesta aba.');
   assert.equal(reportQueueEmptyCopy({ ...base, search: 'ana', isTargeted: true }).title, 'Nenhuma denúncia encontrada');
+});
+
+test('linha de evento mostra quem organiza; sem o nome, cai na contagem', () => {
+  const evento = item({ target_type: 'EVENT', target_name: 'Churrasco', organizer_name: 'Marina Souza' });
+  assert.equal(reportQueueCard(evento).subtitle, 'Organizado por Marina S. · há 2 h');
+  assert.match(reportQueueCard({ ...evento, organizer_name: null }).subtitle, /^3 denúncias · /);
+  // Conta ignora o campo mesmo se vier.
+  assert.match(reportQueueCard(item({ organizer_name: 'Outra' })).subtitle, /^3 denúncias · /);
+});
+
+test('detalhe aberto soma os relatos abertos à linha de estado', () => {
+  const base = { status: 'PENDING', opened_at: new Date(NOW - 2 * 60 * 60 * 1000).toISOString(), resolution: null };
+  assert.equal(adminReport.reportStateLine({ ...base, open_report_count: 3 }), 'Aberta há 2 h · 3 relatos');
+  assert.equal(adminReport.reportStateLine({ ...base, open_report_count: 1 }), 'Aberta há 2 h · 1 relato');
+  // Backend anterior, sem o campo.
+  assert.equal(adminReport.reportStateLine(base), 'Aberta há 2 h');
 });
