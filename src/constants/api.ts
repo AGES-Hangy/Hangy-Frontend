@@ -293,4 +293,12 @@ export const endpoints = {
    * com `resolution = EVENT_REMOVED`. A conta do organizador não muda.
    */
   adminEventModeration: (eventId: string) => `/admin/events/${encodeURIComponent(eventId)}/moderation`,
+  /** Cria categoria (`parent_id: null`) ou tag (`parent_id` preenchido). `POST`. Só `ADMIN` (task 264 [FE]). */
+  adminTags: () => '/admin/tags',
+  /**
+   * `PATCH` renomeia; `DELETE` remove tag micro ou a própria categoria. Em tag em uso o
+   * `DELETE` sem `force` devolve 409; só a 2ª chamada, após confirmação, leva `force=true`.
+   */
+  adminTag: (tagId: string, options?: { force?: boolean }) =>
+    `/admin/tags/${encodeURIComponent(tagId)}${options?.force ? '?force=true' : ''}`,
 } as const;
