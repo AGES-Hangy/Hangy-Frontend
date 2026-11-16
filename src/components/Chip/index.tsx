@@ -170,6 +170,8 @@ const styles = StyleSheet.create({
   label: {
     ...typography.labelS,
     textAlign: 'center',
+    // Rótulo longo trunca em vez de empurrar o X para fora do chip.
+    flexShrink: 1,
   },
   badgeText: {
     ...typography.labelS,

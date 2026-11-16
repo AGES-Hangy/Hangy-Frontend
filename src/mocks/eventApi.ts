@@ -1637,7 +1637,7 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     return { items: cenarioAuditoria === 'empty' ? [] : registrosDeAuditoria(), next_cursor: null } as T;
   }
 
-  const admin = resolveAdminMock(partes, method, init);
+  const admin = resolveAdminMock(partes, method, init, path.split('?')[1] ?? '');
   if (admin) {
     if ('semRede' in admin) throw new MockNetworkError();
     if ('erro' in admin) throw new MockApiError(admin.erro.status, admin.erro.detail);
