@@ -8,6 +8,8 @@ import { apiFetch } from '@/utils/http';
 
 export type ConnectResult =
   | { kind: 'sent'; connectionId: string }
+  /** A outra pessoa já tinha pedido: o pedido de volta aceitou o dela. */
+  | { kind: 'connected'; connectionId: string }
   | { kind: 'conflict' | 'unavailable' | 'failed' | 'ignored' };
 
 /**
@@ -36,12 +38,16 @@ export function useConnectionActions() {
         method: 'POST',
         body: JSON.stringify({ receiver_id: receiverId }),
       });
-      return { kind: 'sent', connectionId: result.connection_id };
+      return result.status === 'CONFIRMED'
+        ? { kind: 'connected', connectionId: result.connection_id }
+        : { kind: 'sent', connectionId: result.connection_id };
     } catch (caught) {
       // O `apiFetch` já avisa a sessão expirada e volta para o Login.
       if (isApiErrorLike(caught) && caught.status === 401) return { kind: 'failed' };
       if (isApiErrorLike(caught) && caught.status === 409) return { kind: 'conflict' };
       if (isApiErrorLike(caught) && caught.status === 404) return { kind: 'unavailable' };
+      // Conta comercial não envia pedidos de conexão.
+      if (isApiErrorLike(caught) && caught.status === 403) return { kind: 'unavailable' };
 
       const failure = describeActionError(caught);
       setError(failure.message);

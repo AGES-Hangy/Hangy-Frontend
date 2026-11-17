@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { API_BASE_URL, endpoints } from '@/constants/api';
-import { saveToken } from '@/utils/auth';
+import { saveSession } from '@/utils/auth';
 import type { UserType } from '@/types/event';
 
 export type PersonalRegisterPayload = {
@@ -74,7 +74,8 @@ export function useRegister() {
       const response = await fetch(`${API_BASE_URL}${endpoints.register()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        // O backend guarda e compara e-mails em minúsculas.
+        body: JSON.stringify({ ...payload, email: payload.email.trim().toLowerCase() }),
       });
 
       if (!response.ok) {
@@ -83,7 +84,7 @@ export function useRegister() {
       }
 
       const data = await response.json();
-      await saveToken(data.access_token);
+      await saveSession({ accessToken: data.access_token, refreshToken: data.refresh_token ?? null });
       return {
         accessToken: data.access_token,
         tokenType: data.token_type,

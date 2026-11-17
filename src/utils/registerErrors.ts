@@ -75,6 +75,9 @@ export function mapRegisterError(status: number, body: unknown): RegisterErrorOu
   if (status === 400 && detail === 'CNPJ is invalid') {
     return [{ kind: 'field', field: 'cnpj', message: 'CNPJ inválido ou não encontrado na Receita.' }];
   }
+  if (status === 400 && detail === 'Terms version is outdated') {
+    return [{ kind: 'general', message: 'Os termos de uso foram atualizados. Volte e aceite a versão nova.' }];
+  }
   if (status === 400 && detail === 'Invalid coordinates') {
     return [{ kind: 'general', message: 'Não conseguimos usar esse endereço. Escolha outro no mapa.' }];
   }

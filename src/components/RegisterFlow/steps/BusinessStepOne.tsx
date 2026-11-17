@@ -43,6 +43,8 @@ export function BusinessStepOne({ form, onChange, onSwitchToPersonal, onNext }: 
 
       <TextField
         label="Email"
+        keyboardType="email-address"
+        autoCapitalize="none"
         placeholder="email@email.com"
         value={form.email}
         onChangeText={(text) => onChange({ email: text, errors: { ...form.errors, email: undefined } })}

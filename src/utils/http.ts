@@ -7,8 +7,9 @@ import {
   UPLOAD_RESPONSE_TIMEOUT_MS,
   UPLOAD_STALL_TIMEOUT_MS,
   USE_API_MOCKS,
+  endpoints,
 } from '@/constants/api';
-import { getToken, removeToken } from '@/utils/auth';
+import { getRefreshToken, getToken, removeToken, saveSession } from '@/utils/auth';
 import { resolveMock, resolveUploadMock } from '@/mocks/eventApi';
 
 /** Por que a chamada falhou — separa "o servidor respondeu" de "nem chegou lá". */
@@ -45,10 +46,12 @@ export class ApiError extends Error {
 }
 
 /**
- * Por que a sessão caiu: `expired` é o 401; `changed` é o 403 `Admin access
- * required`, que no uso normal só acontece quando o papel da conta mudou.
+ * Por que a sessão caiu: `expired` é o 401 que nem o refresh token resolveu;
+ * `changed` é o 403 `Admin access required`, que no uso normal só acontece
+ * quando o papel da conta mudou; `moderated` e `deleted` vêm do
+ * `POST /auth/refresh` quando a conta foi banida/suspensa ou excluída.
  */
-export type SessionEndReason = 'expired' | 'changed';
+export type SessionEndReason = 'expired' | 'changed' | 'moderated' | 'deleted';
 
 type SessionExpiredHandler = (reason: SessionEndReason) => void;
 
@@ -74,6 +77,66 @@ async function handleUnauthorized(reason: SessionEndReason = 'expired') {
   await removeToken();
   onSessionExpired?.(reason);
   router.replace('/Login');
+}
+
+type RefreshOutcome = 'refreshed' | SessionEndReason | 'unreachable';
+
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+/**
+ * Troca o refresh token por uma sessão nova. Uma só chamada por vez: as
+ * requisições que tomaram 401 juntas esperam a mesma renovação, porque cada
+ * refresh token vale uma vez e reenviá-lo derrubaria a sessão.
+ */
+export function refreshSession(): Promise<RefreshOutcome> {
+  refreshInFlight ??= (async (): Promise<RefreshOutcome> => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return 'expired';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoints.refresh()}`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        signal: controller.signal,
+      });
+      if (response.ok) {
+        const data = (await response.json()) as { access_token: string; refresh_token: string };
+        await saveSession({ accessToken: data.access_token, refreshToken: data.refresh_token });
+        return 'refreshed';
+      }
+      if (response.status === 403) {
+        const { detail } = await readErrorBody(response);
+        return detail === 'Account has been deleted' ? 'deleted' : 'moderated';
+      }
+      // 401 (token usado, expirado ou revogado) e qualquer 4xx: não há volta.
+      return response.status >= 500 ? 'unreachable' : 'expired';
+    } catch {
+      // Sem rede: a sessão continua salva para a próxima tentativa.
+      return 'unreachable';
+    } finally {
+      clearTimeout(timeout);
+    }
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+/**
+ * Resolve um 401: renova a sessão e diz se vale repetir a requisição. Se o
+ * token salvo já mudou desde o envio, outra requisição renovou antes, e basta
+ * repetir. Sem renovação possível, encerra a sessão como antes.
+ */
+async function recoverFromUnauthorized(sentToken: string | null): Promise<boolean> {
+  const current = await getToken();
+  if (current && current !== sentToken) return true;
+  const outcome = await refreshSession();
+  if (outcome === 'refreshed') return true;
+  if (outcome === 'unreachable') return false;
+  await handleUnauthorized(outcome);
+  return false;
 }
 
 function detailOf(body: unknown): string | null {
@@ -115,33 +178,48 @@ export async function apiFetch<T>(
     return resolveMock<T>(path, init);
   }
 
-  const token = await getToken();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const send = async (): Promise<{ response: Response; token: string | null }> => {
+    const token = await getToken();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    // O `signal` de quem chamou também cancela; antes ele era sobrescrito.
+    const callerSignal = init.signal ?? undefined;
+    const abortByCaller = () => controller.abort();
+    if (callerSignal?.aborted) controller.abort();
+    callerSignal?.addEventListener('abort', abortByCaller);
+    try {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          ...(init.body ? { 'Content-Type': 'application/json' } : null),
+          ...(token ? { Authorization: `Bearer ${token}` } : null),
+          ...init.headers,
+        },
+      });
+      return { response, token };
+    } catch (error) {
+      // Abortado por quem chamou é cancelamento; pelo nosso relógio, timeout;
+      // qualquer outra exceção de `fetch` é falta de rede.
+      if (callerSignal?.aborted) throw new ApiError('cancelled', null, null);
+      const isTimeout = error instanceof Error && error.name === 'AbortError';
+      throw new ApiError(isTimeout ? 'timeout' : 'network', null, null);
+    } finally {
+      clearTimeout(timeout);
+      callerSignal?.removeEventListener('abort', abortByCaller);
+    }
+  };
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        ...(init.body ? { 'Content-Type': 'application/json' } : null),
-        ...(token ? { Authorization: `Bearer ${token}` } : null),
-        ...init.headers,
-      },
-    });
-  } catch (error) {
-    // `abort` é o timeout que agendamos acima; qualquer outra exceção de
-    // `fetch` é falta de rede.
-    const isTimeout = error instanceof Error && error.name === 'AbortError';
-    throw new ApiError(isTimeout ? 'timeout' : 'network', null, null);
-  } finally {
-    clearTimeout(timeout);
+  let { response, token } = await send();
+
+  // Access token vencido: renova com o refresh token e repete uma vez.
+  if (response.status === 401 && !skipUnauthorizedHandler && (await recoverFromUnauthorized(token))) {
+    ({ response, token } = await send());
+    if (response.status === 401) await handleUnauthorized();
   }
 
   if (response.status === 401) {
-    if (!skipUnauthorizedHandler) await handleUnauthorized();
     const { detail, body } = await readErrorBody(response);
     throw new ApiError('http', 401, detail, body);
   }
@@ -325,15 +403,29 @@ export async function apiUpload<T>(
       return await rejectOnAbort(resolveUploadMock<T>(path, file, { onProgress: reportProgress, signal }), signal);
     }
 
-    const token = await getToken().catch(() => { throw new ApiError('network', null, null); });
-    const body = await buildUploadBody(file);
-    if (signal?.aborted) throw new UploadCancelledError();
+    const upload = async () => {
+      const token = await getToken().catch(() => { throw new ApiError('network', null, null); });
+      const body = await buildUploadBody(file);
+      if (signal?.aborted) throw new UploadCancelledError();
+      return { token, ...(await sendUpload(`${API_BASE_URL}${path}`, body, token, reportProgress, signal)) };
+    };
 
-    const { status, text } = await sendUpload(`${API_BASE_URL}${path}`, body, token, reportProgress, signal);
+    let { token, status, text } = await upload();
+
+    if (status === 401) {
+      // Mesma renovação do `apiFetch`: um envio longo pode atravessar o vencimento.
+      let retried = false;
+      try { retried = await recoverFromUnauthorized(token); } catch { /* A limpeza não pode esconder o 401. */ }
+      if (retried) {
+        ({ token, status, text } = await upload());
+        if (status === 401) {
+          try { await handleUnauthorized(); } catch { /* A limpeza não pode esconder o 401. */ }
+        }
+      }
+    }
     const parsed = parseJson(text);
 
     if (status === 401) {
-      try { await handleUnauthorized(); } catch { /* A limpeza não pode esconder o 401. */ }
       throw new ApiError('http', 401, detailOf(parsed?.body), parsed?.body ?? null);
     }
 

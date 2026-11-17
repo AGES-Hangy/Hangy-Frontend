@@ -189,6 +189,26 @@ export function describeActionError(error: unknown): ActionError {
     };
   }
 
+  if (status === 409 && detail === 'Event is cancelled') {
+    return {
+      message: 'Este evento foi cancelado',
+      tone: 'warning',
+      shouldReload: true,
+      readOnly: true,
+      full: false,
+    };
+  }
+
+  if (status === 409 && detail === 'Event creator cannot join their own event') {
+    return {
+      message: 'Você organiza este evento',
+      tone: 'warning',
+      shouldReload: false,
+      readOnly: false,
+      full: false,
+    };
+  }
+
   if (status === 400 && detail === 'Invalid participant status transition') {
     return {
       message: 'Essa ação não é mais possível para este participante',

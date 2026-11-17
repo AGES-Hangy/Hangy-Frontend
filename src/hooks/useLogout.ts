@@ -3,8 +3,27 @@ import { router } from 'expo-router';
 
 import { useToast } from '@/components/Toast';
 import { useUnregisterDevice } from '@/hooks/useUnregisterDevice';
-import { removeToken } from '@/utils/auth';
+import { endpoints } from '@/constants/api';
+import { getRefreshToken, removeToken } from '@/utils/auth';
+import { apiFetch } from '@/utils/http';
 import { removePushToken } from '@/utils/pushToken';
+
+/**
+ * Avisa o backend para invalidar o refresh token deste aparelho. Falhar aqui
+ * (sem rede, por exemplo) não impede sair: o token local é apagado de todo jeito.
+ */
+async function revokeRefreshToken() {
+  try {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return;
+    await apiFetch(endpoints.logout(), {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }, { skipUnauthorizedHandler: true });
+  } catch {
+    // Melhor esforço.
+  }
+}
 
 export function useLogout() {
   const { unregisterDevice } = useUnregisterDevice();
@@ -20,6 +39,7 @@ export function useLogout() {
       // Antes de removeToken porque o DELETE precisa do Bearer.
       await unregisterDevice({ isLoggingOut: true });
       await removePushToken();
+      await revokeRefreshToken();
       await removeToken();
       router.replace('/Login');
     } catch {

@@ -127,7 +127,8 @@ export function useSearchPeople(query: string) {
   async function connectPerson(userId: string) {
     if (!focused.current || connectionRequest.current) return;
     const person = page?.items.find(item => item.user_id === userId);
-    if (person?.connection_status !== null) return;
+    // Recusado conta como sem vínculo: o backend libera um novo pedido.
+    if (person?.connection_status !== null && person?.connection_status !== 'REJECTED') return;
 
     const revision = focus.current;
     const request = connect(userId);
@@ -147,6 +148,15 @@ export function useSearchPeople(query: string) {
           return { ...previous, page: { ...previous.page, items } };
         });
         addToast({ type: 'success', message: 'Solicitação de conexão enviada.' });
+      } else if (result.kind === 'connected') {
+        setState(previous => {
+          if (!previous?.page || previous.term !== term) return previous;
+          const items = previous.page.items.map(item => (
+            item.user_id === userId ? { ...item, connection_status: 'CONFIRMED' as const } : item
+          ));
+          return { ...previous, page: { ...previous.page, items } };
+        });
+        addToast({ type: 'success', message: 'Vocês agora estão conectados.' });
       } else if (result.kind === 'conflict' || result.kind === 'unavailable') {
         const message = result.kind === 'conflict'
           ? 'Já existe um vínculo com esta pessoa.'
