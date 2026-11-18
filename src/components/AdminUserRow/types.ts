@@ -16,6 +16,11 @@ type AdminUserRowBase = {
    * pede outro texto (ex.: "Membro desde 03/2025 · 12 eventos").
    */
   summary?: string;
+  /**
+   * Conta de estabelecimento: avatar de loja e "Empresa" no começo do resumo,
+   * para diferenciar da conta pessoal na lista de moderação.
+   */
+  isBusiness?: boolean;
 };
 
 type ActiveUserRowProps = AdminUserRowBase & {
