@@ -79,14 +79,14 @@ function plural(count: number, singular: string, pluralForm: string) {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
-/** "2 denúncias anteriores · 1 arquivada e 1 encerrada com ação na conta." */
+/** "2 denúncias anteriores · 1 encerrada sem ação e 1 com ação na conta." */
 export function previousReportsSummary(report: AdminReportDetail): string {
   const { total, archived, resolved_with_action: resolved } = report.previous_reports;
   if (total === 0) return 'Nenhuma denúncia anterior contra esta conta.';
 
   const parts = [
-    archived > 0 ? plural(archived, 'arquivada', 'arquivadas') : null,
-    resolved > 0 ? plural(resolved, 'encerrada com ação na conta', 'encerradas com ação na conta') : null,
+    archived > 0 ? plural(archived, 'encerrada sem ação', 'encerradas sem ação') : null,
+    resolved > 0 ? `${resolved} com ação na conta` : null,
   ].filter(Boolean);
 
   const head = plural(total, 'denúncia anterior', 'denúncias anteriores');
@@ -124,6 +124,14 @@ export function resolutionCopy(report: AdminReportDetail): { title: string; text
       return { title, text: 'Ação aplicada: suspensão temporária da conta.' };
     case 'EVENT_REMOVED':
       return { title, text: 'Ação aplicada: evento removido.' };
+    case 'NO_ACTION':
+      return {
+        title,
+        text:
+          report.target.type === 'EVENT'
+            ? 'Resolvida sem nenhuma ação no evento ou na conta.'
+            : 'Resolvida sem nenhuma ação na conta.',
+      };
     default:
       return { title, text: 'Denúncia encerrada.' };
   }

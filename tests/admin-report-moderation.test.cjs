@@ -73,7 +73,8 @@ function host(file, imports, args = []) {
 
 const endpoints = {
   adminReport: (id) => `/admin/reports/${id}`,
-  adminReportArchive: (id) => `/admin/reports/${id}/archive`,
+  adminReportReview: (id) => `/admin/reports/${id}/review`,
+  adminReportResolve: (id) => `/admin/reports/${id}/resolve`,
   adminEventModeration: (id) => `/admin/events/${id}/moderation`,
   adminUserModeration: (id) => `/admin/users/${id}/moderation`,
 };
@@ -121,16 +122,28 @@ test('banir e suspender agem sobre a conta do alvo e resolvem a denúncia junto'
   ]);
 });
 
-test('arquivar usa o endpoint da denúncia e não toca na conta', async () => {
+test('em análise e resolver sem ação usam os endpoints da denúncia e não tocam na conta', async () => {
   const calls = [];
   const { render } = moderationHook(async (url, init) => {
     calls.push({ url, method: init.method, body: init.body });
     return undefined;
   });
 
-  const result = await render().archive('report-1');
-  assert.deepEqual({ ...result }, { status: 'done', moderationStatus: undefined });
-  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ url: '/admin/reports/report-1/archive', method: 'PATCH' }]);
+  assert.deepEqual({ ...(await render().review('report-1')) }, { status: 'done', moderationStatus: undefined });
+  assert.deepEqual({ ...(await render().resolve('report-1')) }, { status: 'done', moderationStatus: undefined });
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    { url: '/admin/reports/report-1/review', method: 'PATCH' },
+    { url: '/admin/reports/report-1/resolve', method: 'PATCH' },
+  ]);
+});
+
+test('colocar em análise uma denúncia que já está em análise avisa e pede recarga', async () => {
+  const { render, toasts } = moderationHook(async () => {
+    throw apiError(409, 'Report already in review');
+  });
+
+  assert.equal((await render().review('r')).status, 'stale');
+  assert.equal(toasts[0].message, 'Esta denúncia já está em análise.');
 });
 
 test('409 e 404 viram "stale" com aviso, para a tela recarregar', async () => {
@@ -174,7 +187,7 @@ test('falha de rede e de servidor mostram toast de erro; 401 fica com o tratamen
   const { render, toasts } = moderationHook(async () => { throw errors.shift(); });
 
   assert.equal((await render().ban('u', 'r')).status, 'failed');
-  assert.equal((await render().archive('r')).status, 'failed');
+  assert.equal((await render().resolve('r')).status, 'failed');
   assert.equal(render().error, 'Não foi possível concluir a ação. Tente de novo.');
   assert.equal((await render().suspend('u', 'r')).status, 'failed');
   assert.deepEqual(
@@ -287,8 +300,21 @@ test('mock: banir resolve a denúncia e o GET seguinte já vem resolvido', () =>
   assert.equal(resposta.target.moderation_status, 'BANNED');
   assert.equal(resposta.resolution.action, 'BANNED');
 
-  const again = resolveAdminMock(['admin', 'reports', 'mock-ban', 'archive'], 'PATCH', {});
+  const again = resolveAdminMock(['admin', 'reports', 'mock-ban', 'resolve'], 'PATCH', {});
   assert.deepEqual({ ...again.erro }, { status: 409, detail: 'Report already resolved' });
+});
+
+test('mock: pendente vai para análise uma vez e resolve sem ação', () => {
+  const { resolveAdminMock } = loadMock();
+  const review = () => resolveAdminMock(['admin', 'reports', 'pending', 'review'], 'PATCH', {});
+
+  assert.equal(review().resposta.status, 'REVIEWED');
+  assert.deepEqual({ ...review().erro }, { status: 409, detail: 'Report already in review' });
+
+  const { resposta } = resolveAdminMock(['admin', 'reports', 'pending', 'resolve'], 'PATCH', {});
+  assert.equal(resposta.status, 'RESOLVED');
+  assert.equal(resposta.resolution.action, 'NO_ACTION');
+  assert.equal(resposta.target.moderation_status, 'ACTIVE');
 });
 
 test('mock: cenários de erro respondem como o backend', () => {

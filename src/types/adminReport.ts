@@ -2,14 +2,24 @@ import type { ReportReason, ReportStatus, UserModerationStatus } from '@/types/a
 
 /**
  * Contrato de `GET /admin/reports/{report_id}` (task 245 [BE]), de
- * `PATCH /admin/reports/{report_id}/archive` (task 246 [BE]) e de
+ * `PATCH /admin/reports/{report_id}/review` e `/resolve` e de
  * `PATCH /admin/events/{event_id}/moderation`, espelhando
  * `app/presentation/dtos/admin_report.py`. Motivo, status da denúncia e status
  * da conta são os mesmos tipos de `@/types/admin`.
  */
 
 /** `ReportResolutionActionEnum` do backend. */
-export type ReportResolutionAction = 'BANNED' | 'SUSPENDED' | 'ARCHIVED' | 'EVENT_REMOVED' | (string & {});
+/**
+ * `ReportResolutionActionEnum` do backend. `ARCHIVED` (status `REJECTED`) é o
+ * arquivamento antigo; `NO_ACTION` é "Resolver sem ação" (status `RESOLVED`).
+ */
+export type ReportResolutionAction =
+  | 'BANNED'
+  | 'SUSPENDED'
+  | 'ARCHIVED'
+  | 'EVENT_REMOVED'
+  | 'NO_ACTION'
+  | (string & {});
 
 export interface AdminReportUser {
   id: string;
@@ -83,6 +93,7 @@ export interface AdminReportDetail {
   reported_at: string;
   previous_reports: {
     total: number;
+    /** Encerradas sem ação: arquivadas ou resolvidas com `NO_ACTION`. */
     archived: number;
     resolved_with_action: number;
   };

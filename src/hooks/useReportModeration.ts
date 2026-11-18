@@ -10,10 +10,11 @@ import { apiFetch } from '@/utils/http';
 
 export { SUSPENSION_DAYS };
 
-export type ReportModerationAction = 'BAN' | 'SUSPEND' | 'ARCHIVE' | 'REMOVE_EVENT';
+/** `REVIEW` só coloca em análise; as outras encerram a denúncia. */
+export type ReportModerationAction = 'BAN' | 'SUSPEND' | 'RESOLVE' | 'REMOVE_EVENT' | 'REVIEW';
 
 export type ReportModerationResult =
-  /** Ação aplicada; `moderationStatus` é o novo status da conta (ausente ao arquivar). */
+  /** Ação aplicada; `moderationStatus` é o novo status da conta (ausente quando ela não muda). */
   | { status: 'done'; moderationStatus?: UserModerationStatus }
   /** A denúncia ou a conta mudou por fora: a tela deve recarregar o detalhe. */
   | { status: 'stale' }
@@ -23,11 +24,12 @@ export type ReportModerationResult =
   | { status: 'ignored' };
 
 /**
- * `detail` dos 409 de `PATCH /admin/users/{id}/moderation` (task 249 [BE]) e de
- * `PATCH /admin/reports/{id}/archive` (task 246 [BE]) e de
+ * `detail` dos 409 de `PATCH /admin/users/{id}/moderation` (task 249 [BE]), de
+ * `PATCH /admin/reports/{id}/review` e `/resolve` e de
  * `PATCH /admin/events/{id}/moderation`, em `routes/admin.py`.
  */
 const REPORT_ALREADY_RESOLVED = 'Report already resolved';
+const REPORT_ALREADY_IN_REVIEW = 'Report already in review';
 const ACCOUNT_ALREADY_BANNED = 'Account is already banned';
 const OWN_ACCOUNT = 'Admins cannot moderate their own account';
 const REPORT_NOT_ABOUT_USER = 'Report is not about this user';
@@ -46,14 +48,16 @@ function staleMessage(status: number, detail: string | null): string {
   if (detail === ACCOUNT_ALREADY_BANNED) return 'Esta conta já está banida.';
   if (detail === EVENT_ALREADY_REMOVED) return 'Este evento já foi removido.';
   if (detail === REPORT_ALREADY_RESOLVED) return 'Esta denúncia já foi encerrada por outra pessoa.';
+  if (detail === REPORT_ALREADY_IN_REVIEW) return 'Esta denúncia já está em análise.';
   if (status === 409) return 'A denúncia ou a conta mudou. Confira o estado atual.';
   return 'Esta denúncia ou a conta não existe mais.';
 }
 
 /**
  * As ações do detalhe da denúncia. Banir e suspender agem sobre a conta
- * (`target.id`) e, com o `report_id`, resolvem a denúncia na mesma transação;
- * arquivar é outro endpoint e não toca na conta. Em denúncia de evento,
+ * (`target.id`) e, com o `report_id`, resolvem a denúncia na mesma transação.
+ * Colocar em análise e resolver sem ação são endpoints da própria denúncia e
+ * não tocam na conta nem no evento. Em denúncia de evento,
  * "Remover evento" tira o evento do ar e resolve a denúncia, sem mudar a conta
  * do organizador.
  */
@@ -136,10 +140,19 @@ export function useReportModeration() {
     [moderate, run],
   );
 
-  const archive = useCallback(
+  const review = useCallback(
     (reportId: string) =>
-      run('ARCHIVE', async () => {
-        await apiFetch<unknown>(endpoints.adminReportArchive(reportId), { method: 'PATCH' });
+      run('REVIEW', async () => {
+        await apiFetch<unknown>(endpoints.adminReportReview(reportId), { method: 'PATCH' });
+        return undefined;
+      }),
+    [run],
+  );
+
+  const resolve = useCallback(
+    (reportId: string) =>
+      run('RESOLVE', async () => {
+        await apiFetch<unknown>(endpoints.adminReportResolve(reportId), { method: 'PATCH' });
         return undefined;
       }),
     [run],
@@ -159,5 +172,5 @@ export function useReportModeration() {
     [run],
   );
 
-  return { ban, suspend, archive, removeEvent, pendingAction, isLoading: pendingAction !== null, error };
+  return { ban, suspend, review, resolve, removeEvent, pendingAction, isLoading: pendingAction !== null, error };
 }

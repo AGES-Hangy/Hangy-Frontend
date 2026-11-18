@@ -13,7 +13,7 @@ export type DialogVariant =
   | 'BanUser'
   | 'SuspendUser'
   | 'RevertModeration'
-  | 'ArchiveReport'
+  | 'ResolveReport'
   | 'RemoveEvent';
 
 export type DialogProps = {

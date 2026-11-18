@@ -16,6 +16,8 @@ export const AUDIT_ACTION_ICONS: Record<AuditAction, AuditActionIcon> = {
   USER_SUSPENDED: { icon: 'clock', color: palette.warning.default },
   USER_REVERTED: { icon: 'circle-check', color: colors.feedback.success },
   REPORT_ARCHIVED: { icon: 'check', color: colors.text.tertiary },
+  REPORT_REVIEWED: { icon: 'clock', color: palette.info.default },
+  REPORT_RESOLVED: { icon: 'circle-check', color: colors.text.tertiary },
   EVENT_REMOVED: { icon: 'trash-2', color: colors.feedback.error },
   TAG_CREATED: { icon: 'plus', color: colors.text.brand },
   TAG_UPDATED: { icon: 'pencil', color: colors.text.brand },
