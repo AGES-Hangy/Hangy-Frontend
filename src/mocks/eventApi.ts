@@ -63,6 +63,7 @@ import { resolveAdminMock } from '@/mocks/adminApi';
  * | `forbidden` | `403` nos pendentes: só a seção de confirmados aparece    |
  * | `full`      | `409 Event is full` ao aprovar                           |
  * | `finished`  | `409 Event already finished` ao cancelar                 |
+ * | `ongoing`   | Começou há 1 h e termina em 2 h: mostra "Encerrar evento"  |
  *
  * ## Envio da capa (`POST /uploads/event-covers`, task 276)
  *
@@ -483,6 +484,8 @@ function estadoInicial() {
     eventosIndisponiveis: [] as string[],
     // `cancelled` vale para o mock inteiro; o favoritar só responde `404` para o evento cancelado.
     eventosCancelados: [] as string[],
+    /** `PATCH /events/{id}/finish`: id → `end_date` antecipado para a hora do pedido. */
+    eventosEncerrados: {} as Record<string, string>,
     /**
      * Denúncias abertas, como `ALVO:id:MOTIVO`. O perfil `reported` já nasce
      * com uma por Abuso, para ver o motivo "em análise" sem enviar nada.
@@ -531,6 +534,9 @@ const ehVisitanteDeEventoPublico = (eventId: string) => eventId === 'guest' || C
 
 const ehVisitante = (eventId: string) => ehVisitanteDeEventoPublico(eventId) || CENARIOS_PRIVADOS.includes(eventId);
 
+/** Horário a `horas` de agora — o cenário `ongoing` precisa andar com o relógio. */
+const horasDaqui = (horas: number) => new Date(Date.now() + horas * 3_600_000).toISOString();
+
 function detalhe(eventId: string): EventDetail {
   const ehOrganizador = !ehVisitante(eventId);
   const ehPrivado = CENARIOS_PRIVADOS.includes(eventId);
@@ -539,14 +545,17 @@ function detalhe(eventId: string): EventDetail {
   // centro de uma área. Depois de aprovado, volta tudo exato.
   const localAproximado = ehPrivado && !aprovado;
   const overrides = db.overrides;
+  const emAndamento = eventId === 'ongoing';
 
   return {
     event_id: eventId,
     title: overrides?.title ?? 'Futebol na PUC',
     description: overrides?.description ?? DESCRICAO,
     // O frame mostra 16:00 em Porto Alegre (UTC-3).
-    event_date: overrides?.event_date ?? '2026-10-30T19:00:00Z',
-    end_date: overrides?.end_date ?? '2026-10-30T22:00:00Z',
+    event_date: emAndamento ? horasDaqui(-1) : (overrides?.event_date ?? '2026-10-30T19:00:00Z'),
+    end_date:
+      db.eventosEncerrados[eventId] ??
+      (emAndamento ? horasDaqui(2) : (overrides?.end_date ?? '2026-10-30T22:00:00Z')),
     location: localAproximado
       ? { latitude: -30.0531, longitude: -51.1762 }
       : (overrides?.location ?? { latitude: -30.0577, longitude: -51.1738 }),
@@ -558,7 +567,11 @@ function detalhe(eventId: string): EventDetail {
     location_precision: localAproximado ? 'APPROXIMATE' : 'EXACT',
     location_radius_m: localAproximado ? 500 : null,
     privacy: ehPrivado ? 'PRIVATE' : ehVisitanteDeEventoPublico(eventId) ? 'PUBLIC' : 'INVITE_ONLY',
-    status: db.cancelled ? 'CANCELLED' : eventId === 'finished' ? 'FINISHED' : 'PUBLISHED',
+    status: db.cancelled
+      ? 'CANCELLED'
+      : eventId === 'finished' || db.eventosEncerrados[eventId]
+        ? 'FINISHED'
+        : 'PUBLISHED',
     // `null` gravado pelo PATCH é "sem capa": com `??`, a padrão voltaria.
     cover_photo_url: overrides ? overrides.cover_photo_url : 'https://picsum.photos/seed/hangy-evento/900/600',
     tags: (overrides?.tag_ids ?? ['t1', 't2']).map((id) => ({ id, name: NOME_DA_TAG[id] ?? id })),
@@ -2059,6 +2072,25 @@ export async function resolveMock<T>(path: string, init: RequestInit = {}): Prom
     db.cancelled = true;
     db.eventosCancelados.push(eventId);
     return { event_id: eventId, status: 'CANCELLED', updated_at: new Date().toISOString() } as T;
+  }
+
+  if (partes[0] === 'events' && partes[2] === 'finish' && method === 'PATCH') {
+    // Mesma ordem de checagem do `EventsService.finish`.
+    if (db.cancelled) throw new MockApiError(409, 'Event is cancelled');
+    const atual = detalhe(eventId);
+    if (atual.status !== 'FINISHED') {
+      if (Date.parse(atual.event_date) > Date.now()) {
+        throw new MockApiError(409, 'Event has not started yet');
+      }
+      const agora = new Date().toISOString();
+      db.eventosEncerrados[eventId] = atual.end_date < agora ? atual.end_date : agora;
+    }
+    return {
+      event_id: eventId,
+      status: 'FINISHED',
+      end_date: detalhe(eventId).end_date,
+      updated_at: new Date().toISOString(),
+    } as T;
   }
 
   if (partes[0] === 'events' && partes[2] === 'favorite' && partes.length === 3 && (method === 'POST' || method === 'DELETE')) {

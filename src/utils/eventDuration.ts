@@ -37,11 +37,29 @@ export function isValidDuration(durationMinutes: number | null): durationMinutes
 
 /**
  * Mesma regra do backend para "evento encerrado": status `FINISHED` ou o
- * horário de término já passou. Ninguém marca o evento como `FINISHED` à mão.
+ * horário de término já passou. O organizador pode antecipar o fim
+ * (`PATCH /events/{id}/finish`); sem isso, o evento encerra sozinho no
+ * `end_date`, sem job nenhum.
  */
 export function hasEventEnded(
   event: { status: EventStatus; end_date: string },
   now: number = Date.now(),
 ): boolean {
   return event.status === 'FINISHED' || new Date(event.end_date).getTime() <= now;
+}
+
+/**
+ * O evento está acontecendo: já começou, não acabou e não foi cancelado. É
+ * quando o organizador pode encerrar — antes do início o backend responde
+ * `409 Event has not started yet`.
+ */
+export function isEventHappening(
+  event: { status: EventStatus; event_date: string; end_date: string },
+  now: number = Date.now(),
+): boolean {
+  return (
+    event.status === 'PUBLISHED' &&
+    new Date(event.event_date).getTime() <= now &&
+    !hasEventEnded(event, now)
+  );
 }

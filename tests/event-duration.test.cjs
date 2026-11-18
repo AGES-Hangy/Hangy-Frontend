@@ -13,7 +13,7 @@ vm.runInNewContext(
 );
 const {
   MAX_EVENT_DURATION_MINUTES, durationFromPickerValue, durationMinutesBetween,
-  durationToPickerValue, endDateFrom, hasEventEnded, isValidDuration,
+  durationToPickerValue, endDateFrom, hasEventEnded, isEventHappening, isValidDuration,
 } = mod;
 
 const START = '2026-10-26T20:00:00.000Z';
@@ -51,4 +51,16 @@ test('an event has ended by status or once end_date is reached', () => {
   assert.equal(hasEventEnded(published, end), true);
   assert.equal(hasEventEnded(published, end + 60_000), true);
   assert.equal(hasEventEnded({ ...published, status: 'FINISHED' }, end - 3_600_000), true);
+});
+
+test('an event can be finished only between its start and its end', () => {
+  const start = Date.parse(START);
+  const end = Date.parse('2026-10-26T22:00:00.000Z');
+  const published = { status: 'PUBLISHED', event_date: START, end_date: '2026-10-26T22:00:00.000Z' };
+  assert.equal(isEventHappening(published, start - 1), false);
+  assert.equal(isEventHappening(published, start), true);
+  assert.equal(isEventHappening(published, end - 1), true);
+  assert.equal(isEventHappening(published, end), false);
+  assert.equal(isEventHappening({ ...published, status: 'FINISHED' }, start + 1), false);
+  assert.equal(isEventHappening({ ...published, status: 'CANCELLED' }, start + 1), false);
 });

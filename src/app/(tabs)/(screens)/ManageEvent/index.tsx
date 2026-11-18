@@ -22,15 +22,18 @@ import { useCancelEvent } from '@/hooks/useCancelEvent';
 import { useEvent } from '@/hooks/useEvent';
 import { useEventParticipants } from '@/hooks/useEventParticipants';
 import { useEventShare } from '@/hooks/useEventShare';
+import { useFinishEvent } from '@/hooks/useFinishEvent';
 import { useRetryOnReconnect } from '@/hooks/useRetryOnReconnect';
 import { useTopAppBar } from '@/hooks/useTopAppBar';
 import type { EventParticipantItem } from '@/types/event';
 import { formatRelativeTime } from '@/utils/datetime';
 import { loadErrorScreenProps } from '@/utils/errorScreen';
+import { isEventHappening } from '@/utils/eventDuration';
 
 /** Confirmação aberta no momento — no máximo uma por vez. */
 type Confirmation =
   | { kind: 'cancelEvent' }
+  | { kind: 'finishEvent' }
   | { kind: 'removeParticipant'; participant: EventParticipantItem }
   | null;
 
@@ -60,6 +63,7 @@ export default function ManageEvent() {
     Boolean(event?.viewer.is_organizer),
   );
   const { cancelEvent, isLoading: isCancelling, isReadOnly: cancelReadOnly } = useCancelEvent(id);
+  const { finishEvent, isLoading: isFinishing } = useFinishEvent(id);
 
   const failure = eventError ?? participants.error;
   // Refaz as duas cargas: qualquer uma das duas pode ter sido a que falhou.
@@ -107,6 +111,14 @@ export default function ManageEvent() {
       return;
     }
 
+    if (confirmation.kind === 'finishEvent') {
+      await finishEvent();
+      closeConfirmation();
+      // Encerrado (ou recusado com 409): o detalhe recarregado mostra o estado real.
+      reloadEvent();
+      return;
+    }
+
     const trimmedReason = cancelReason.trim();
     if (!trimmedReason) return;
 
@@ -151,6 +163,9 @@ export default function ManageEvent() {
 
   const isLocked = participants.isReadOnly || cancelReadOnly ||
     event?.status === 'FINISHED' || event?.status === 'CANCELLED';
+  // Já começou e não acabou: em vez de editar ou cancelar, o organizador encerra.
+  // O horário é lido a cada render — a tela não reage sozinha à hora de início.
+  const isHappening = Boolean(event && !isLocked && isEventHappening(event));
   const dialogCopy = describeConfirmation(confirmation, participants.confirmedCount);
   // A seção de pendentes não é renderizada quando a API nega — esconder é
   // melhor do que mostrar e negar no toque.
@@ -257,7 +272,19 @@ export default function ManageEvent() {
         </View>
       </ScrollView>
 
-      {canManage && (
+      {canManage && isHappening && (
+        <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[20] }]}>
+          <Button
+            label="Encerrar evento"
+            icon="flag"
+            disabled={isOffline}
+            onPress={() => setConfirmation({ kind: 'finishEvent' })}
+            style={styles.actionButton}
+          />
+        </View>
+      )}
+
+      {canManage && !isHappening && (
         <View style={[styles.actions, { paddingBottom: insets.bottom + spacing[20] }]}>
           <Button
             label="Editar evento"
@@ -280,12 +307,15 @@ export default function ManageEvent() {
 
       <Dialog
         visible={confirmation !== null}
-        variant="DeleteEvent"
+        variant={confirmation?.kind === 'finishEvent' ? 'FinishEvent' : 'DeleteEvent'}
         title={dialogCopy.title}
         description={dialogCopy.description}
         confirmLabel={dialogCopy.confirmLabel}
-        // Só o cancelamento espera a rede; remover é otimista e fecha na hora.
-        isLoading={confirmation?.kind === 'cancelEvent' && isCancelling}
+        // Cancelar e encerrar esperam a rede; remover é otimista e fecha na hora.
+        isLoading={
+          (confirmation?.kind === 'cancelEvent' && isCancelling) ||
+          (confirmation?.kind === 'finishEvent' && isFinishing)
+        }
         // O backend exige um motivo (1-1000 caracteres) para cancelar.
         confirmDisabled={isOffline || (confirmation?.kind === 'cancelEvent' && cancelReason.trim().length === 0)}
         onConfirm={onConfirm}
@@ -320,6 +350,15 @@ function describeConfirmation(confirmation: Confirmation, confirmedCount: number
       description:
         'A pessoa deixa de constar na lista de participantes e é notificada da remoção.',
       confirmLabel: 'Remover',
+    };
+  }
+
+  if (confirmation?.kind === 'finishEvent') {
+    return {
+      title: 'Encerrar o evento?',
+      description:
+        'O evento passa a constar como encerrado e os confirmados já podem publicar as fotos. Não dá para desfazer.',
+      confirmLabel: 'Encerrar evento',
     };
   }
 
