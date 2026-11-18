@@ -1,6 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { ActivityIndicator, AppState, Linking, PixelRatio, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  Keyboard,
+  Linking,
+  PixelRatio,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
@@ -16,17 +28,20 @@ import type { Event } from '@/components/EventCard/types';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { MapArea } from '@/components/MapArea';
-import { MapPin } from '@/components/MapPin';
+import { getClusterPinAnchor, getEventPinAnchor, MapPin } from '@/components/MapPin';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { TextField } from '@/components/TextField';
 import { useToast } from '@/components/Toast';
 import { colors, palette } from '@/constants/colors';
 import { elevation, layout, radius, spacing } from '@/constants/layout';
 import { typography } from '@/constants/typography';
+import { useAddressSearch, type AddressSuggestion } from '@/hooks/useAddressSearch';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { distanceInMeters, useNearbyEvents } from '@/hooks/useNearbyEvents';
 import { useParticipation, type ParticipationError } from '@/hooks/useParticipation';
 import { useTags } from '@/hooks/useTags';
 import type { NearbyEventItem } from '@/types/event';
+import { clusterByScreenDistance, spreadInMeters, type MapCluster } from '@/utils/mapClusters';
 import { countActiveFilters, EMPTY_FILTER_VALUE, toNearbyEventFilters } from '@/utils/searchFilters';
 
 /** Porto Alegre — onde o mapa abre sem a posição do usuário. Negar a permissão não bloqueia a tela. */
@@ -41,8 +56,19 @@ const USER_REGION_DELTA = 0.02;
 /** O CTA do estado vazio afasta o zoom: o raio da busca sai da área visível. */
 const SEARCH_EXPAND_FACTOR = 3;
 const MAP_ANIMATION_MS = 500;
-/** Ponta do pin na coordenada do evento, não o centro do desenho. */
-const PIN_ANCHOR = { x: 0.5, y: 1 };
+/**
+ * Pins mais próximos que isto na tela (em pontos) viram um grupo. A cabeça do
+ * pin tem 60 de diâmetro: abaixo disso eles se sobrepõem e o de baixo fica
+ * difícil de tocar.
+ */
+const CLUSTER_DISTANCE_PT = 64;
+/**
+ * Grupo com eventos mais espalhados que isto aproxima o zoom ao ser tocado;
+ * abaixo (mesmo local, ou quase), aproximar não os separa e o toque abre a lista.
+ */
+const CLUSTER_ZOOM_MIN_SPREAD_M = 30;
+/** Lista do grupo mostra até ~2,5 cards e rola o resto — o meio fica pra indicar que rola. */
+const CLUSTER_LIST_MAX_HEIGHT = layout.eventCard.mapPreviewHeight * 2.5 + spacing[8] * 2;
 const CENTER_ANCHOR = { x: 0.5, y: 0.5 };
 /** Círculo do ícone do aviso — diâmetro do IconButton MD. */
 const NOTICE_ICON_CIRCLE = 44;
@@ -60,6 +86,18 @@ const AREA_EDGE_PADDING = {
   right: spacing[32],
   bottom: layout.eventCard.mapPreviewHeight + NOTICE_ICON_CIRCLE + spacing[16] + spacing[12] + spacing[32],
   left: spacing[32],
+};
+
+/**
+ * Folga ao aproximar num grupo. O pin sobe ~73 a partir da coordenada (a
+ * ponta fica nela): em cima soma a barra de busca (56) e as margens dela; nas
+ * laterais, meio pin; embaixo, o botão de centralizar (44).
+ */
+const CLUSTER_EDGE_PADDING = {
+  top: spacing[16] + 56 + spacing[16] + 73,
+  right: spacing[16] + 30,
+  bottom: spacing[16] + NOTICE_ICON_CIRCLE + spacing[16],
+  left: spacing[16] + 30,
 };
 
 type Coordinate = { latitude: number; longitude: number };
@@ -124,7 +162,7 @@ function circleEdges(center: Coordinate, radiusM: number): Coordinate[] {
 }
 
 // No Android o `edgePadding` do `fitToCoordinates` é em pixels físicos, não em dp.
-function toNativePadding(padding: typeof AREA_EDGE_PADDING) {
+function toNativePadding(padding: { top: number; right: number; bottom: number; left: number }) {
   if (Platform.OS !== 'android') return padding;
   const ratio = PixelRatio.get();
   return {
@@ -183,6 +221,15 @@ export interface LiveViewProps {
   selectedEventId: string | null;
   onSelectEvent: (eventId: string | null) => void;
   onRegionChangeComplete: (region: Region) => void;
+  /** O mapa terminou de carregar e já aceita `animateToRegion`. */
+  onMapReady?: () => void;
+  /** Texto da busca de lugar no topo do mapa. */
+  placeQuery: string;
+  onChangePlaceQuery: (text: string) => void;
+  /** Sugestão escolhida: o campo mostra o nome dela, sem buscar de novo. */
+  onPlaceSelected: (place: AddressSuggestion) => void;
+  /** Sugestões do Nominatim para `placeQuery`. */
+  placeResults: AddressSuggestion[];
   userCoordinate: Coordinate | null;
   /** Busca concluída sem nenhum evento — não é erro. */
   showEmptyState: boolean;
@@ -217,6 +264,11 @@ export function LiveView({
   selectedEventId,
   onSelectEvent,
   onRegionChangeComplete,
+  onMapReady,
+  placeQuery,
+  onChangePlaceQuery,
+  onPlaceSelected,
+  placeResults,
   userCoordinate,
   showEmptyState,
   canExpandSearch,
@@ -234,24 +286,70 @@ export function LiveView({
   pendingEventIds,
 }: LiveViewProps) {
   const regionRef = useRef(initialRegion);
+  // O agrupamento depende do zoom e do tamanho do mapa na tela; só recalcula
+  // quando o mapa para de mexer, como a busca.
+  const [mapRegion, setMapRegion] = useState(initialRegion);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
+  /** Eventos do grupo tocado cujo local não se separa com zoom — lista no rodapé. */
+  const [clusterListIds, setClusterListIds] = useState<string[] | null>(null);
   const selectedEvent = events.find((event) => event.event_id === selectedEventId) ?? null;
+  // O selecionado fica fora dos grupos: ele precisa continuar visível e destacado.
+  const clusters = useMemo(
+    () =>
+      clusterByScreenDistance(
+        events.filter((event) => event.event_id !== selectedEventId),
+        (event) => event.event_id,
+        (event) => event.location,
+        mapRegion,
+        mapSize,
+        CLUSTER_DISTANCE_PT,
+      ),
+    [events, selectedEventId, mapRegion, mapSize],
+  );
+  const clusterListEvents = clusterListIds
+    ? events.filter((event) => clusterListIds.includes(event.event_id))
+    : [];
   // No máximo uma área por vez: só a do pin selecionado.
   const selectedAreaRadius = selectedEvent ? approximateRadius(selectedEvent) : null;
 
   function handleRegionChangeComplete(region: Region) {
     regionRef.current = region;
+    setMapRegion(region);
     onRegionChangeComplete(region);
+  }
+
+  function handleMapLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    setMapSize((current) => (current.width === width && current.height === height ? current : { width, height }));
   }
 
   function handleMapPress(event: MapPressEvent) {
     // No iOS o toque num pin também chega aqui; só o mapa vazio fecha o preview.
     if (event.nativeEvent.action === 'marker-press') return;
     onSelectEvent(null);
+    setClusterListIds(null);
+  }
+
+  // Grupo espalhado: aproxima até os pins se separarem. Grupo no mesmo local:
+  // zoom nenhum separa, então a lista dos eventos abre no rodapé.
+  function handleClusterPress(cluster: Extract<MapCluster<NearbyEventItem>, { kind: 'cluster' }>) {
+    const coordinates = cluster.items.map((event) => event.location);
+    onSelectEvent(null);
+    if (spreadInMeters(coordinates) >= CLUSTER_ZOOM_MIN_SPREAD_M) {
+      setClusterListIds(null);
+      mapRef.current?.fitToCoordinates(coordinates, {
+        edgePadding: toNativePadding(CLUSTER_EDGE_PADDING),
+        animated: true,
+      });
+      return;
+    }
+    setClusterListIds(cluster.items.map((event) => event.event_id));
   }
 
   // Selecionar recentra o mapa no pin, mantendo o zoom atual. Pin aproximado
   // enquadra a área inteira — num zoom fechado o círculo tomaria a tela toda.
   function handleSelectPin(event: NearbyEventItem) {
+    setClusterListIds(null);
     onSelectEvent(event.event_id);
     const radiusM = approximateRadius(event);
     if (radiusM) {
@@ -268,6 +366,24 @@ export function LiveView({
     if (!userCoordinate) return;
     mapRef.current?.animateToRegion(
       { ...userCoordinate, latitudeDelta: USER_REGION_DELTA, longitudeDelta: USER_REGION_DELTA },
+      MAP_ANIMATION_MS,
+    );
+  }
+
+  // Buscar um lugar leva o mapa até lá, no mesmo zoom de quando centraliza no
+  // usuário; a busca de eventos vem do `onRegionChangeComplete`, como ao arrastar.
+  function handleSelectPlace(place: AddressSuggestion) {
+    Keyboard.dismiss();
+    onSelectEvent(null);
+    setClusterListIds(null);
+    onPlaceSelected(place);
+    mapRef.current?.animateToRegion(
+      {
+        latitude: place.latitude,
+        longitude: place.longitude,
+        latitudeDelta: USER_REGION_DELTA,
+        longitudeDelta: USER_REGION_DELTA,
+      },
       MAP_ANIMATION_MS,
     );
   }
@@ -304,12 +420,13 @@ export function LiveView({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={handleMapLayout}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         onRegionChangeComplete={handleRegionChangeComplete}
+        onMapReady={onMapReady}
         onPress={handleMapPress}
         // O ponto do usuário é o MapPin UserLocation, não o marcador nativo.
         showsUserLocation={false}
@@ -319,22 +436,51 @@ export function LiveView({
         rotateEnabled={false}
         pitchEnabled={false}
       >
-        {events.map((event) => {
-          const isSelected = event.event_id === selectedEventId;
+        {selectedEvent && (
+          <Marker
+            key={selectedEvent.event_id}
+            coordinate={selectedEvent.location}
+            anchor={getEventPinAnchor('Selected', isLocationApproximate(selectedEvent))}
+            zIndex={3}
+            onPress={() => handleSelectPin(selectedEvent)}
+            stopPropagation
+          >
+            <MapPin
+              state="Selected"
+              uri={selectedEvent.cover_photo_url ?? undefined}
+              isApproximate={isLocationApproximate(selectedEvent)}
+            />
+          </Marker>
+        )}
+
+        {clusters.map((entry) => {
+          if (entry.kind === 'cluster') {
+            return (
+              <Marker
+                key={entry.key}
+                coordinate={entry.center}
+                anchor={getClusterPinAnchor()}
+                zIndex={2}
+                onPress={() => handleClusterPress(entry)}
+                stopPropagation
+              >
+                <MapPin state="Cluster" count={entry.items.length} />
+              </Marker>
+            );
+          }
+          const event = entry.item;
+          const state = selectedEventId ? 'Unselected' : 'Default';
+          const isApproximate = isLocationApproximate(event);
           return (
             <Marker
               key={event.event_id}
               coordinate={event.location}
-              anchor={PIN_ANCHOR}
-              zIndex={isSelected ? 2 : 1}
+              anchor={getEventPinAnchor(state, isApproximate)}
+              zIndex={1}
               onPress={() => handleSelectPin(event)}
               stopPropagation
             >
-              <MapPin
-                state={selectedEventId ? (isSelected ? 'Selected' : 'Unselected') : 'Default'}
-                uri={event.cover_photo_url ?? undefined}
-                isApproximate={isLocationApproximate(event)}
-              />
+              <MapPin state={state} uri={event.cover_photo_url ?? undefined} isApproximate={isApproximate} />
             </Marker>
           );
         })}
@@ -352,6 +498,39 @@ export function LiveView({
 
       {isOffline && <OfflineBanner />}
       <View style={[styles.topOverlay, isOffline && styles.topOverlayBelowBanner]} pointerEvents="box-none">
+        <View style={styles.topActions} pointerEvents="box-none">
+          <View style={styles.placeSearch}>
+            <TextField
+              type="Location"
+              placeholder="Buscar bairro, cidade ou endereço"
+              accessibilityLabel="Buscar um lugar no mapa"
+              value={placeQuery}
+              onChangeText={onChangePlaceQuery}
+              options={placeResults.map((place, index) => ({ value: String(index), label: place.shortLabel }))}
+              onSelectOption={(option) => {
+                const place = placeResults[Number(option.value)];
+                if (place) handleSelectPlace(place);
+              }}
+              style={styles.placeSearchField}
+            />
+          </View>
+          <View>
+            <IconButton
+              icon="sliders-horizontal"
+              variant={activeFilterCount > 0 ? 'Tonal' : 'Outline'}
+              accessibilityLabel={
+                activeFilterCount > 0 ? `Filtros, ${activeFilterCount} em uso` : 'Filtrar eventos'
+              }
+              onPress={onOpenFilters}
+              style={styles.floatingButton}
+            />
+            {activeFilterCount > 0 && (
+              <View style={styles.filterCount} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no">
+                <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </View>
+        </View>
         {notice && locationNotice && (
           <View style={styles.notice}>
             <View style={styles.noticeHeader}>
@@ -387,29 +566,11 @@ export function LiveView({
             </View>
           </View>
         )}
-        <View style={styles.topActions} pointerEvents="box-none">
-          {isLoading && (
-            <View style={styles.loading} accessibilityLabel="Buscando eventos" accessibilityRole="progressbar">
-              <ActivityIndicator size="small" color={colors.action.primary} />
-            </View>
-          )}
-          <View>
-            <IconButton
-              icon="sliders-horizontal"
-              variant={activeFilterCount > 0 ? 'Tonal' : 'Outline'}
-              accessibilityLabel={
-                activeFilterCount > 0 ? `Filtros, ${activeFilterCount} em uso` : 'Filtrar eventos'
-              }
-              onPress={onOpenFilters}
-              style={styles.floatingButton}
-            />
-            {activeFilterCount > 0 && (
-              <View style={styles.filterCount} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no">
-                <Text style={styles.filterCountText}>{activeFilterCount}</Text>
-              </View>
-            )}
+        {isLoading && (
+          <View style={styles.loading} accessibilityLabel="Buscando eventos" accessibilityRole="progressbar">
+            <ActivityIndicator size="small" color={colors.action.primary} />
           </View>
-        </View>
+        )}
       </View>
 
       <View style={styles.bottomOverlay} pointerEvents="box-none">
@@ -459,6 +620,31 @@ export function LiveView({
               )}
             </View>
           </View>
+        ) : clusterListEvents.length > 0 ? (
+          <View style={styles.clusterList}>
+            <View style={styles.clusterListHeader}>
+              <Text style={styles.clusterListTitle} accessibilityRole="header">
+                {`${clusterListEvents.length} eventos neste local`}
+              </Text>
+              <IconButton
+                icon="x"
+                variant="Ghost"
+                size="SM"
+                accessibilityLabel="Fechar lista de eventos"
+                onPress={() => setClusterListIds(null)}
+              />
+            </View>
+            <ScrollView style={styles.clusterListScroll} contentContainerStyle={styles.clusterListContent}>
+              {clusterListEvents.map((event) => (
+                <EventCard
+                  key={event.event_id}
+                  variant="MapPreview"
+                  event={toPreviewEvent(event, userCoordinate)}
+                  onPress={() => handleSelectPin(event)}
+                />
+              ))}
+            </ScrollView>
+          </View>
         ) : showEmptyState ? (
           <View style={styles.emptyCard}>
             {activeFilterCount > 0 ? (
@@ -503,6 +689,27 @@ export default function Live() {
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
   const regionRef = useRef<Region>(DEFAULT_REGION);
+  // `animateToRegion` antes de o mapa carregar é descartado (no Android
+  // sempre; no iOS às vezes) — e a posição do usuário costuma chegar antes,
+  // porque a última conhecida sai na hora. Sem isto o mapa ficava parado na
+  // região padrão, afastado, em vez de aproximar no usuário.
+  const isMapReadyRef = useRef(false);
+  const pendingRegionRef = useRef<Region | null>(null);
+
+  const centerMap = useCallback((region: Region) => {
+    if (!isMapReadyRef.current) {
+      pendingRegionRef.current = region;
+      return;
+    }
+    mapRef.current?.animateToRegion(region, MAP_ANIMATION_MS);
+  }, []);
+
+  const handleMapReady = useCallback(() => {
+    isMapReadyRef.current = true;
+    const pending = pendingRegionRef.current;
+    pendingRegionRef.current = null;
+    if (pending) mapRef.current?.animateToRegion(pending, MAP_ANIMATION_MS);
+  }, []);
 
   const searchFiltered = useCallback(
     (region: Region) => {
@@ -528,6 +735,8 @@ export default function Live() {
   /** Incrementa no "Tentar de novo" do aviso de GPS para refazer a localização. */
   const [locateAttempt, setLocateAttempt] = useState(0);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [placeQuery, setPlaceQuery] = useState('');
+  const { results: placeResults, search: searchPlaces } = useAddressSearch();
   // Nearby só fornece is_confirmed; conserva as solicitações desta sessão.
   const [pendingEventIds, setPendingEventIds] = useState<ReadonlySet<string>>(new Set());
   const [isCancelDialogVisible, setIsCancelDialogVisible] = useState(false);
@@ -575,7 +784,7 @@ export default function Live() {
         const region = { ...coordinate, latitudeDelta: USER_REGION_DELTA, longitudeDelta: USER_REGION_DELTA };
         setIsLocationUnavailable(false);
         setUserCoordinate(coordinate);
-        mapRef.current?.animateToRegion(region, MAP_ANIMATION_MS);
+        centerMap(region);
         hasSearchedRef.current = true;
         void searchFilteredNow(region);
       } catch {
@@ -592,7 +801,7 @@ export default function Live() {
     return () => {
       cancelled = true;
     };
-  }, [permission, locateAttempt, searchFilteredNow]);
+  }, [permission, locateAttempt, searchFilteredNow, centerMap]);
 
   // O evento selecionado saiu da área buscada: o preview fecha junto.
   useEffect(() => {
@@ -710,6 +919,14 @@ export default function Live() {
         selectedEventId={selectedEventId}
         onSelectEvent={setSelectedEventId}
         onRegionChangeComplete={searchFiltered}
+        onMapReady={handleMapReady}
+        placeQuery={placeQuery}
+        onChangePlaceQuery={(text) => {
+          setPlaceQuery(text);
+          searchPlaces(text);
+        }}
+        onPlaceSelected={(place) => setPlaceQuery(place.shortLabel)}
+        placeResults={placeResults}
         userCoordinate={userCoordinate}
         showEmptyState={isEmpty}
         canExpandSearch={!isAtMaxRadius}
@@ -779,14 +996,29 @@ const styles = StyleSheet.create({
   topOverlayBelowBanner: {
     top: spacing[64],
   },
-  // Carregando à esquerda do botão de filtro, os dois no canto direito.
+  // Busca de lugar ocupando a largura, filtro no canto direito. Fica acima do
+  // aviso de localização para a lista de sugestões abrir por cima dele.
   topActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: spacing[8],
+    zIndex: 3,
+    elevation: 3,
   },
+  // O campo do Design System é plano; aqui ele flutua sobre o mapa.
+  placeSearch: {
+    flex: 1,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface.card,
+    ...elevation[2],
+  },
+  // Sem o mínimo de 280 do campo: em telas estreitas ele divide a linha com o filtro.
+  placeSearchField: {
+    minWidth: 0,
+  },
+  // Indicador discreto no canto direito, abaixo da busca.
   loading: {
+    alignSelf: 'flex-end',
     padding: spacing[8],
     borderRadius: radius.full,
     backgroundColor: colors.surface.card,
@@ -832,6 +1064,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: spacing[12],
     justifyContent: 'center',
+  },
+  clusterList: {
+    alignSelf: 'stretch',
+    paddingTop: spacing[12],
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface.card,
+    ...elevation[2],
+  },
+  clusterListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: spacing[16],
+    paddingRight: spacing[8],
+  },
+  clusterListTitle: {
+    ...typography.h4,
+    color: colors.text.primary,
+  },
+  clusterListScroll: {
+    maxHeight: CLUSTER_LIST_MAX_HEIGHT,
+  },
+  clusterListContent: {
+    padding: spacing[8],
+    gap: spacing[8],
   },
   emptyCard: {
     alignSelf: 'stretch',
