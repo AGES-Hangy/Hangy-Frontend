@@ -206,6 +206,16 @@ function UsuarioContent({ profile, refresh }: UsuarioContentProps) {
         <View style={styles.badgeWrap}>
           <Badge family="Moderation" value={profile.moderation_status} />
         </View>
+        {/* O perfil público (pessoa ou empresa), como os usuários veem. A API
+            o mostra ao admin mesmo com a conta banida ou suspensa. */}
+        <Button
+          label="Ver perfil no app"
+          variant="Tertiary"
+          size="SM"
+          icon="eye"
+          onPress={() => router.push({ pathname: '/UserProfile', params: { id: profile.user_id } })}
+          accessibilityLabel={`Ver o perfil de ${name} no app`}
+        />
       </View>
 
       {/* StatCards — apenas Eventos e Denúncias */}
