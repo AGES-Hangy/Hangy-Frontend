@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
  * Nominatim (OpenStreetMap) — pública, sem chave. A política de uso deles
  * pede no máximo 1 req/s, daí o debounce de 500ms em `search`.
  */
-const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
+export const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
 const SEARCH_DEBOUNCE_MS = 500;
 const MIN_QUERY_LENGTH = 4;
 
@@ -15,7 +15,7 @@ const MIN_QUERY_LENGTH = 4;
  * do Android (`okhttp/...`) leva 403, e a busca falhava em silêncio. No Web o
  * navegador não deixa sobrescrever esse header (ele já manda o Referer).
  */
-const REQUEST_HEADERS: Record<string, string> = {
+export const REQUEST_HEADERS: Record<string, string> = {
   'Accept-Language': 'pt-BR',
   ...(Platform.OS === 'web' ? {} : { 'User-Agent': 'Hangy/1.0 (aplicativo Hangy)' }),
 };

@@ -3,6 +3,8 @@ import { useFocusEffect } from 'expo-router';
 
 import { useToast } from '@/components/Toast';
 import { describeListLoadError, isApiErrorLike, type LoadError } from '@/utils/apiErrors';
+import { feedPath, resolveFeedOrigin } from '@/utils/feedOrigin';
+import { feedOriginSources } from '@/utils/feedOriginSources';
 import { apiFetch } from '@/utils/http';
 
 import type { Event, EventPrivacy } from '@/components/EventCard/types';
@@ -101,8 +103,12 @@ export function useFeed() {
       }
 
       try {
+        // Posição do aparelho com permissão, senão a cidade cadastrada: o feed
+        // corta eventos longe dali. Sem nenhuma das duas, vai sem filtro.
+        const origin = await resolveFeedOrigin(feedOriginSources);
+        if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
         // `apiFetch` cuida do token, do timeout e do 401 global (toast + Login).
-        const data = await apiFetch<ApiFeedResponse>('/feed');
+        const data = await apiFetch<ApiFeedResponse>(feedPath(origin));
         if (requestId !== latestRequestIdRef.current || revision !== feedRevision) return;
 
         setSections(normalizeFeed(data));
