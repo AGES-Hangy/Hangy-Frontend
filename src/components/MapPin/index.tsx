@@ -109,6 +109,87 @@ const CLUSTER_SHADOW = {
   elevation: layout.mapPinShadows.cluster.offsetY,
 } as const;
 
+/**
+ * Quanto a sombra borrada passa do desenho: o desfoque gaussiano vai até ~3σ
+ * (σ = blur / 2) e ainda desce `offsetY`.
+ */
+function shadowSpread(blur: number) {
+  return Math.ceil(blur * 1.5);
+}
+
+type EventPinState = 'Default' | 'Unselected' | 'Selected';
+
+/**
+ * Geometria do pin de evento dentro do marker. O marker do mapa é recortado
+ * no tamanho da View (no Android vira bitmap; no iOS o SVG corta no próprio
+ * viewport), então a sobra da sombra e do selo de cadeado entra no tamanho do
+ * container — senão a sombra aparece cortada reta embaixo e nas laterais. A
+ * sobra lateral entra dos dois lados para a ponta continuar no centro.
+ */
+function eventPinLayout(state: EventPinState, isApproximate: boolean) {
+  const { width, height, haloSize, inset } = PIN_METRICS[state];
+  const scale = width / PIN_WIDTH;
+  const shadow = PIN_SHADOWS[state];
+  const spread = shadowSpread(shadow.shadowRadius);
+  const offsetY = shadow.shadowOffset.height;
+
+  const baseWidth = haloSize || width;
+  const baseHeight = height + inset;
+  const badgeLeft = inset + LOCK_BADGE_CENTER_X * scale - LOCK_BADGE_SIZE / 2;
+  const badgeTop = inset + LOCK_BADGE_CENTER_Y * scale - LOCK_BADGE_SIZE / 2;
+
+  // O halo do selecionado já sobra `inset` em volta do pin.
+  const shadowX = Math.max(0, spread - inset);
+  const shadowTop = Math.max(0, spread - offsetY - inset);
+  const shadowBottom = spread + offsetY;
+  const badgeX = isApproximate ? Math.max(0, badgeLeft + LOCK_BADGE_SIZE - baseWidth) : 0;
+  const badgeY = isApproximate ? Math.max(0, -badgeTop) : 0;
+
+  const outsetX = Math.max(shadowX, badgeX);
+  const outsetTop = Math.max(shadowTop, badgeY);
+  const totalWidth = baseWidth + outsetX * 2;
+  const totalHeight = outsetTop + baseHeight + shadowBottom;
+
+  return {
+    width,
+    height,
+    haloSize,
+    inset,
+    scale,
+    badgeLeft,
+    badgeTop,
+    outsetX,
+    outsetTop,
+    totalWidth,
+    totalHeight,
+    // A ponta do pin fica acima da sobra da sombra, não na base da View.
+    anchor: { x: 0.5, y: (outsetTop + baseHeight) / totalHeight },
+  };
+}
+
+/**
+ * Âncora do `Marker` para um pin de evento: a ponta do pin na coordenada.
+ * Muda com o estado e o selo, porque a sobra da sombra muda junto.
+ */
+export function getEventPinAnchor(state: EventPinState = 'Default', isApproximate = false) {
+  return eventPinLayout(state, isApproximate).anchor;
+}
+
+const CLUSTER_OUTSET =
+  shadowSpread(layout.mapPinShadows.cluster.blur) + layout.mapPinShadows.cluster.offsetY;
+
+/**
+ * Âncora do `Marker` para o pin `Cluster`: o círculo fica na altura da cabeça
+ * dos pins de evento (centro da cabeça a 43 da ponta), não centrado na
+ * coordenada — senão o grupo aparece ~40 pontos abaixo dos pins vizinhos e
+ * por cima deles.
+ */
+export function getClusterPinAnchor() {
+  const total = CLUSTER_SIZE + CLUSTER_OUTSET * 2;
+  const headCenterAboveTip = PIN_HEIGHT - PIN_WIDTH / 2;
+  return { x: 0.5, y: Math.min(1, (CLUSTER_OUTSET + CLUSTER_SIZE / 2 + headCenterAboveTip) / total) };
+}
+
 const USER_DOT_SHADOW = {
   shadowColor: palette.neutral[950],
   shadowOffset: { width: 0, height: layout.mapPinShadows.userLoc.offsetY },
@@ -145,40 +226,36 @@ function EventPin({
   uri,
   isApproximate = false,
 }: {
-  state: 'Default' | 'Unselected' | 'Selected';
+  state: EventPinState;
   uri?: string;
   isApproximate?: boolean;
 }) {
   const [loadedUri, setLoadedUri] = useState<string>();
   const filterId = `map-pin-shadow-${useId().replace(/:/g, '')}`;
-  const { width, height, haloSize, inset } = PIN_METRICS[state];
-  const scale = width / PIN_WIDTH;
+  const {
+    width,
+    height,
+    haloSize,
+    inset,
+    scale,
+    badgeLeft,
+    badgeTop,
+    outsetX,
+    outsetTop,
+    totalWidth,
+    totalHeight,
+  } = eventPinLayout(state, isApproximate);
+  const shadow = PIN_SHADOWS[state];
   const photoFrameSize = PHOTO_FRAME_SIZE * scale;
   const photoBorderWidth = PHOTO_BORDER_WIDTH * scale;
   const photoSize = EVENT_PHOTO_SIZE * scale;
   const isUnselected = state === 'Unselected';
-
-  // O selo faz parte do marker: a área que ele ultrapassa fica reservada no
-  // tamanho do container, senão é cortada. A sobra lateral entra dos dois
-  // lados para a ponta do pin continuar no centro da base (âncora 0.5, 1).
-  const baseWidth = haloSize || width;
-  const baseHeight = height + inset;
-  const badgeLeft = inset + LOCK_BADGE_CENTER_X * scale - LOCK_BADGE_SIZE / 2;
-  const badgeTop = inset + LOCK_BADGE_CENTER_Y * scale - LOCK_BADGE_SIZE / 2;
-  const outsetX = isApproximate
-    ? Math.max(0, badgeLeft + LOCK_BADGE_SIZE - baseWidth)
-    : 0;
-  const outsetTop = isApproximate ? Math.max(0, -badgeTop) : 0;
+  const pinLeft = inset + outsetX;
+  const pinTop = inset + outsetTop;
 
   return (
     <View
-      style={[
-        styles.pinContainer,
-        {
-          width: baseWidth + outsetX * 2,
-          height: baseHeight + outsetTop,
-        },
-      ]}
+      style={[styles.pinContainer, { width: totalWidth, height: totalHeight }]}
       pointerEvents="none"
     >
       {state === 'Selected' && (
@@ -195,46 +272,46 @@ function EventPin({
           ]}
         />
       )}
+      {/* O SVG cobre o marker inteiro (não só o pin) para a sombra caber no viewport. */}
+      <Svg
+        width={totalWidth}
+        height={totalHeight}
+        viewBox={`${-pinLeft / scale} ${-pinTop / scale} ${totalWidth / scale} ${totalHeight / scale}`}
+        accessible={false}
+        style={StyleSheet.absoluteFill}
+      >
+        <Defs>
+          <Filter
+            id={filterId}
+            x={-pinLeft / scale}
+            y={-pinTop / scale}
+            width={totalWidth / scale}
+            height={totalHeight / scale}
+            filterUnits="userSpaceOnUse"
+          >
+            <FeGaussianBlur stdDeviation={shadow.shadowRadius / 2} />
+          </Filter>
+        </Defs>
+        <Path
+          d={PIN_PATH}
+          fill={palette.neutral[950]}
+          opacity={shadow.shadowOpacity}
+          transform={`translate(0 ${shadow.shadowOffset.height})`}
+          filter={`url(#${filterId})`}
+        />
+        <Path d={PIN_PATH} fill={PIN_COLORS[state]} />
+      </Svg>
       <View
         style={[
           styles.pin,
           {
             width,
             height,
-            left: inset + outsetX,
-            top: inset + outsetTop,
+            left: pinLeft,
+            top: pinTop,
           },
         ]}
       >
-        <Svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${PIN_WIDTH} ${PIN_HEIGHT}`}
-          accessible={false}
-          style={[StyleSheet.absoluteFill, styles.pinSvg]}
-        >
-          <Defs>
-            <Filter
-              id={filterId}
-              x={-PIN_SHADOWS[state].shadowRadius * 2}
-              y={-PIN_SHADOWS[state].shadowRadius * 2}
-              width={PIN_WIDTH + PIN_SHADOWS[state].shadowRadius * 4}
-              height={PIN_HEIGHT + PIN_SHADOWS[state].shadowRadius * 4}
-              filterUnits="userSpaceOnUse"
-            >
-              <FeGaussianBlur stdDeviation={PIN_SHADOWS[state].shadowRadius / 2} />
-            </Filter>
-          </Defs>
-          <Path
-            d={PIN_PATH}
-            fill={palette.neutral[950]}
-            opacity={PIN_SHADOWS[state].shadowOpacity}
-            transform={`translate(0 ${PIN_SHADOWS[state].shadowOffset.height})`}
-            filter={`url(#${filterId})`}
-          />
-          <Path d={PIN_PATH} fill={PIN_COLORS[state]} />
-        </Svg>
-
         <View
           style={[
             styles.photoFrame,
@@ -316,16 +393,20 @@ function EventPin({
 }
 
 function ClusterPin({ count }: { count: number }) {
+  // Sobra igual nos quatro lados: a sombra cabe no marker e o centro continua
+  // no meio (âncora 0.5, 0.5).
   return (
-    <View style={[styles.cluster, CLUSTER_SHADOW]}>
-      <Text
-        style={styles.clusterCount}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-      >
-        {count}
-      </Text>
+    <View style={{ padding: CLUSTER_OUTSET }} pointerEvents="none">
+      <View style={[styles.cluster, CLUSTER_SHADOW]}>
+        <Text
+          style={styles.clusterCount}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
+          {count}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -398,9 +479,6 @@ export function MapPin(props: MapPinProps) {
 }
 
 const styles = StyleSheet.create({
-  pinSvg: {
-    overflow: 'visible',
-  },
   pinContainer: {
     position: 'relative',
   },

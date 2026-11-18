@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import MapView from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -22,6 +22,9 @@ const DEFAULT_REGION = {
   latitudeDelta: 0.05,
   longitudeDelta: 0.05,
 };
+
+/** Zoom de rua — o mesmo do GPS e da busca, perto o bastante pra mirar o pino. */
+const CLOSE_DELTA = 0.01;
 
 type Props = {
   visible: boolean;
@@ -48,6 +51,47 @@ export function MapPickerModal({ visible, onClose, onConfirm }: Props) {
   const [isLocating, setIsLocating] = useState(false);
   const { results, search, reverseGeocode } = useAddressSearch();
 
+  // Vira true quando a pessoa arrasta o mapa ou escolhe um endereço: aí o GPS
+  // que chegar depois não pode puxar o mapa de volta.
+  const hasInteracted = useRef(false);
+
+  function moveTo(latitude: number, longitude: number) {
+    const nextRegion = { latitude, longitude, latitudeDelta: CLOSE_DELTA, longitudeDelta: CLOSE_DELTA };
+    setRegion(nextRegion);
+    mapRef.current?.animateToRegion(nextRegion, 500);
+  }
+
+  // Ao abrir, já centraliza perto de onde a pessoa está, sem esperar o botão.
+  // Se a permissão foi negada, fica no ponto padrão em silêncio — o aviso só
+  // aparece quando ela pede a localização pelo botão.
+  useEffect(() => {
+    if (!visible) return;
+    hasInteracted.current = false;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || cancelled) return;
+        // A última posição conhecida sai na hora; a atual pode levar segundos.
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown && !cancelled && !hasInteracted.current) {
+          moveTo(lastKnown.coords.latitude, lastKnown.coords.longitude);
+        }
+        const current = await Location.getCurrentPositionAsync({});
+        if (!cancelled && !hasInteracted.current) {
+          moveTo(current.coords.latitude, current.coords.longitude);
+        }
+      } catch {
+        // Sem GPS o mapa só fica no ponto padrão; a busca por texto continua.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
   async function handleUseCurrentLocation() {
     setIsLocating(true);
     try {
@@ -58,28 +102,15 @@ export function MapPickerModal({ visible, onClose, onConfirm }: Props) {
       }
       setPermissionDenied(false);
       const position = await Location.getCurrentPositionAsync({});
-      const nextRegion = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      };
-      setRegion(nextRegion);
-      mapRef.current?.animateToRegion(nextRegion, 500);
+      moveTo(position.coords.latitude, position.coords.longitude);
     } finally {
       setIsLocating(false);
     }
   }
 
   function handleSelectSuggestion(suggestion: AddressSuggestion) {
-    const nextRegion = {
-      latitude: suggestion.latitude,
-      longitude: suggestion.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-    setRegion(nextRegion);
-    mapRef.current?.animateToRegion(nextRegion, 500);
+    hasInteracted.current = true;
+    moveTo(suggestion.latitude, suggestion.longitude);
   }
 
   async function handleConfirm() {
@@ -117,6 +148,9 @@ export function MapPickerModal({ visible, onClose, onConfirm }: Props) {
             style={styles.map}
             initialRegion={region}
             onRegionChangeComplete={setRegion}
+            onPanDrag={() => {
+              hasInteracted.current = true;
+            }}
           />
           <View pointerEvents="none" style={styles.centerPin}>
             <Icon name="map-pin" size={36} color={palette.primary[600]} fill={palette.primary[100]} />
