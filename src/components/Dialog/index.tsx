@@ -81,7 +81,7 @@ const VARIANTS = {
     destructive: false,
   },
   // "Admin — Denúncia — banir usuário" (Sprint 4). O título leva o nome da
-  // conta e vem por `title`. Suspender e arquivar não têm frame próprio:
+  // conta e vem por `title`. Suspender e resolver sem ação não têm frame próprio:
   // seguem a mesma estrutura, só o texto muda.
   BanUser: {
     title: 'Banir usuário?',
@@ -104,10 +104,10 @@ const VARIANTS = {
     confirmLabel: 'Reverter',
     destructive: false,
   },
-  ArchiveReport: {
-    title: 'Arquivar denúncia?',
-    description: 'A denúncia sai da fila e a conta denunciada não sofre nenhuma ação.',
-    confirmLabel: 'Arquivar denúncia',
+  ResolveReport: {
+    title: 'Resolver sem ação?',
+    description: 'A denúncia vai para Resolvidas e nada muda na conta ou no evento denunciado.',
+    confirmLabel: 'Resolver sem ação',
     destructive: false,
   },
   // Denúncia de evento. Sem frame próprio: mesma estrutura do banir.

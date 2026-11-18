@@ -306,10 +306,17 @@ export const endpoints = {
   /** Detalhe de uma denúncia no painel administrativo (task 245 [BE]). Só `ADMIN`. */
   adminReport: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}`,
   /**
-   * Arquiva a denúncia sem tocar na conta (task 246 [BE]). Só `ADMIN`. `PATCH`
-   * sem corpo; devolve o detalhe atualizado, com `status: REJECTED`.
+   * Coloca a denúncia em análise: `PENDING` → `REVIEWED`, sem encerrar. Só
+   * `ADMIN`. `PATCH` sem corpo; devolve o detalhe atualizado. Já em análise
+   * devolve `409 Report already in review`.
    */
-  adminReportArchive: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/archive`,
+  adminReportReview: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/review`,
+  /**
+   * Resolve a denúncia sem tocar na conta nem no evento: `status: RESOLVED`,
+   * `resolution.action: NO_ACTION`. Só `ADMIN`. `PATCH` sem corpo; devolve o
+   * detalhe atualizado.
+   */
+  adminReportResolve: (reportId: string) => `/admin/reports/${encodeURIComponent(reportId)}/resolve`,
   /** Lista de moderação de contas, paginada por cursor. Só `ADMIN`. A query vem de `adminUsersQuery`. */
   adminUsers: (query: string) => `/admin/users${query ? `?${query}` : ''}`,
   /** Ficha completa de um usuário para moderação (task 249 [BE]). Só `ADMIN`. */

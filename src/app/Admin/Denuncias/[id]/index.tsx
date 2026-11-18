@@ -41,17 +41,20 @@ const metrics = layout.adminReport;
 /** A linha "Denunciado por" tem uma linha de Body S: o hitSlop completa os 44 de toque. */
 const REPORTER_HIT_SLOP = Math.max(0, (44 - typography.bodyS.lineHeight) / 2);
 
-const DIALOG_VARIANT: Record<ReportModerationAction, DialogVariant> = {
+/** As ações que encerram a denúncia, todas com confirmação. "Em análise" não pede. */
+type ClosingAction = Exclude<ReportModerationAction, 'REVIEW'>;
+
+const DIALOG_VARIANT: Record<ClosingAction, DialogVariant> = {
   BAN: 'BanUser',
   SUSPEND: 'SuspendUser',
-  ARCHIVE: 'ArchiveReport',
+  RESOLVE: 'ResolveReport',
   REMOVE_EVENT: 'RemoveEvent',
 };
 
-const RESOLUTION_ACTION: Record<ReportModerationAction, ReportResolutionAction> = {
+const RESOLUTION_ACTION: Record<ClosingAction, ReportResolutionAction> = {
   BAN: 'BANNED',
   SUSPEND: 'SUSPENDED',
-  ARCHIVE: 'ARCHIVED',
+  RESOLVE: 'NO_ACTION',
   REMOVE_EVENT: 'EVENT_REMOVED',
 };
 
@@ -107,19 +110,19 @@ function targetRowProps(report: AdminReportDetail): AdminUserRowProps {
   return { ...base, moderationStatus: 'ACTIVE', eventCount, ...(isEvent ? { reportCount } : {}) };
 }
 
-function dialogTitle(action: ReportModerationAction, report: AdminReportDetail) {
+function dialogTitle(action: ClosingAction, report: AdminReportDetail) {
   if (action === 'BAN') return `Banir ${targetName(report)}?`;
   if (action === 'SUSPEND') return `Suspender ${targetName(report)}?`;
   if (action === 'REMOVE_EVENT' && report.event) return `Remover ${report.event.title}?`;
   return undefined;
 }
 
-function successMessage(action: ReportModerationAction, report: AdminReportDetail) {
+function successMessage(action: ClosingAction, report: AdminReportDetail) {
   const closed = `Denúncia #${report.report_number} encerrada.`;
   if (action === 'BAN') return `${targetName(report)} foi banido. ${closed}`;
   if (action === 'SUSPEND') return `${targetName(report)} foi suspenso por ${SUSPENSION_DAYS} dias. ${closed}`;
   if (action === 'REMOVE_EVENT') return `Evento removido. ${closed}`;
-  return `Denúncia #${report.report_number} arquivada.`;
+  return `Denúncia #${report.report_number} resolvida sem ação.`;
 }
 
 function LoadingSkeleton() {
@@ -137,9 +140,11 @@ function LoadingSkeleton() {
 }
 
 /**
- * Detalhe de uma denúncia no painel administrativo, com as três ações de
- * moderação. Depois de qualquer ação a tela não navega: troca de estado no
- * lugar (Aberta → Resolvida), com a conta já no status novo.
+ * Detalhe de uma denúncia no painel administrativo. Pendente, pode ir para
+ * "Em análise"; aberta, encerra com banir, suspender ou remover o evento, ou
+ * "Resolver sem ação". Depois de qualquer ação a tela não navega: troca de
+ * estado no lugar (Pendente → Em análise → Resolvida), com a conta já no
+ * status novo.
  */
 export default function AdminReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -149,14 +154,14 @@ export default function AdminReportDetailScreen() {
   const isRefreshing = report !== null && isLoading;
   const refreshFailed = report !== null && !isLoading && error !== null;
 
-  const { ban, suspend, archive, removeEvent, pendingAction } = useReportModeration();
+  const { ban, suspend, review, resolve, removeEvent, pendingAction } = useReportModeration();
   // O detalhe da denúncia só traz id e título do evento: capa, data, local e
   // privacidade do card vêm do próprio evento.
   const reportedEvent = useEvent(report?.target.type === 'EVENT' ? report.event?.id : undefined);
   const { user } = useCurrentUser();
   const { addToast } = useToast();
   const insets = useSafeAreaInsets();
-  const [dialog, setDialog] = useState<ReportModerationAction | null>(null);
+  const [dialog, setDialog] = useState<ClosingAction | null>(null);
   const actionsLocked = pendingAction !== null || isRefreshing;
 
   const title = report ? `Denúncia #${report.report_number}` : 'Denúncia';
@@ -175,7 +180,7 @@ export default function AdminReportDetailScreen() {
           ? await suspend(report.target.id, report.report_id)
           : action === 'REMOVE_EVENT' && event
             ? await removeEvent(event.id, report.report_id)
-            : await archive(report.report_id);
+            : await resolve(report.report_id);
 
     if (result.status === 'ignored') return;
     setDialog(null);
@@ -189,7 +194,7 @@ export default function AdminReportDetailScreen() {
     if (result.status !== 'done') return;
 
     patchReport({
-      status: action === 'ARCHIVE' ? 'REJECTED' : 'RESOLVED',
+      status: 'RESOLVED',
       moderationStatus: result.moderationStatus,
       ...(action === 'REMOVE_EVENT' && report.event
         ? { event: { ...report.event, moderation_status: 'REMOVED' } }
@@ -201,6 +206,19 @@ export default function AdminReportDetailScreen() {
       },
     });
     addToast({ type: 'success', message: successMessage(action, report) });
+  }
+
+  async function startReview() {
+    if (!report) return;
+    const result = await review(report.report_id);
+    if (result.status === 'stale') {
+      const refreshed = await reload();
+      if (!refreshed) addToast({ type: 'error', message: 'Não foi possível atualizar a denúncia.' });
+      return;
+    }
+    if (result.status !== 'done') return;
+    patchReport({ status: 'REVIEWED' });
+    addToast({ type: 'success', message: `Denúncia #${report.report_number} em análise.` });
   }
 
   function renderBody() {
@@ -225,6 +243,22 @@ export default function AdminReportDetailScreen() {
     const open = isReportOpen(report.status);
     const resolution = resolutionCopy(report);
     const event = removableEvent(report);
+    // Só a pendente vai para análise; em análise, a linha fica só com "Resolver".
+    const reviewButton =
+      report.status === 'PENDING' ? (
+        <Button
+          label="Colocar em análise"
+          variant="Tertiary"
+          size="SM"
+          icon="clock"
+          onPress={() => {
+            void startReview();
+          }}
+          disabled={actionsLocked}
+          isLoading={pendingAction === 'REVIEW'}
+          accessibilityLabel={`Colocar a denúncia #${report.report_number} em análise`}
+        />
+      ) : null;
 
     return (
       <>
@@ -333,7 +367,7 @@ export default function AdminReportDetailScreen() {
             </View>
           ) : open && report.target.type === 'EVENT' ? (
             <>
-              {/* Frame "Denúncia de evento": remover ou arquivar; banir e suspender ficam na ficha. */}
+              {/* Frame "Denúncia de evento": remover ou resolver sem ação; banir e suspender ficam na ficha. */}
               <View style={styles.mainActions}>
                 {event ? (
                   <Button
@@ -347,23 +381,25 @@ export default function AdminReportDetailScreen() {
                   />
                 ) : null}
                 <Button
-                  label="Arquivar denúncia"
+                  label="Resolver sem ação"
                   variant="Secondary"
                   size="LG"
-                  onPress={() => setDialog('ARCHIVE')}
+                  onPress={() => setDialog('RESOLVE')}
                   disabled={actionsLocked}
-                  accessibilityLabel={`Arquivar a denúncia #${report.report_number} sem ação`}
+                  accessibilityLabel={`Resolver a denúncia #${report.report_number} sem ação`}
                   style={[styles.mainAction, styles.eventAction]}
                 />
               </View>
-              <Button
-                label="Ver ficha do organizador"
-                variant="Tertiary"
-                size="SM"
-                onPress={() => openUserSheet(report.target.id)}
-                accessibilityLabel={`Ver a ficha de ${targetName(report)}`}
-                style={styles.secondaryAction}
-              />
+              <View style={styles.secondaryActions}>
+                {reviewButton}
+                <Button
+                  label="Ver ficha do organizador"
+                  variant="Tertiary"
+                  size="SM"
+                  onPress={() => openUserSheet(report.target.id)}
+                  accessibilityLabel={`Ver a ficha de ${targetName(report)}`}
+                />
+              </View>
             </>
           ) : open ? (
             <>
@@ -387,15 +423,18 @@ export default function AdminReportDetailScreen() {
                   style={styles.mainAction}
                 />
               </View>
-              <Button
-                label="Arquivar denúncia"
-                variant="Tertiary"
-                size="SM"
-                onPress={() => setDialog('ARCHIVE')}
-                disabled={actionsLocked}
-                accessibilityLabel={`Arquivar a denúncia #${report.report_number} sem ação na conta`}
-                style={styles.secondaryAction}
-              />
+              <View style={styles.secondaryActions}>
+                {reviewButton}
+                <Button
+                  label="Resolver sem ação"
+                  variant="Tertiary"
+                  size="SM"
+                  icon="check"
+                  onPress={() => setDialog('RESOLVE')}
+                  disabled={actionsLocked}
+                  accessibilityLabel={`Resolver a denúncia #${report.report_number} sem ação na conta`}
+                />
+              </View>
             </>
           ) : (
             <View
@@ -523,13 +562,19 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  // "Arquivar denúncia" cabe no frame com a fonte do DS; com a do sistema, mais
+  // "Resolver sem ação" cabe no frame com a fonte do DS; com a do sistema, mais
   // larga, o padding de 24 do LG cortaria o rótulo na largura de 176.
   eventAction: {
     paddingHorizontal: spacing[12],
   },
   secondaryAction: {
     alignSelf: 'center',
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing[8],
   },
   outdated: {
     gap: spacing[8],

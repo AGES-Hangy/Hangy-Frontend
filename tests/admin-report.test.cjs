@@ -83,7 +83,7 @@ test('target summary follows the current moderation status', () => {
 test('previous reports summary handles empty and plural cases', () => {
   assert.equal(
     previousReportsSummary(report()),
-    '2 denúncias anteriores · 1 arquivada e 1 encerrada com ação na conta.',
+    '2 denúncias anteriores · 1 encerrada sem ação e 1 com ação na conta.',
   );
   assert.equal(
     previousReportsSummary(report({ previous_reports: { total: 0, archived: 0, resolved_with_action: 0 } })),
@@ -112,4 +112,11 @@ test('state line and resolution card describe who, when and which action', () =>
   const archived = { ...resolved, status: 'REJECTED', resolution: { ...resolved.resolution, action: 'ARCHIVED' } };
   assert.equal(reportStateLine(archived), 'Arquivada hoje, 14:32');
   assert.equal(resolutionCopy(archived).title, 'Arquivada por Gabriel N.');
+
+  const noAction = { ...resolved, resolution: { ...resolved.resolution, action: 'NO_ACTION' } };
+  assert.equal(reportStateLine(noAction), 'Encerrada hoje, 14:32');
+  assert.deepEqual(
+    { ...resolutionCopy(noAction) },
+    { title: 'Resolvida por Gabriel N.', text: 'Resolvida sem nenhuma ação na conta.' },
+  );
 });

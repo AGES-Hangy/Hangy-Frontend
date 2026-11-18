@@ -22,7 +22,7 @@ type ModerationStatus = UserModerationStatus;
  * | qualquer    | Denúncia `REVIEWED` (Em análise), conta ativa                   |
  * | `pending`   | Denúncia `PENDING`, sem denúncias anteriores                    |
  * | `resolved`  | Já resolvida com banimento                                      |
- * | `archived`  | Já arquivada (`REJECTED`)                                       |
+ * | `archived`  | Já arquivada (`REJECTED`), do fluxo antigo                      |
  * | `suspended` | Conta já suspensa por outra denúncia; suspender de novo funciona |
  * | `banned`    | Conta já banida: suspender devolve `409 Account is already banned` |
  * | `taken`     | Qualquer ação devolve `409 Report already resolved` e o `GET` seguinte vem resolvido |
@@ -284,12 +284,24 @@ export function resolveAdminMock(
     return { resposta: denuncia(reportId) };
   }
 
-  // PATCH /admin/reports/{id}/archive (task 246 [BE]).
-  if (partes[1] === 'reports' && partes[3] === 'archive' && method === 'PATCH') {
+  // PATCH /admin/reports/{id}/review: PENDING → REVIEWED, sem encerrar.
+  if (partes[1] === 'reports' && partes[3] === 'review' && method === 'PATCH') {
     const reportId = partes[2];
     const falha = falhaDaAcao(reportId);
     if (falha) return falha;
-    return { resposta: resolver(reportId, 'ARCHIVED', null, 'REJECTED') };
+    const atual = denuncia(reportId);
+    if (atual.status !== 'PENDING') return { erro: { status: 409, detail: 'Report already in review' } };
+    const emAnalise: AdminReportDetail = { ...atual, status: 'REVIEWED' };
+    denuncias.set(reportId, emAnalise);
+    return { resposta: emAnalise };
+  }
+
+  // PATCH /admin/reports/{id}/resolve: encerra sem ação na conta nem no evento.
+  if (partes[1] === 'reports' && partes[3] === 'resolve' && method === 'PATCH') {
+    const reportId = partes[2];
+    const falha = falhaDaAcao(reportId);
+    if (falha) return falha;
+    return { resposta: resolver(reportId, 'NO_ACTION', null, 'RESOLVED') };
   }
 
   // PATCH /admin/events/{id}/moderation com `report_id` (remover evento pela denúncia).
