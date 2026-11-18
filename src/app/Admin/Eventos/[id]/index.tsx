@@ -168,6 +168,17 @@ function EventoContent({ event, refresh }: EventoContentProps) {
           <Badge family="Privacy" value={event.privacy} />
         </View>
         {event.tags.length > 0 ? <Text style={styles.tags}>{event.tags.join(' · ')}</Text> : null}
+        {/* O detalhe público, como os usuários veem: o admin entra mesmo em evento
+            só por convite, mas sem endereço exato nem participantes. */}
+        <Button
+          label="Ver evento no app"
+          variant="Tertiary"
+          size="SM"
+          icon="eye"
+          onPress={() => router.push({ pathname: '/EventDetail', params: { id: event.event_id } })}
+          accessibilityLabel={`Ver ${event.title} no app`}
+          style={styles.viewInApp}
+        />
       </View>
 
       <View style={styles.statRow}>
@@ -402,6 +413,9 @@ const styles = StyleSheet.create({
   tags: {
     ...typography.bodyS,
     color: colors.text.secondary,
+  },
+  viewInApp: {
+    alignSelf: 'flex-start',
   },
   statRow: {
     flexDirection: 'row',
