@@ -146,6 +146,8 @@ export interface ModerationResult {
 export interface AdminUser {
   user_id: string;
   name: string | null;
+  /** `BUSINESS` é conta de estabelecimento; a lista a marca como Empresa. Contas `ADMIN` não vêm. */
+  user_type: 'PERSONAL' | 'BUSINESS';
   moderation_status: UserModerationStatus;
   /** ISO 8601. Só vem preenchido com `SUSPENDED`. */
   suspended_until: string | null;

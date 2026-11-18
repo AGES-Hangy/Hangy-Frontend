@@ -54,6 +54,10 @@ function reportsSummary(count: number): string {
 }
 
 export function adminUserRowProps(user: AdminUser): AdminUserRowProps {
+  return { ...statusRowProps(user), ...(user.user_type === 'BUSINESS' ? { isBusiness: true } : {}) };
+}
+
+function statusRowProps(user: AdminUser): AdminUserRowProps {
   // Um status novo da API que o AdminUserRow não conheça quebra aqui no typecheck.
   const moderationStatus: ModerationStatus = user.moderation_status;
   const name = user.name?.trim() || UNNAMED_ADMIN_USER;

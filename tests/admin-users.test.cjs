@@ -45,6 +45,7 @@ const MIDDAY = '2026-11-20T12:00:00Z';
 const user = overrides => ({
   user_id: '11111111-1111-4111-8111-111111111111',
   name: 'Ana Costa',
+  user_type: 'PERSONAL',
   moderation_status: 'ACTIVE',
   suspended_until: null,
   event_count: 0,
@@ -121,6 +122,14 @@ test('adminUserRowProps: ACTIVE leva eventCount e reportCount', () => {
     eventCount: 3,
     reportCount: 1,
   });
+});
+
+test('adminUserRowProps: conta de estabelecimento leva isBusiness; a pessoal não', () => {
+  assert.equal(adminUserRowProps(user({ user_type: 'BUSINESS' })).isBusiness, true);
+  assert.equal('isBusiness' in adminUserRowProps(user()), false);
+  const banned = adminUserRowProps(user({ user_type: 'BUSINESS', moderation_status: 'BANNED', report_count: 1 }));
+  assert.equal(banned.isBusiness, true);
+  assert.equal(banned.moderationStatus, 'BANNED');
 });
 
 test('adminUserRowProps: SUSPENDED com data válida usa dd/MM e não leva summary', () => {

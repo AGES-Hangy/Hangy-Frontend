@@ -31,9 +31,15 @@ function resolveSummary(props: AdminUserRowProps): string {
   return `Banido em ${props.untilDate} · ${reportsLabel(props.reportCount)}`;
 }
 
+/** Prefixo do resumo da conta de estabelecimento. */
+const BUSINESS_LABEL = 'Empresa';
+
 export function AdminUserRow(props: AdminUserRowProps) {
-  const { name, avatarUri, moderationStatus, onPress } = props;
-  const summary = resolveSummary(props);
+  const { name, avatarUri, moderationStatus, onPress, isBusiness = false } = props;
+  const baseSummary = resolveSummary(props);
+  const summary = isBusiness
+    ? [BUSINESS_LABEL, baseSummary].filter(Boolean).join(' · ')
+    : baseSummary;
   const statusLabel = resolveModerationVariant(moderationStatus).label;
 
   return (
@@ -46,7 +52,7 @@ export function AdminUserRow(props: AdminUserRowProps) {
       style={({ pressed }) => [styles.container, pressed && onPress && { opacity: pressedOpacity }]}
     >
       <Avatar
-        variant="User"
+        variant={isBusiness ? 'Store' : 'User'}
         diameter={metrics.avatarSize}
         source={avatarUri ? { uri: avatarUri } : undefined}
       />
