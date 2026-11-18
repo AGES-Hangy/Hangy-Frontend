@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 export type DialogVariant =
   | 'LeaveEvent'
   | 'DeleteEvent'
+  | 'FinishEvent'
   | 'SendRequest'
   | 'DiscardEvent'
   | 'DeleteAccount'

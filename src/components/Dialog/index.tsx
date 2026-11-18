@@ -32,6 +32,13 @@ const VARIANTS = {
     confirmLabel: 'Excluir evento',
     destructive: true,
   },
+  // Sem frame no Figma: encerrar não apaga nada, então o botão não é destrutivo.
+  FinishEvent: {
+    title: 'Encerrar o evento?',
+    description: 'O evento passa a constar como encerrado. Não dá para desfazer.',
+    confirmLabel: 'Encerrar evento',
+    destructive: false,
+  },
   SendRequest: {
     title: 'Enviar solicitação?',
     description: 'O dono do evento precisa aprovar antes da sua presença ser confirmada.',

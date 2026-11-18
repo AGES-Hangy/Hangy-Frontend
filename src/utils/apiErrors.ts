@@ -189,6 +189,16 @@ export function describeActionError(error: unknown): ActionError {
     };
   }
 
+  if (status === 409 && detail === 'Event has not started yet') {
+    return {
+      message: 'O evento ainda não começou',
+      tone: 'warning',
+      shouldReload: true,
+      readOnly: false,
+      full: false,
+    };
+  }
+
   if (status === 409 && detail === 'Event is cancelled') {
     return {
       message: 'Este evento foi cancelado',

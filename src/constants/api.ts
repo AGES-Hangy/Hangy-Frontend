@@ -114,6 +114,7 @@ export const endpoints = {
     return `/events/${eventId}/participants?${params.toString()}`;
   },
   eventCancel: (eventId: string) => `/events/${eventId}/cancel`,
+  eventFinish: (eventId: string) => `/events/${eventId}/finish`,
   eventShare: (eventId: string) => `/events/${eventId}/share`,
   eventFavorite: (eventId: string) => `/events/${encodeURIComponent(eventId)}/favorite`,
   notifications: (options?: { limit?: number; cursor?: string | null; unreadOnly?: boolean }) => {
