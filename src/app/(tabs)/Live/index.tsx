@@ -486,7 +486,12 @@ export function LiveView({
         })}
 
         {selectedEvent && selectedAreaRadius && (
-          <MapArea key={selectedEvent.event_id} center={selectedEvent.location} radiusM={selectedAreaRadius} />
+          // Prefixo na chave: o pin selecionado, irmão no mesmo `MapView`, já usa o id puro.
+          <MapArea
+            key={`area-${selectedEvent.event_id}`}
+            center={selectedEvent.location}
+            radiusM={selectedAreaRadius}
+          />
         )}
 
         {userCoordinate && (
