@@ -51,7 +51,15 @@
       "expo-image",
       "expo-status-bar",
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "# Preserve reflectively constructed WorkManager/Room classes with SDK 58 R8.\n# https://github.com/expo/expo/issues/52173\n-keep class * extends androidx.room.RoomDatabase { <init>(); }\n-keep class * extends androidx.work.InputMerger { <init>(); }"
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {
