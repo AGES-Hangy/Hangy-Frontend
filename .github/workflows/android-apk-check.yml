@@ -1,0 +1,36 @@
+name: Verify Hangy APK cold start
+on:
+  push:
+    branches: [qa/android-cold-start-20261125]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APK_URL: https://github.com/AGES-Hangy/Hangy-Frontend/releases/download/android-13a983c/hangy-develop-13a983c.apk
+      APK_SHA256: f5223a83838995b1c20895db0a209e5ad6e258ea58960ada951ed4c16238a1f4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download the signed APK and verify its digest
+        run: |
+          curl -fLsS --retry 3 "$APK_URL" -o hangy.apk
+          echo "$APK_SHA256  hangy.apk" | sha256sum -c -
+      - name: Enable emulator hardware acceleration
+        run: sudo setfacl -m u:"$USER":rw /dev/kvm
+      - name: Install APK and open the login screen three times
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash .github/scripts/check-android-startup.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-startup-evidence
+          path: qa-evidence/
